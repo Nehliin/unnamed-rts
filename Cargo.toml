@@ -1,0 +1,21 @@
+[package]
+name = "experimental-rts"
+version = "0.1.0"
+authors = ["Nehliin <oskar.d.nehlin@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+winit = "0.24"
+futures = "0.3"
+env_logger = "0.8"
+nalgebra = "0.24"
+wgpu = "0.6"
+log = "0.4"
+
+[build-dependencies]
+shaderc = "0.7"
+glob = "0.3"
+rayon = "1"
+anyhow = "1"

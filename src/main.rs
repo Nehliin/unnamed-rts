@@ -7,6 +7,7 @@ use winit::{
     window::WindowBuilder,
 };
 
+mod graphics;
 mod application;
 
 fn main() {

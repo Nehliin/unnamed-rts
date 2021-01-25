@@ -39,9 +39,9 @@ impl ShaderData {
 
 fn main() -> Result<()> {
     let mut shader_paths = Vec::new(); 
-    shader_paths.extend(glob("./src/shaders/**/*.vert")?);
-    shader_paths.extend(glob("./src/shaders/**/*.frag")?);
-    shader_paths.extend(glob("./src/shaders/**/*.comp")?);
+    shader_paths.extend(glob("./src/graphics/shaders/**/*.vert")?);
+    shader_paths.extend(glob("./src/graphics/shaders/**/*.frag")?);
+    shader_paths.extend(glob("./src/graphics/shaders/**/*.comp")?);
 
 
     let shaders = shader_paths

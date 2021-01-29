@@ -7,6 +7,8 @@ use winit::{
     window::WindowBuilder,
 };
 
+mod assets;
+mod components;
 mod graphics;
 mod application;
 
@@ -47,7 +49,6 @@ fn main() {
             }
         }
         Event::RedrawRequested(_) => {
-            app.update();
             match app.render() {
                 Ok(_) => {}
                 // Recreate the swap_chain if lost

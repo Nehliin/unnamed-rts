@@ -1,9 +1,21 @@
-use super::{simple_texture::SimpleTexture, texture::{LoadableTexture, TextureData}, vertex_buffers::{ImmutableVertexData, MutableVertexData, VertexBuffer}};
+use crate::assets::AssetLoader;
+
+use super::{
+    simple_texture::SimpleTexture,
+    texture::{LoadableTexture, TextureData},
+    vertex_buffers::{ImmutableVertexData, MutableVertexData, VertexBuffer, VertexBufferData},
+};
 use anyhow::Result;
 use crevice::std140::AsStd140;
 use nalgebra::{Matrix4, Vector3};
-use std::path::Path;
-use wgpu::{Buffer, BufferAddress, Device, Queue, VertexAttributeDescriptor, VertexFormat, util::{BufferInitDescriptor, DeviceExt}};
+use std::{
+    ops::Range,
+    path::{Path, PathBuf},
+};
+use wgpu::{
+    util::{BufferInitDescriptor, DeviceExt},
+    Buffer, BufferAddress, Device, Queue, RenderPass, VertexAttributeDescriptor, VertexFormat,
+};
 
 // Todo make it dynamically growable
 const INSTANCE_BUFFER_SIZE: u64 = 16_000;
@@ -18,19 +30,19 @@ impl VertexBuffer for MeshVertex {
     const STEP_MODE: wgpu::InputStepMode = wgpu::InputStepMode::Vertex;
 
     fn get_attributes<'a>() -> &'a [wgpu::VertexAttributeDescriptor] {
-         &[
+        &[
             VertexAttributeDescriptor {
                 offset: 0,
                 format: VertexFormat::Float3,
                 shader_location: 0,
             },
             VertexAttributeDescriptor {
-                offset: std::mem::size_of::<Vector3<f32>>() as BufferAddress,
+                offset: std::mem::size_of::<mint::Vector3<f32>>() as BufferAddress,
                 format: VertexFormat::Float3,
                 shader_location: 1,
             },
             VertexAttributeDescriptor {
-                offset: (std::mem::size_of::<Vector3<f32>>() * 2) as BufferAddress,
+                offset: (std::mem::size_of::<mint::Vector3<f32>>() * 2) as BufferAddress,
                 format: VertexFormat::Float2,
                 shader_location: 2,
             },
@@ -142,22 +154,25 @@ impl Model {
         for m in obj_models {
             let mut vertices = Vec::new();
             for i in 0..m.mesh.positions.len() / 3 {
-                vertices.push(MeshVertex {
-                    position: mint::Vector3 {
-                        x: m.mesh.positions[i * 3],
-                        y: m.mesh.positions[i * 3 + 1],
-                        z: m.mesh.positions[i * 3 + 2],
-                    },
-                    tex_coords: mint::Vector2 {
-                        x: m.mesh.texcoords[i * 2],
-                        y: m.mesh.texcoords[i * 2 + 1],
-                    },
-                    normal: mint::Vector3 {
-                        x: m.mesh.normals[i * 3],
-                        y: m.mesh.normals[i * 3 + 1],
-                        z: m.mesh.normals[i * 3 + 2],
-                    },
-                });
+                vertices.push(
+                    MeshVertex {
+                        position: mint::Vector3 {
+                            x: m.mesh.positions[i * 3],
+                            y: m.mesh.positions[i * 3 + 1],
+                            z: m.mesh.positions[i * 3 + 2],
+                        },
+                        tex_coords: mint::Vector2 {
+                            x: m.mesh.texcoords[i * 2],
+                            y: m.mesh.texcoords[i * 2 + 1],
+                        },
+                        normal: mint::Vector3 {
+                            x: m.mesh.normals[i * 3],
+                            y: m.mesh.normals[i * 3 + 1],
+                            z: m.mesh.normals[i * 3 + 2],
+                        },
+                    }
+                    .as_std140(),
+                );
             }
             let vertex_buffer = VertexBuffer::allocate_immutable_buffer(device, &vertices);
 
@@ -171,7 +186,7 @@ impl Model {
             let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
                 label: Some("Index buffer"),
                 usage: wgpu::BufferUsage::INDEX,
-                contents: &indicies
+                contents: &indicies,
             });
 
             meshes.push(Mesh {
@@ -181,14 +196,76 @@ impl Model {
                 num_indexes: m.mesh.indices.len() as u32,
             });
         }
-        let instance_buffer_len = INSTANCE_BUFFER_SIZE as usize / std::mem::size_of::<InstanceData>();
+        let instance_buffer_len =
+            INSTANCE_BUFFER_SIZE as usize / std::mem::size_of::<<InstanceData as AsStd140>::Std140Type>();
         println!("INSTANCE BUFFER LEN: {}", instance_buffer_len);
-        let buffer_data = vec![InstanceData::default(); instance_buffer_len];
+        let buffer_data = vec![InstanceData::default().as_std140(); instance_buffer_len];
         let instance_buffer = VertexBuffer::allocate_mutable_buffer(device, &buffer_data);
         Ok(Model {
             meshes,
             materials,
             instance_buffer,
         })
+    }
+}
+pub trait DrawModel<'b> {
+    fn draw_mesh_instanced(
+        &mut self,
+        mesh: &'b Mesh,
+        material: &'b Material,
+        instance_buffer: &'b MutableVertexData<InstanceData>,
+        instances: Range<u32>,
+    );
+
+    fn draw_untextured(&mut self, model: &'b Model, instances: Range<u32>);
+
+    fn draw_model_instanced(&mut self, model: &'b Model, instances: Range<u32>);
+}
+
+impl<'a, 'b> DrawModel<'b> for RenderPass<'a>
+where
+    'b: 'a,
+{
+    fn draw_mesh_instanced(
+        &mut self,
+        mesh: &'b Mesh,
+        material: &'b Material,
+        instance_buffer: &'b MutableVertexData<InstanceData>,
+        instances: Range<u32>,
+    ) {
+        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        self.set_vertex_buffer(1, instance_buffer.slice(..));
+        self.set_index_buffer(mesh.index_buffer.slice(..));
+        //self.set_texture_data(0, &material.diffuse_texture);
+        //self.set_texture_data(1, &material.specular_texture);
+        self.draw_indexed(0..mesh.num_indexes, 0, instances);
+    }
+
+    fn draw_untextured(&mut self, model: &'b Model, instances: Range<u32>) {
+        let instance_buffer = &model.instance_buffer;
+        for mesh in &model.meshes {
+            self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+            self.set_vertex_buffer(1, instance_buffer.slice(..));
+            self.set_index_buffer(mesh.index_buffer.slice(..));
+            self.draw_indexed(0..mesh.num_indexes, 0, instances.clone());
+        }
+    }
+
+    fn draw_model_instanced(&mut self, model: &'b Model, instances: Range<u32>) {
+        let instance_buffer = &model.instance_buffer;
+        for mesh in &model.meshes {
+            let material = &model.materials[mesh.material];
+            self.draw_mesh_instanced(mesh, material, instance_buffer, instances.clone());
+        }
+    }
+}
+
+impl AssetLoader for Model {
+    fn load(path: &PathBuf, device: &Device, queue: &Queue) -> Result<Model> {
+        Model::load(device, queue, path)
+    }
+
+    fn extension() -> &'static str {
+        "obj"
     }
 }

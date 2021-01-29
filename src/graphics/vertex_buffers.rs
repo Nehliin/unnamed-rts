@@ -1,5 +1,5 @@
+use crevice::std140::AsStd140;
 use std::{any::type_name, marker::PhantomData, ops::RangeBounds};
-use crevice::std140::{AsStd140};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     BufferAddress,
@@ -47,19 +47,8 @@ impl<T: VertexBuffer> VertexBufferData for MutableVertexData<T> {
 
 impl<T: VertexBuffer> MutableVertexData<T> {
     #[allow(dead_code)]
-    pub fn update(
-        &self,
-        device: &wgpu::Device,
-        encoder: &mut wgpu::CommandEncoder,
-        buffer_data: &[T],
-    ) {
-        let raw_bytes: Vec<T::Std140Type> = buffer_data.iter().map(|item| item.as_std140()).collect();
-        let staging_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("staging buffer"),
-            usage: wgpu::BufferUsage::COPY_SRC,
-            contents: bytemuck::cast_slice(&raw_bytes),
-        });
-        encoder.copy_buffer_to_buffer(&staging_buffer, 0, &self.buffer, 0, raw_bytes.len() as u64);
+    pub fn update(&self, queue: &wgpu::Queue, buffer_data: &[T::Std140Type]) {
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&buffer_data));
     }
 }
 
@@ -68,32 +57,28 @@ pub trait VertexBuffer: AsStd140 + Sized {
 
     fn allocate_immutable_buffer(
         device: &wgpu::Device,
-        buffer_data: &[Self],
+        buffer_data: &[Self::Std140Type],
     ) -> ImmutableVertexData<Self> {
-        let raw_bytes: Vec<Self::Std140Type> = buffer_data.iter().map(|item| item.as_std140()).collect();
         ImmutableVertexData {
             _marker: PhantomData::default(),
             buffer: device.create_buffer_init(&BufferInitDescriptor {
-                // TODO should only be part of debug builds probably
                 label: Some(&format!("Immutable buffer of: {}", type_name::<Self>())),
                 usage: wgpu::BufferUsage::VERTEX,
-                contents: bytemuck::cast_slice(&raw_bytes),
+                contents: bytemuck::cast_slice(&buffer_data),
             }),
         }
     }
 
     fn allocate_mutable_buffer(
         device: &wgpu::Device,
-        buffer_data: &[Self],
+        buffer_data: &[Self::Std140Type],
     ) -> MutableVertexData<Self> {
-        let raw_bytes: Vec<Self::Std140Type> = buffer_data.iter().map(|item| item.as_std140()).collect();
         MutableVertexData {
             _marker: PhantomData::default(),
             buffer: device.create_buffer_init(&BufferInitDescriptor {
-                // TODO should only be part of debug builds probably
                 label: Some(&format!("Mutable buffer of: {}", type_name::<Self>())),
                 usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
-                contents: bytemuck::cast_slice(&raw_bytes),
+                contents: bytemuck::cast_slice(&buffer_data),
             }),
         }
     }

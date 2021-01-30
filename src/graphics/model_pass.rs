@@ -8,11 +8,7 @@ use wgpu::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescri
 use crate::assets::{Assets, Handle};
 use crate::components;
 
-use super::{
-    camera::{self, Camera, CameraUniform},
-    model::{DrawModel, InstanceData, MeshVertex, Model},
-    vertex_buffers::VertexBuffer,
-};
+use super::{camera::{self, Camera, CameraUniform}, model::{DrawModel, InstanceData, MeshVertex, Model}, simple_texture::SimpleTexture, texture::TextureShaderLayout, vertex_buffers::VertexBuffer};
 
 #[system]
 #[read_component(Transform)]
@@ -169,7 +165,7 @@ impl ModelPass {
 
         let render_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Model pipeline layout"),
-            bind_group_layouts: &[&camera_bind_group_layout], // Camera
+            bind_group_layouts: &[&camera_bind_group_layout, SimpleTexture::get_layout(&device), SimpleTexture::get_layout(&device)], // Camera
             push_constant_ranges: &[],
         });
 

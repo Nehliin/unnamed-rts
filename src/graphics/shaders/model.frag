@@ -1,7 +1,7 @@
 
 #version 450
 
-
+layout(location=0) in vec2 v_tex_coords;
 layout(location=1) in vec3 normal;
 layout(location=2) in vec3 fragment_position;
 layout(location=3) in vec3 view_pos;
@@ -10,12 +10,12 @@ layout(location=0) out vec4 f_color;
 
 
 // handle multiple textures?
-/*layout(set = 0, binding = 0) uniform texture2D t_diffuse;
-layout(set = 0, binding = 1) uniform sampler s_diffuse;
-layout(set = 1, binding = 0) uniform texture2D t_specular;
-layout(set = 1, binding = 1) uniform sampler s_specular;
+layout(set = 1, binding = 0) uniform texture2D t_diffuse;
+layout(set = 1, binding = 1) uniform sampler s_diffuse;
+layout(set = 2, binding = 0) uniform texture2D t_specular;
+layout(set = 2, binding = 1) uniform sampler s_specular;
 
-
+/*
 layout(set = 2, binding = 0) uniform texture2DArray t_shadow;
 layout(set = 2, binding = 1) uniform samplerShadow s_shadow;
 
@@ -94,5 +94,8 @@ void main() {
         float shadow_value = calc_shadow(i, light_space_pos);
         result += calculate_point_light(pointLights[i], norm, shadow_value);
     }*/
-    f_color = vec4(1.0);
+    vec4 result = vec4(0.0);
+    result += texture(sampler2D(t_diffuse, s_diffuse), v_tex_coords);
+    result += texture(sampler2D(t_specular, s_specular), v_tex_coords);
+    f_color = result;
 }

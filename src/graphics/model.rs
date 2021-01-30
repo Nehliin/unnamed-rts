@@ -225,8 +225,8 @@ where
         self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
         self.set_vertex_buffer(1, instance_buffer.slice(..));
         self.set_index_buffer(mesh.index_buffer.slice(..));
-        //self.set_texture_data(0, &material.diffuse_texture);
-        //self.set_texture_data(1, &material.specular_texture);
+        self.set_bind_group(1, &material.diffuse_texture.bind_group, &[]);
+        self.set_bind_group(2, &material.specular_texture.bind_group, &[]);
         self.draw_indexed(0..mesh.num_indexes, 0, instances);
     }
 

@@ -30,8 +30,8 @@ pub fn update(
         // DON'T USE A VEC HERE FOR GODS SAKE
         let model_matrices = transforms
             .iter()
-            .map(|trans| InstanceData::new(trans.get_model_matrix()).as_std140())
-            .collect::<Vec<<InstanceData as AsStd140>::Std140Type>>();
+            .map(|trans| InstanceData::new(trans.get_model_matrix()))
+            .collect::<Vec<InstanceData>>();
 
         let instance_buffer = &asset_storage.get(model).unwrap().instance_buffer;
         instance_buffer.update(queue, &model_matrices);
@@ -90,8 +90,8 @@ pub fn draw(
     query.for_each_chunk(world, |chunk| {
         let transforms = chunk.component_slice::<Transform>().unwrap();
         let model = &chunk.component_slice::<Handle<Model>>().unwrap()[0];
-        let model = &asset_storage.get(model).unwrap();
-        render_pass.draw_model_instanced(&model, 0..transforms.len() as u32)
+        let model = asset_storage.get(model).unwrap();
+        render_pass.draw_model_instanced(model, 0..transforms.len() as u32)
     });
     drop(render_pass);
     pass.command_sender.send(encoder.finish()).unwrap();

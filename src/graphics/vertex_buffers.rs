@@ -1,5 +1,5 @@
-use crevice::std140::AsStd140;
 use std::{any::type_name, marker::PhantomData, ops::RangeBounds};
+use bytemuck::{Pod, Zeroable};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     BufferAddress,
@@ -11,12 +11,12 @@ pub trait VertexBufferData {
     fn slice<S: RangeBounds<BufferAddress>>(&self, bounds: S) -> wgpu::BufferSlice;
 }
 
-pub struct ImmutableVertexData<T: AsStd140> {
+pub struct ImmutableVertexData<T: Pod + Zeroable> {
     pub(crate) buffer: wgpu::Buffer,
     _marker: PhantomData<T>,
 }
 
-pub struct MutableVertexData<T: AsStd140> {
+pub struct MutableVertexData<T: Pod + Zeroable> {
     pub(crate) buffer: wgpu::Buffer,
     _marker: PhantomData<T>,
 }
@@ -47,17 +47,17 @@ impl<T: VertexBuffer> VertexBufferData for MutableVertexData<T> {
 
 impl<T: VertexBuffer> MutableVertexData<T> {
     #[allow(dead_code)]
-    pub fn update(&self, queue: &wgpu::Queue, buffer_data: &[T::Std140Type]) {
+    pub fn update(&self, queue: &wgpu::Queue, buffer_data: &[T]) {
         queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&buffer_data));
     }
 }
 
-pub trait VertexBuffer: AsStd140 + Sized {
+pub trait VertexBuffer: Pod + Zeroable {
     const STEP_MODE: wgpu::InputStepMode;
 
     fn allocate_immutable_buffer(
         device: &wgpu::Device,
-        buffer_data: &[Self::Std140Type],
+        buffer_data: &[Self],
     ) -> ImmutableVertexData<Self> {
         ImmutableVertexData {
             _marker: PhantomData::default(),
@@ -71,7 +71,7 @@ pub trait VertexBuffer: AsStd140 + Sized {
 
     fn allocate_mutable_buffer(
         device: &wgpu::Device,
-        buffer_data: &[Self::Std140Type],
+        buffer_data: &[Self],
     ) -> MutableVertexData<Self> {
         MutableVertexData {
             _marker: PhantomData::default(),

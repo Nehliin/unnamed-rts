@@ -12,7 +12,15 @@ use winit::{
     window::Window,
 };
 
-use crate::{assets::{self, Assets}, components::Transform, graphics::{camera::Camera, model::{InstanceData, Model}, model_pass::{draw_system, update_system, ModelPass}}};
+use crate::{
+    assets::{self, Assets},
+    components::Transform,
+    graphics::{
+        camera::Camera,
+        model::{InstanceData, Model},
+        model_pass::{draw_system, update_system, ModelPass},
+    },
+};
 
 const CAMERA_SPEED: f32 = 6.5;
 
@@ -80,7 +88,7 @@ impl App {
 
         resources.insert(Time {
             current_time: std::time::Instant::now(),
-            delta_time: 0.0
+            delta_time: 0.0,
         });
 
         // This should be in a game state
@@ -94,9 +102,16 @@ impl App {
         ));
 
         world.push((
-            suit,
+            suit.clone(),
             Transform::new(
                 Isometry3::translation((0 + 2) as f32, -1.75, 0 as f32),
+                Vector3::new(0.2, 0.2, 0.2),
+            ),
+        ));
+        world.push((
+            suit,
+            Transform::new(
+                Isometry3::translation(-2 as f32, -1.75, 0 as f32),
                 Vector3::new(0.2, 0.2, 0.2),
             ),
         ));
@@ -162,7 +177,7 @@ impl App {
 
     pub fn render(&mut self) -> Result<(), wgpu::SwapChainError> {
         // move this somewhere else:
-        let mut time = self.resources.get_mut::<Time>().unwrap(); 
+        let mut time = self.resources.get_mut::<Time>().unwrap();
         let now = std::time::Instant::now();
         time.delta_time = (now - time.current_time).as_secs_f32();
         time.current_time = now;

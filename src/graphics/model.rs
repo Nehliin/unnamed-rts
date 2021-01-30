@@ -6,8 +6,8 @@ use super::{
     vertex_buffers::{ImmutableVertexData, MutableVertexData, VertexBuffer, VertexBufferData},
 };
 use anyhow::Result;
-use crevice::std140::AsStd140;
-use nalgebra::{Matrix4, Vector3};
+use bytemuck::{Pod, Zeroable};
+use nalgebra::Matrix4;
 use std::{
     ops::Range,
     path::{Path, PathBuf},
@@ -19,11 +19,13 @@ use wgpu::{
 
 // Todo make it dynamically growable
 const INSTANCE_BUFFER_SIZE: u64 = 16_000;
-#[derive(Debug, AsStd140)]
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Pod, Zeroable)]
 pub struct MeshVertex {
-    position: mint::Vector3<f32>,
-    normal: mint::Vector3<f32>,
-    tex_coords: mint::Vector2<f32>,
+    position: [f32; 3],
+    normal: [f32; 3],
+    tex_coords: [f32; 2],
 }
 
 impl VertexBuffer for MeshVertex {
@@ -37,22 +39,22 @@ impl VertexBuffer for MeshVertex {
                 shader_location: 0,
             },
             VertexAttributeDescriptor {
-                offset: std::mem::size_of::<mint::Vector3<f32>>() as BufferAddress,
+                offset: std::mem::size_of::<[f32; 3]>() as BufferAddress,
                 format: VertexFormat::Float3,
                 shader_location: 1,
             },
             VertexAttributeDescriptor {
-                offset: (std::mem::size_of::<mint::Vector3<f32>>() * 2) as BufferAddress,
+                offset: (std::mem::size_of::<[f32; 3]>() * 2) as BufferAddress,
                 format: VertexFormat::Float2,
                 shader_location: 2,
             },
         ]
     }
 }
-
-#[derive(Debug, Clone, AsStd140)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct InstanceData {
-    model_matrix: mint::ColumnMatrix4<f32>,
+    model_matrix: [[f32; 4]; 4],
 }
 
 impl InstanceData {
@@ -154,39 +156,26 @@ impl Model {
         for m in obj_models {
             let mut vertices = Vec::new();
             for i in 0..m.mesh.positions.len() / 3 {
-                vertices.push(
-                    MeshVertex {
-                        position: mint::Vector3 {
-                            x: m.mesh.positions[i * 3],
-                            y: m.mesh.positions[i * 3 + 1],
-                            z: m.mesh.positions[i * 3 + 2],
-                        },
-                        tex_coords: mint::Vector2 {
-                            x: m.mesh.texcoords[i * 2],
-                            y: m.mesh.texcoords[i * 2 + 1],
-                        },
-                        normal: mint::Vector3 {
-                            x: m.mesh.normals[i * 3],
-                            y: m.mesh.normals[i * 3 + 1],
-                            z: m.mesh.normals[i * 3 + 2],
-                        },
-                    }
-                    .as_std140(),
-                );
+                vertices.push(MeshVertex {
+                    position: [
+                        m.mesh.positions[i * 3],
+                        m.mesh.positions[i * 3 + 1],
+                        m.mesh.positions[i * 3 + 2],
+                    ],
+                    tex_coords: [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]],
+                    normal: [
+                        m.mesh.normals[i * 3],
+                        m.mesh.normals[i * 3 + 1],
+                        m.mesh.normals[i * 3 + 2],
+                    ],
+                });
             }
             let vertex_buffer = VertexBuffer::allocate_immutable_buffer(device, &vertices);
-
-            let indicies = unsafe {
-                std::slice::from_raw_parts(
-                    m.mesh.indices.as_ptr() as *const u8,
-                    m.mesh.indices.len() * 4,
-                )
-            };
 
             let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
                 label: Some("Index buffer"),
                 usage: wgpu::BufferUsage::INDEX,
-                contents: &indicies,
+                contents: bytemuck::cast_slice(&m.mesh.indices),
             });
 
             meshes.push(Mesh {
@@ -196,10 +185,10 @@ impl Model {
                 num_indexes: m.mesh.indices.len() as u32,
             });
         }
-        let instance_buffer_len =
-            INSTANCE_BUFFER_SIZE as usize / std::mem::size_of::<<InstanceData as AsStd140>::Std140Type>();
+        let instance_buffer_len = INSTANCE_BUFFER_SIZE as usize
+            / std::mem::size_of::<InstanceData>();
         println!("INSTANCE BUFFER LEN: {}", instance_buffer_len);
-        let buffer_data = vec![InstanceData::default().as_std140(); instance_buffer_len];
+        let buffer_data = vec![InstanceData::default(); instance_buffer_len];
         let instance_buffer = VertexBuffer::allocate_mutable_buffer(device, &buffer_data);
         Ok(Model {
             meshes,

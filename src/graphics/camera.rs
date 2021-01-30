@@ -1,6 +1,8 @@
-use nalgebra::geometry::Perspective3;
-use nalgebra::{Matrix4, Point3, Vector3};
 use crevice::std140::AsStd140;
+use mint::ColumnMatrix4;
+use nalgebra::{Matrix, geometry::Perspective3};
+use nalgebra::{Matrix4, Point3, Vector3};
+use once_cell::sync::Lazy;
 #[derive(Debug, Clone)]
 pub struct Camera {
     direction: Vector3<f32>,
@@ -11,18 +13,27 @@ pub struct Camera {
     yaw: f32,
 }
 
-#[derive(Debug,Copy, Clone, AsStd140)]
+#[derive(Debug, Copy, Clone, AsStd140)]
 pub struct CameraUniform {
     pub view_matrix: mint::ColumnMatrix4<f32>,
     pub projection: mint::ColumnMatrix4<f32>,
     pub view_pos: mint::Vector3<f32>,
 }
 
+#[rustfmt::skip]
+static OPENGL_TO_WGPU_COORDS: Lazy<Matrix4<f32>> = Lazy::new(|| {
+    Matrix4::new(
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 0.5, 0.5,
+        0.0, 0.0, 0.0, 1.0)
+});
+
 impl From<Camera> for CameraUniform {
     fn from(camera: Camera) -> Self {
         CameraUniform {
             view_matrix: camera.view_matrix.into(),
-            projection: (*camera.get_projection_matrix()).into(),
+            projection: (*OPENGL_TO_WGPU_COORDS * (camera.get_projection_matrix())).into(),
             view_pos: camera.get_vec_position().into(),
         }
     }

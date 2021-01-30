@@ -18,16 +18,10 @@ uniform Uniforms {
     vec3 view_pos;
 };
 
-const mat4 CONVERSION = mat4(
-1.0, 0.0, 0.0, 0.0,
-0.0, 1.0, 0.0, 0.0,
-0.0, 0.0, 0.5, 0.0,
-0.0, 0.0, 0.5, 1.0);
-
 void main() {
     out_tex_coords = tex_coords;
     out_view_pos = view_pos;
     fragment_position = vec3(model * vec4(a_position, 1.0));
     normal = mat3(transpose(inverse(mat3(model)))) * a_normal; //make sure surface normals doesn't become fucked when scaling;
-    gl_Position = CONVERSION * projection * view * vec4(fragment_position, 1.0);
+    gl_Position = projection * view * vec4(fragment_position, 1.0);
 }

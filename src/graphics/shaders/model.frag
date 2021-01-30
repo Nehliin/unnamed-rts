@@ -77,11 +77,11 @@ vec3 calculate_point_light(PointLight light, vec3 normal, float shadow_value) {
     return result;
 }
 */
-const mat4 CONVERSION = mat4(
+/*const mat4 CONVERSION = mat4(
 1.0, 0.0, 0.0, 0.0,
 0.0, 1.0, 0.0, 0.0,
 0.0, 0.0, 0.5, 0.0,
-0.0, 0.0, 0.5, 1.0);
+0.0, 0.0, 0.5, 1.0);*/
 
 
 void main() {

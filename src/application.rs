@@ -1,18 +1,25 @@
 use crossbeam_channel::Receiver;
 use legion::{Resources, Schedule, World};
 use nalgebra::{Isometry3, Point3, Vector3};
-use wgpu::{BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits, PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture, TextureFormat, TextureUsage};
-use winit::{dpi::PhysicalSize, event::WindowEvent, window::Window};
-
-use crate::{
-    assets::{self, Assets},
-    components::Transform,
-    graphics::{
-        camera::Camera,
-        model::Model,
-        model_pass::{draw_system, update_system, ModelPass},
-    },
+use wgpu::{
+    BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
+    PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
+    TextureFormat, TextureUsage,
 };
+use winit::{
+    dpi::PhysicalSize,
+    event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
+    window::Window,
+};
+
+use crate::{assets::{self, Assets}, components::Transform, graphics::{camera::Camera, model::{InstanceData, Model}, model_pass::{draw_system, update_system, ModelPass}}};
+
+const CAMERA_SPEED: f32 = 6.5;
+
+pub struct Time {
+    current_time: std::time::Instant,
+    pub delta_time: f32,
+}
 
 pub struct App {
     world: World,
@@ -56,6 +63,9 @@ impl App {
             height: size.height,
             present_mode: wgpu::PresentMode::Mailbox,
         };
+        window.set_cursor_grab(true).unwrap();
+        window.set_cursor_visible(false);
+
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
         let mut assets: Assets<Model> = Assets::new();
         let mut world = World::default();
@@ -67,6 +77,11 @@ impl App {
             .build();
         resources.insert(device);
         resources.insert(queue);
+
+        resources.insert(Time {
+            current_time: std::time::Instant::now(),
+            delta_time: 0.0
+        });
 
         // This should be in a game state
         let suit = assets.load("nanosuit/nanosuit.obj").unwrap();
@@ -107,11 +122,52 @@ impl App {
         self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
     }
 
-    pub fn did_handle_input(&mut self, _event: &WindowEvent) -> bool {
-        false
+    pub fn input_handler(&mut self, event: &DeviceEvent) {
+        let mut camera = self.resources.get_mut::<Camera>().unwrap();
+        let time = self.resources.get::<Time>().unwrap();
+        match event {
+            DeviceEvent::Key(KeyboardInput {
+                state,
+                virtual_keycode: Some(key),
+                ..
+            }) => match *key {
+                VirtualKeyCode::A if *state == ElementState::Pressed => {
+                    camera.move_sideways(-CAMERA_SPEED * time.delta_time);
+                }
+                VirtualKeyCode::D if *state == ElementState::Pressed => {
+                    camera.move_sideways(CAMERA_SPEED * time.delta_time);
+                }
+                VirtualKeyCode::W if *state == ElementState::Pressed => {
+                    camera.move_in_direction(CAMERA_SPEED * time.delta_time);
+                }
+                VirtualKeyCode::S if *state == ElementState::Pressed => {
+                    camera.move_in_direction(-CAMERA_SPEED * time.delta_time);
+                }
+                _ => {}
+            },
+            DeviceEvent::MouseMotion { delta } => {
+                let mut xoffset = delta.0 as f32;
+                let mut yoffset = delta.1 as f32; // reversed since y-coordinates go from bottom to top
+                let sensitivity: f32 = 0.05; // change this value to your liking
+                xoffset *= sensitivity;
+                yoffset *= sensitivity;
+                let yaw = camera.get_yaw();
+                let pitch = camera.get_pitch();
+                camera.set_yaw(xoffset + yaw);
+                camera.set_pitch(yoffset + pitch);
+            }
+            _ => {}
+        }
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SwapChainError> {
+        // move this somewhere else:
+        let mut time = self.resources.get_mut::<Time>().unwrap(); 
+        let now = std::time::Instant::now();
+        time.delta_time = (now - time.current_time).as_secs_f32();
+        time.current_time = now;
+        drop(time);
+
         self.resources.remove::<SwapChainTexture>();
         self.resources
             .insert(self.swap_chain.get_current_frame()?.output);

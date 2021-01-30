@@ -7,10 +7,10 @@ use winit::{
     window::WindowBuilder,
 };
 
+mod application;
 mod assets;
 mod components;
 mod graphics;
-mod application;
 
 fn main() {
     env_logger::init();
@@ -22,30 +22,33 @@ fn main() {
 
     let mut app = block_on(App::new(&window));
     event_loop.run(move |event, _, control_flow| match event {
+        Event::DeviceEvent { ref event, .. } => {
+            app.input_handler(event);
+        }
         Event::WindowEvent {
             ref event,
             window_id,
         } if window_id == window.id() => {
-            if !app.did_handle_input(event) {
-                match event {
-                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                    WindowEvent::Resized(physical_size) => {
-                        app.resize(*physical_size);
-                    }
-                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        // new_inner_size is &&mut so we have to dereference it twice
-                        app.resize(**new_inner_size);
-                    }
-                    WindowEvent::KeyboardInput { input, .. } => match input {
-                        KeyboardInput {
-                            state: ElementState::Pressed,
-                            virtual_keycode: Some(VirtualKeyCode::Escape),
-                            ..
-                        } => *control_flow = ControlFlow::Exit,
-                        _ => {}
-                    },
-                    _ => {}
+            match event {
+                WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                WindowEvent::Resized(physical_size) => {
+                    app.resize(*physical_size);
                 }
+                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                    // new_inner_size is &&mut so we have to dereference it twice
+                    app.resize(**new_inner_size);
+                }
+                WindowEvent::KeyboardInput { input, .. } => {
+                    if let KeyboardInput {
+                        state: ElementState::Pressed,
+                        virtual_keycode: Some(VirtualKeyCode::Escape),
+                        ..
+                    } = input
+                    {
+                        *control_flow = ControlFlow::Exit
+                    }
+                }
+                _ => {}
             }
         }
         Event::RedrawRequested(_) => {

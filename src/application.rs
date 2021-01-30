@@ -8,16 +8,16 @@ use wgpu::{
 };
 use winit::{
     dpi::PhysicalSize,
-    event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
+    event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode},
     window::Window,
 };
 
 use crate::{
-    assets::{self, Assets},
+    assets::Assets,
     components::Transform,
     graphics::{
         camera::Camera,
-        model::{InstanceData, Model},
+        model::Model,
         model_pass::{draw_system, update_system, ModelPass},
     },
 };

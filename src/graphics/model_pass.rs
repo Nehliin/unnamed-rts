@@ -3,12 +3,28 @@ use crevice::std140::AsStd140;
 use crevice::std140::Std140;
 use crossbeam_channel::Sender;
 use legion::{world::SubWorld, *};
-use wgpu::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, BlendDescriptor, Buffer, BufferDescriptor, BufferUsage, ColorStateDescriptor, ColorWrite, CommandEncoderDescriptor, CompareFunction, CullMode, DepthStencilStateDescriptor, Device, Extent3d, FrontFace, PipelineLayoutDescriptor, ProgrammableStageDescriptor, Queue, RasterizationStateDescriptor, RenderPassColorAttachmentDescriptor, RenderPassDepthStencilAttachmentDescriptor, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderStage, StencilStateDescriptor, SwapChainDescriptor, SwapChainTexture, TextureDimension, TextureFormat, TextureViewDescriptor, include_spirv};
+use wgpu::{
+    include_spirv, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
+    BindGroupLayoutEntry, BindingResource, BindingType, BlendDescriptor, Buffer, BufferDescriptor,
+    BufferUsage, ColorStateDescriptor, ColorWrite, CommandEncoderDescriptor, CompareFunction,
+    CullMode, DepthStencilStateDescriptor, Device, Extent3d, FrontFace, PipelineLayoutDescriptor,
+    ProgrammableStageDescriptor, Queue, RasterizationStateDescriptor,
+    RenderPassColorAttachmentDescriptor, RenderPassDepthStencilAttachmentDescriptor,
+    RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderStage,
+    StencilStateDescriptor, SwapChainDescriptor, SwapChainTexture, TextureDimension, TextureFormat,
+    TextureViewDescriptor,
+};
 
 use crate::assets::{Assets, Handle};
 use crate::components;
 
-use super::{camera::{self, Camera, CameraUniform}, model::{DrawModel, InstanceData, MeshVertex, Model}, simple_texture::SimpleTexture, texture::TextureShaderLayout, vertex_buffers::VertexBuffer};
+use super::{
+    camera::{Camera, CameraUniform},
+    model::{DrawModel, InstanceData, MeshVertex, Model},
+    simple_texture::SimpleTexture,
+    texture::TextureShaderLayout,
+    vertex_buffers::VertexBuffer,
+};
 
 #[system]
 #[read_component(Transform)]
@@ -75,7 +91,6 @@ pub fn draw(
             depth_ops: Some(wgpu::Operations {
                 load: wgpu::LoadOp::Clear(1.0),
                 store: true,
-                
             }),
             stencil_ops: None,
         }),
@@ -165,7 +180,11 @@ impl ModelPass {
 
         let render_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Model pipeline layout"),
-            bind_group_layouts: &[&camera_bind_group_layout, SimpleTexture::get_layout(&device), SimpleTexture::get_layout(&device)], // Camera
+            bind_group_layouts: &[
+                &camera_bind_group_layout,
+                SimpleTexture::get_layout(&device),
+                SimpleTexture::get_layout(&device),
+            ], // Camera
             push_constant_ranges: &[],
         });
 

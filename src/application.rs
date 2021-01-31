@@ -1,14 +1,22 @@
+use std::{
+    sync::{Arc, Mutex},
+    time::Instant,
+};
+
 use crossbeam_channel::Receiver;
+use egui::FontDefinitions;
+use egui_demo_lib::DemoWindows;
 use legion::{Resources, Schedule, World};
 use nalgebra::{Isometry3, Point3, Vector3};
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
-    PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
+    PowerPreference, Queue, RenderPass, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
     TextureFormat, TextureUsage,
 };
 use winit::{
     dpi::PhysicalSize,
-    event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode},
+    event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode},
+    event_loop::EventLoopProxy,
     window::Window,
 };
 
@@ -21,6 +29,9 @@ use crate::{
         model_pass::{draw_system, update_system, ModelPass},
     },
 };
+
+use egui_wgpu_backend::ScreenDescriptor;
+use egui_winit_platform::{Platform, PlatformDescriptor};
 
 const CAMERA_SPEED: f32 = 6.5;
 
@@ -37,6 +48,10 @@ pub struct App {
     swap_chain: SwapChain,
     surface: Surface,
     command_receiver: Receiver<CommandBuffer>,
+    platform: Platform,
+    demo_app: DemoWindows,
+    egui_time: Instant,
+    egui_pass: egui_wgpu_backend::RenderPass,
     pub size: PhysicalSize<u32>,
 }
 
@@ -71,10 +86,23 @@ impl App {
             height: size.height,
             present_mode: wgpu::PresentMode::Mailbox,
         };
-        window.set_cursor_grab(true).unwrap();
-        window.set_cursor_visible(false);
+        //window.set_cursor_grab(true).unwrap();
+        //window.set_cursor_visible(false);
 
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
+
+        //let repaint_signal = Arc::new(ExampleRepaintSignal());
+        let platform = Platform::new(PlatformDescriptor {
+            physical_width: size.width as u32,
+            physical_height: size.height as u32,
+            scale_factor: window.scale_factor(),
+            font_definitions: FontDefinitions::default(),
+            style: Default::default(),
+        });
+        let egui_pass = egui_wgpu_backend::RenderPass::new(&device, TextureFormat::Bgra8UnormSrgb);
+        // Display the demo application that ships with egui.
+        let demo_app = egui_demo_lib::DemoWindows::default();
+
         let mut assets: Assets<Model> = Assets::new();
         let mut world = World::default();
         let mut resources = Resources::default();
@@ -124,6 +152,10 @@ impl App {
             surface,
             sc_desc,
             command_receiver: rc,
+            platform,
+            egui_pass,
+            demo_app,
+            egui_time: Instant::now(),
         }
     }
 
@@ -175,12 +207,18 @@ impl App {
         }
     }
 
+    pub fn ui_event(&mut self, event: &Event<()>) {
+        self.platform.handle_event(event);
+    }
+
     pub fn render(&mut self) -> Result<(), wgpu::SwapChainError> {
         // move this somewhere else:
         let mut time = self.resources.get_mut::<Time>().unwrap();
         let now = std::time::Instant::now();
         time.delta_time = (now - time.current_time).as_secs_f32();
         time.current_time = now;
+        self.platform
+            .update_time(self.egui_time.elapsed().as_secs_f64());
         drop(time);
 
         self.resources.remove::<SwapChainTexture>();
@@ -197,8 +235,37 @@ impl App {
         self.schedule.execute(&mut self.world, &mut self.resources);
         // How to handle the different uniforms?
 
+        self.platform.begin_frame();
+        self.demo_app.ui(&self.platform.context());
+
+        let (_output, commands) = self.platform.end_frame();
+        let jobs = self.platform.context().tessellate(commands);
+        let device = self.resources.get::<Device>().unwrap();
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("encoder"),
+        });
+
         let queue = self.resources.get_mut::<Queue>().unwrap();
-        queue.submit(std::iter::once(self.command_receiver.recv().unwrap()));
+        // Upload all resources for the GPU.
+        let screen_descriptor = ScreenDescriptor {
+            physical_width: self.sc_desc.width,
+            physical_height: self.sc_desc.height,
+            scale_factor: 1.0, //window.scale_factor() as f32,
+        };
+        self.egui_pass
+            .update_texture(&device, &queue, &self.platform.context().texture());
+        self.egui_pass.update_user_textures(&device, &queue);
+        self.egui_pass
+            .update_buffers(&device, &queue, &jobs, &screen_descriptor);
+        let frame = self.resources.get::<SwapChainTexture>().unwrap();
+        // Record all render passes.
+        self.egui_pass
+            .execute(&mut encoder, &frame.view, &jobs, &screen_descriptor, None);
+
+        queue.submit(vec![
+            self.command_receiver.recv().unwrap(),
+            encoder.finish(),
+        ]);
 
         Ok(())
     }

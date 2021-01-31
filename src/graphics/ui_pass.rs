@@ -515,18 +515,13 @@ pub fn end_ui_frame(
     #[resource] device: &Device,
     #[resource] queue: &Queue,
     #[resource] current_frame: &SwapChainTexture,
-    #[resource] sc_desc: &SwapChainDescriptor,
+    #[resource] screen_descriptor: &ScreenDescriptor,
 ) {
     let (_output, commands) = platform.end_frame();
     let paint_jobs = platform.context().tessellate(commands);
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
         label: Some("Ui command encoder"),
     });
-    let screen_descriptor = ScreenDescriptor {
-        physical_width: sc_desc.width,
-        physical_height: sc_desc.height,
-        scale_factor: 1.0, //window.scale_factor() as f32,
-    };
     pass.update_texture(&device, &queue, &platform.context().texture());
     pass.update_user_textures(&device, &queue);
     pass.update_buffers(&device, &queue, &paint_jobs, &screen_descriptor);

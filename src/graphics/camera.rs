@@ -67,6 +67,10 @@ impl Camera {
         }
     }
 
+    pub fn update_aspect_ratio(&mut self, width: u32, height: u32) {
+        self.projection_matrix = Perspective3::new(width as f32 / height as f32, 45.0, 0.1, 100.0);
+    }
+
     #[inline]
     pub fn get_vec_position(&self) -> Vector3<f32> {
         to_vec(&self.position)

@@ -3,17 +3,7 @@ use crevice::std140::AsStd140;
 use crevice::std140::Std140;
 use crossbeam_channel::Sender;
 use legion::{world::SubWorld, *};
-use wgpu::{
-    include_spirv, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
-    BindGroupLayoutEntry, BindingResource, BindingType, BlendDescriptor, Buffer, BufferDescriptor,
-    BufferUsage, ColorStateDescriptor, ColorWrite, CommandEncoderDescriptor, CompareFunction,
-    CullMode, DepthStencilStateDescriptor, Device, Extent3d, FrontFace, PipelineLayoutDescriptor,
-    ProgrammableStageDescriptor, Queue, RasterizationStateDescriptor,
-    RenderPassColorAttachmentDescriptor, RenderPassDepthStencilAttachmentDescriptor,
-    RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderStage,
-    StencilStateDescriptor, SwapChainDescriptor, SwapChainTexture, TextureDimension, TextureFormat,
-    TextureViewDescriptor,
-};
+use wgpu::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, BlendDescriptor, Buffer, BufferDescriptor, BufferUsage, ColorStateDescriptor, ColorWrite, CommandEncoderDescriptor, CompareFunction, CullMode, DepthStencilStateDescriptor, Device, Extent3d, FrontFace, PipelineLayoutDescriptor, ProgrammableStageDescriptor, Queue, RasterizationStateDescriptor, RenderPassColorAttachmentDescriptor, RenderPassDepthStencilAttachmentDescriptor, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderStage, StencilStateDescriptor, SwapChainDescriptor, SwapChainTexture, TextureDimension, TextureFormat, TextureViewDescriptor, include_spirv};
 
 use crate::assets::{Assets, Handle};
 use crate::components;
@@ -55,7 +45,7 @@ pub fn update(
 #[read_component(Handle<Model>)]
 pub fn draw(
     world: &SubWorld,
-    #[state] pass: &ModelPass,
+    #[resource] pass: &ModelPass,
     #[resource] camera: &Camera,
     #[resource] queue: &Queue,
     #[resource] asset_storage: &Assets<Model>,
@@ -119,7 +109,7 @@ pub struct ModelPass {
 }
 
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-fn create_depth_texture(
+pub fn create_depth_texture(
     device: &wgpu::Device,
     sc_desc: &wgpu::SwapChainDescriptor,
 ) -> wgpu::Texture {
@@ -147,7 +137,7 @@ impl ModelPass {
     ) -> ModelPass {
         let vs_module = device.create_shader_module(include_spirv!("shaders/model.vert.spv"));
         let fs_module = device.create_shader_module(include_spirv!("shaders/model.frag.spv"));
-        let depth_texture = create_depth_texture(&device, sc_desc);
+        let depth_texture = create_depth_texture(device, sc_desc);
         let depth_texture_view = depth_texture.create_view(&TextureViewDescriptor::default());
         let camera_buffer = device.create_buffer(&BufferDescriptor {
             label: Some("Camera buffer"),
@@ -236,5 +226,10 @@ impl ModelPass {
             depth_texture,
             depth_texture_view,
         }
+    }
+
+    pub fn handle_resize(&mut self, device: &Device, sc_desc: &SwapChainDescriptor) {
+        self.depth_texture = create_depth_texture(&device, &sc_desc);
+        self.depth_texture_view = self.depth_texture.create_view(&TextureViewDescriptor::default());
     }
 }

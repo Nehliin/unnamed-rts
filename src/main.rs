@@ -1,6 +1,6 @@
 use application::App;
 use futures::executor::block_on;
-use log::error;
+use log::warn;
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -31,11 +31,14 @@ fn main() {
                 match event {
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     WindowEvent::Resized(physical_size) => {
-                        app.resize(*physical_size);
+                        app.resize(*physical_size, None);
                     }
-                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                    WindowEvent::ScaleFactorChanged {
+                        new_inner_size,
+                        scale_factor,
+                    } => {
                         // new_inner_size is &&mut so we have to dereference it twice
-                        app.resize(**new_inner_size);
+                        app.resize(**new_inner_size, Some(*scale_factor as f32));
                     }
                     WindowEvent::KeyboardInput { input, .. } => {
                         if let KeyboardInput {
@@ -54,11 +57,11 @@ fn main() {
                 match app.render() {
                     Ok(_) => {}
                     // Recreate the swap_chain if lost
-                    Err(wgpu::SwapChainError::Lost) => app.resize(app.size),
+                    Err(wgpu::SwapChainError::Lost) => app.resize(app.size, None),
                     // The system is out of memory, we should probably quit
                     Err(wgpu::SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     // All other errors (Outdated, Timeout) should be resolved by the next frame
-                    Err(e) => error!("{:?}", e),
+                    Err(e) => warn!("{:?}", e),
                 }
             }
             Event::MainEventsCleared => {

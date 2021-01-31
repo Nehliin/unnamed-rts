@@ -6,7 +6,7 @@ use egui_demo_lib::DemoWindows;
 use image::{GenericImageView, ImageFormat};
 use legion::{Resources, Schedule, World};
 use nalgebra::{Isometry3, Point3, Vector3};
-use ui_pass::UiPass;
+use ui_pass::{ScreenDescriptor, UiPass};
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
     PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
@@ -47,6 +47,7 @@ pub struct App {
     schedule: Schedule,
     swap_chain: SwapChain,
     surface: Surface,
+    sc_desc: SwapChainDescriptor,
     // TODO: use small vec instead
     command_receivers: Vec<Receiver<CommandBuffer>>,
     pub size: PhysicalSize<u32>,
@@ -88,7 +89,11 @@ impl App {
 
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
-        //let repaint_signal = Arc::new(ExampleRepaintSignal());
+        let screen_descriptor = ScreenDescriptor {
+            physical_width: size.width,
+            physical_height: size.height,
+            scale_factor: window.scale_factor() as f32,
+        };
         let platform = Platform::new(PlatformDescriptor {
             physical_width: size.width as u32,
             physical_height: size.height as u32,
@@ -96,21 +101,6 @@ impl App {
             font_definitions: FontDefinitions::default(),
             style: Default::default(),
         });
-        /*let mut egui_pass =
-            egui_wgpu_backend::RenderPass::new(&device, TextureFormat::Bgra8UnormSrgb);
-        //let texture = SimpleTexture::load_texture(&device, &queue, "awesomeface.png").unwrap();
-        let img = image::open("awesomeface.png").unwrap();
-        let pixels: Vec<egui::Color32> = img
-            .to_rgba8()
-            .pixels()
-            .map(|rgb| {
-                egui::Color32::from_rgba_premultiplied(rgb.0[0], rgb.0[1], rgb.0[2], rgb.0[3])
-            })
-            .collect();
-        let id = egui_pass
-            .alloc_srgba_premultiplied((img.width() as usize, img.height() as usize), &pixels);
-        // Display the demo application that ships with egui.
-        let demo_app = egui_demo_lib::DemoWindows::default();*/
 
         let mut assets: Assets<Model> = Assets::new();
         let mut world = World::default();
@@ -119,20 +109,17 @@ impl App {
         let (model_sender, model_rc) = crossbeam_channel::bounded(1);
         let schedule = Schedule::builder()
             .add_system(model_pass::update_system())
-            .add_system(model_pass::draw_system(ModelPass::new(
-                &device,
-                &sc_desc,
-                model_sender,
-            )))
+            .add_system(model_pass::draw_system())
             .add_system(ui_pass::begin_ui_frame_system(Instant::now()))
             .add_system(ui_pass::draw_demo_system())
             .add_system(ui_pass::end_ui_frame_system(UiPass::new(
                 &device, ui_sender,
             )))
             .build();
+        resources.insert(ModelPass::new(&device, &sc_desc, model_sender));
         resources.insert(device);
         resources.insert(platform);
-        resources.insert(sc_desc);
+        resources.insert(screen_descriptor);
         resources.insert(queue);
 
         resources.insert(Time {
@@ -153,14 +140,14 @@ impl App {
         world.push((
             suit.clone(),
             Transform::new(
-                Isometry3::translation((0 + 2) as f32, -1.75, 0 as f32),
+                Isometry3::translation(2.0, -1.75, 0.0),
                 Vector3::new(0.2, 0.2, 0.2),
             ),
         ));
         world.push((
             suit,
             Transform::new(
-                Isometry3::translation(-2 as f32, -1.75, 0 as f32),
+                Isometry3::translation(-2.0, -1.75, 0.0),
                 Vector3::new(0.2, 0.2, 0.2),
             ),
         ));
@@ -171,27 +158,33 @@ impl App {
             resources,
             swap_chain,
             surface,
+            sc_desc,
             command_receivers: vec![model_rc, ui_rc],
         }
     }
-
-    pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
+    // maybe use a system for this instead?
+    pub fn resize(&mut self, new_size: PhysicalSize<u32>, updated_scale_factor: Option<f32>) {
         let device = self
             .resources
             .get::<Device>()
             .expect("Device to be registerd");
-        let mut sc_desc = self
-            .resources
-            .get_mut::<SwapChainDescriptor>()
-            .expect("SwapChainDescriptor to be present");
-        sc_desc.width = new_size.width;
-        sc_desc.height = new_size.height;
-        self.swap_chain = device.create_swap_chain(&self.surface, &sc_desc);
+        self.sc_desc.width = new_size.width;
+        self.sc_desc.height = new_size.height;
+        self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
+        let mut screen_descriptor = self.resources.get_mut::<ScreenDescriptor>().expect("Screen descriptor not available");
+        screen_descriptor.physical_width = new_size.width;
+        screen_descriptor.physical_height = new_size.height;
+        if let Some(scale_factor) = updated_scale_factor {
+            screen_descriptor.scale_factor = scale_factor;
+        }
+        let mut camera = self.resources.get_mut::<Camera>().unwrap();
+        camera.update_aspect_ratio(new_size.width, new_size.height);
+        self.resources.get_mut::<ModelPass>().unwrap().handle_resize(&device, &self.sc_desc);
     }
 
     pub fn event_handler(&mut self, event: &Event<()>) {
         match event {
-            Event::DeviceEvent { ref event, ..} => {
+            Event::DeviceEvent { ref event, .. } => {
                 let mut camera = self.resources.get_mut::<Camera>().unwrap();
                 let time = self.resources.get::<Time>().unwrap();
                 match event {
@@ -228,13 +221,11 @@ impl App {
                     _ => {}
                 }
             }
-            _ => self.ui_event(event)
+            _ => {
+                let mut platform = self.resources.get_mut::<Platform>().unwrap();
+                platform.handle_event(event);
+            }
         }
-    }
-
-    pub fn ui_event(&mut self, event: &Event<()>) {
-        let mut platform = self.resources.get_mut::<Platform>().unwrap();
-        platform.handle_event(event);
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SwapChainError> {

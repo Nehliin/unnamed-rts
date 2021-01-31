@@ -2,7 +2,6 @@ use std::time::Instant;
 
 use crossbeam_channel::Receiver;
 use egui::{FontDefinitions, SidePanel};
-use egui_demo_lib::DemoWindows;
 use image::{GenericImageView, ImageFormat};
 use legion::{Resources, Schedule, World};
 use nalgebra::{Isometry3, Point3, Vector3};
@@ -111,7 +110,7 @@ impl App {
             .add_system(model_pass::update_system())
             .add_system(model_pass::draw_system())
             .add_system(ui_pass::begin_ui_frame_system(Instant::now()))
-            .add_system(ui_pass::draw_demo_system())
+            .add_system(ui_pass::draw_fps_counter_system())
             .add_system(ui_pass::end_ui_frame_system(UiPass::new(
                 &device, ui_sender,
             )))

@@ -2,6 +2,7 @@ use std::time::Instant;
 
 use bytemuck::{Pod, Zeroable};
 use crossbeam_channel::Sender;
+use egui::Color32;
 use egui_winit_platform::Platform;
 use legion::*;
 use wgpu::{
@@ -10,6 +11,8 @@ use wgpu::{
     CommandBuffer, CommandEncoderDescriptor, Device, Queue, SwapChainDescriptor, SwapChainTexture,
     TextureFormat,
 };
+
+use crate::application::Time;
 
 #[derive(Debug)]
 enum BufferType {
@@ -497,14 +500,12 @@ pub fn begin_ui_frame(#[state] time_since_start: &Instant, #[resource] platform:
 }
 
 #[system]
-pub fn draw_demo(#[resource] platform: &Platform) {
-    egui::SidePanel::left("test", 200.0).show(&platform.context(), |ui| {
-            ui.heading("Test image");
-            if ui.button("Click me!").clicked {
-                ui.label("Clicked!");
-            } else {
-                ui.label("Not Clicked");
-            }
+pub fn draw_fps_counter(#[resource] platform: &Platform, #[resource] time: &Time) {
+    egui::Area::new("FPS area")
+        .fixed_pos(egui::pos2(0.0, 0.0))
+        .show(&platform.context(), |ui| {
+            let label = egui::Label::new(format!("FPS: {}", 1.0 / time.delta_time)).text_color(Color32::WHITE);
+            ui.add(label);
         });
 }
 // TODO: handle user textures here
@@ -533,5 +534,7 @@ pub fn end_ui_frame(
         &screen_descriptor,
         None,
     );
-    pass.command_sender.send(encoder.finish()).expect("Failed to send ui_render commands");
+    pass.command_sender
+        .send(encoder.finish())
+        .expect("Failed to send ui_render commands");
 }

@@ -530,18 +530,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "egui_demo_lib"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e7b363a61a4dd3fc489c5f4c205da5ee2899155ac67c8614c5f1207039cd964"
-dependencies = [
- "egui",
- "epi",
-]
-
-[[package]]
 name = "egui_winit_platform"
 version = "0.3.0"
+source = "git+https://github.com/Nehliin/egui_winit_platform.git#18e2b4dd5965e54cdbd7f7dac8b9492ce0c24d9f"
 dependencies = [
  "egui",
  "winit",
@@ -585,15 +576,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "epi"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e358eaf8b9898aa366bed1c0645dd439f272341e5cd1404c8a6a604e544ee065"
-dependencies = [
- "egui",
-]
-
-[[package]]
 name = "erased-serde"
 version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -611,7 +593,6 @@ dependencies = [
  "crevice",
  "crossbeam-channel 0.5.0",
  "egui",
- "egui_demo_lib",
  "egui_winit_platform",
  "env_logger",
  "futures",

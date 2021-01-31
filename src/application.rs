@@ -1,22 +1,20 @@
-use std::{
-    sync::{Arc, Mutex},
-    time::Instant,
-};
+use std::time::Instant;
 
 use crossbeam_channel::Receiver;
-use egui::FontDefinitions;
+use egui::{FontDefinitions, SidePanel};
 use egui_demo_lib::DemoWindows;
+use image::{GenericImageView, ImageFormat};
 use legion::{Resources, Schedule, World};
 use nalgebra::{Isometry3, Point3, Vector3};
+use ui_pass::UiPass;
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
-    PowerPreference, Queue, RenderPass, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
+    PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
     TextureFormat, TextureUsage,
 };
 use winit::{
     dpi::PhysicalSize,
     event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode},
-    event_loop::EventLoopProxy,
     window::Window,
 };
 
@@ -26,11 +24,14 @@ use crate::{
     graphics::{
         camera::Camera,
         model::Model,
-        model_pass::{draw_system, update_system, ModelPass},
+        model_pass::{self, ModelPass},
+        simple_texture::SimpleTexture,
+        texture::{LoadableTexture, Texture},
+        ui_pass,
     },
 };
 
-use egui_wgpu_backend::ScreenDescriptor;
+//use egui_wgpu_backend::ScreenDescriptor;
 use egui_winit_platform::{Platform, PlatformDescriptor};
 
 const CAMERA_SPEED: f32 = 6.5;
@@ -44,14 +45,10 @@ pub struct App {
     world: World,
     resources: Resources,
     schedule: Schedule,
-    sc_desc: SwapChainDescriptor,
     swap_chain: SwapChain,
     surface: Surface,
-    command_receiver: Receiver<CommandBuffer>,
-    platform: Platform,
-    demo_app: DemoWindows,
-    egui_time: Instant,
-    egui_pass: egui_wgpu_backend::RenderPass,
+    // TODO: use small vec instead
+    command_receivers: Vec<Receiver<CommandBuffer>>,
     pub size: PhysicalSize<u32>,
 }
 
@@ -99,19 +96,43 @@ impl App {
             font_definitions: FontDefinitions::default(),
             style: Default::default(),
         });
-        let egui_pass = egui_wgpu_backend::RenderPass::new(&device, TextureFormat::Bgra8UnormSrgb);
+        /*let mut egui_pass =
+            egui_wgpu_backend::RenderPass::new(&device, TextureFormat::Bgra8UnormSrgb);
+        //let texture = SimpleTexture::load_texture(&device, &queue, "awesomeface.png").unwrap();
+        let img = image::open("awesomeface.png").unwrap();
+        let pixels: Vec<egui::Color32> = img
+            .to_rgba8()
+            .pixels()
+            .map(|rgb| {
+                egui::Color32::from_rgba_premultiplied(rgb.0[0], rgb.0[1], rgb.0[2], rgb.0[3])
+            })
+            .collect();
+        let id = egui_pass
+            .alloc_srgba_premultiplied((img.width() as usize, img.height() as usize), &pixels);
         // Display the demo application that ships with egui.
-        let demo_app = egui_demo_lib::DemoWindows::default();
+        let demo_app = egui_demo_lib::DemoWindows::default();*/
 
         let mut assets: Assets<Model> = Assets::new();
         let mut world = World::default();
         let mut resources = Resources::default();
-        let (sender, rc) = crossbeam_channel::bounded(1);
+        let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
+        let (model_sender, model_rc) = crossbeam_channel::bounded(1);
         let schedule = Schedule::builder()
-            .add_system(update_system())
-            .add_system(draw_system(ModelPass::new(&device, &sc_desc, sender)))
+            .add_system(model_pass::update_system())
+            .add_system(model_pass::draw_system(ModelPass::new(
+                &device,
+                &sc_desc,
+                model_sender,
+            )))
+            .add_system(ui_pass::begin_ui_frame_system(Instant::now()))
+            .add_system(ui_pass::draw_demo_system())
+            .add_system(ui_pass::end_ui_frame_system(UiPass::new(
+                &device, ui_sender,
+            )))
             .build();
         resources.insert(device);
+        resources.insert(platform);
+        resources.insert(sc_desc);
         resources.insert(queue);
 
         resources.insert(Time {
@@ -150,12 +171,7 @@ impl App {
             resources,
             swap_chain,
             surface,
-            sc_desc,
-            command_receiver: rc,
-            platform,
-            egui_pass,
-            demo_app,
-            egui_time: Instant::now(),
+            command_receivers: vec![model_rc, ui_rc],
         }
     }
 
@@ -164,51 +180,61 @@ impl App {
             .resources
             .get::<Device>()
             .expect("Device to be registerd");
-        self.sc_desc.width = new_size.width;
-        self.sc_desc.height = new_size.height;
-        self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
+        let mut sc_desc = self
+            .resources
+            .get_mut::<SwapChainDescriptor>()
+            .expect("SwapChainDescriptor to be present");
+        sc_desc.width = new_size.width;
+        sc_desc.height = new_size.height;
+        self.swap_chain = device.create_swap_chain(&self.surface, &sc_desc);
     }
 
-    pub fn input_handler(&mut self, event: &DeviceEvent) {
-        let mut camera = self.resources.get_mut::<Camera>().unwrap();
-        let time = self.resources.get::<Time>().unwrap();
+    pub fn event_handler(&mut self, event: &Event<()>) {
         match event {
-            DeviceEvent::Key(KeyboardInput {
-                state,
-                virtual_keycode: Some(key),
-                ..
-            }) => match *key {
-                VirtualKeyCode::A if *state == ElementState::Pressed => {
-                    camera.move_sideways(-CAMERA_SPEED * time.delta_time);
+            Event::DeviceEvent { ref event, ..} => {
+                let mut camera = self.resources.get_mut::<Camera>().unwrap();
+                let time = self.resources.get::<Time>().unwrap();
+                match event {
+                    DeviceEvent::Key(KeyboardInput {
+                        state,
+                        virtual_keycode: Some(key),
+                        ..
+                    }) => match *key {
+                        VirtualKeyCode::A if *state == ElementState::Pressed => {
+                            camera.move_sideways(-CAMERA_SPEED * time.delta_time);
+                        }
+                        VirtualKeyCode::D if *state == ElementState::Pressed => {
+                            camera.move_sideways(CAMERA_SPEED * time.delta_time);
+                        }
+                        VirtualKeyCode::W if *state == ElementState::Pressed => {
+                            camera.move_in_direction(CAMERA_SPEED * time.delta_time);
+                        }
+                        VirtualKeyCode::S if *state == ElementState::Pressed => {
+                            camera.move_in_direction(-CAMERA_SPEED * time.delta_time);
+                        }
+                        _ => {}
+                    },
+                    DeviceEvent::MouseMotion { delta } => {
+                        let mut xoffset = delta.0 as f32;
+                        let mut yoffset = delta.1 as f32; // reversed since y-coordinates go from bottom to top
+                        let sensitivity: f32 = 0.05; // change this value to your liking
+                        xoffset *= sensitivity;
+                        yoffset *= sensitivity;
+                        let yaw = camera.get_yaw();
+                        let pitch = camera.get_pitch();
+                        camera.set_yaw(xoffset + yaw);
+                        camera.set_pitch(yoffset + pitch);
+                    }
+                    _ => {}
                 }
-                VirtualKeyCode::D if *state == ElementState::Pressed => {
-                    camera.move_sideways(CAMERA_SPEED * time.delta_time);
-                }
-                VirtualKeyCode::W if *state == ElementState::Pressed => {
-                    camera.move_in_direction(CAMERA_SPEED * time.delta_time);
-                }
-                VirtualKeyCode::S if *state == ElementState::Pressed => {
-                    camera.move_in_direction(-CAMERA_SPEED * time.delta_time);
-                }
-                _ => {}
-            },
-            DeviceEvent::MouseMotion { delta } => {
-                let mut xoffset = delta.0 as f32;
-                let mut yoffset = delta.1 as f32; // reversed since y-coordinates go from bottom to top
-                let sensitivity: f32 = 0.05; // change this value to your liking
-                xoffset *= sensitivity;
-                yoffset *= sensitivity;
-                let yaw = camera.get_yaw();
-                let pitch = camera.get_pitch();
-                camera.set_yaw(xoffset + yaw);
-                camera.set_pitch(yoffset + pitch);
             }
-            _ => {}
+            _ => self.ui_event(event)
         }
     }
 
     pub fn ui_event(&mut self, event: &Event<()>) {
-        self.platform.handle_event(event);
+        let mut platform = self.resources.get_mut::<Platform>().unwrap();
+        platform.handle_event(event);
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SwapChainError> {
@@ -217,8 +243,6 @@ impl App {
         let now = std::time::Instant::now();
         time.delta_time = (now - time.current_time).as_secs_f32();
         time.current_time = now;
-        self.platform
-            .update_time(self.egui_time.elapsed().as_secs_f64());
         drop(time);
 
         self.resources.remove::<SwapChainTexture>();
@@ -235,37 +259,9 @@ impl App {
         self.schedule.execute(&mut self.world, &mut self.resources);
         // How to handle the different uniforms?
 
-        self.platform.begin_frame();
-        self.demo_app.ui(&self.platform.context());
-
-        let (_output, commands) = self.platform.end_frame();
-        let jobs = self.platform.context().tessellate(commands);
-        let device = self.resources.get::<Device>().unwrap();
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("encoder"),
-        });
-
         let queue = self.resources.get_mut::<Queue>().unwrap();
-        // Upload all resources for the GPU.
-        let screen_descriptor = ScreenDescriptor {
-            physical_width: self.sc_desc.width,
-            physical_height: self.sc_desc.height,
-            scale_factor: 1.0, //window.scale_factor() as f32,
-        };
-        self.egui_pass
-            .update_texture(&device, &queue, &self.platform.context().texture());
-        self.egui_pass.update_user_textures(&device, &queue);
-        self.egui_pass
-            .update_buffers(&device, &queue, &jobs, &screen_descriptor);
-        let frame = self.resources.get::<SwapChainTexture>().unwrap();
-        // Record all render passes.
-        self.egui_pass
-            .execute(&mut encoder, &frame.view, &jobs, &screen_descriptor, None);
 
-        queue.submit(vec![
-            self.command_receiver.recv().unwrap(),
-            encoder.finish(),
-        ]);
+        queue.submit(self.command_receivers.iter().map(|rc| rc.recv().unwrap()));
 
         Ok(())
     }

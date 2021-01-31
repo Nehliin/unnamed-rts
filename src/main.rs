@@ -22,11 +22,8 @@ fn main() {
         .expect("Failed to create window");
     let mut app = block_on(App::new(&window));
     event_loop.run(move |event, _, control_flow| {
-        app.ui_event(&event);
+        app.event_handler(&event);
         match event {
-            Event::DeviceEvent { ref event, .. } => {
-                app.input_handler(event);
-            }
             Event::WindowEvent {
                 ref event,
                 window_id,

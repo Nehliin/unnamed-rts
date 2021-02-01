@@ -1,11 +1,8 @@
-use std::{sync::Mutex, time::Instant};
+use std::time::Instant;
 
 use crossbeam_channel::Receiver;
-use egui::{FontDefinitions, SidePanel};
-use image::{GenericImageView, ImageFormat};
 use legion::{Resources, Schedule, World};
 use nalgebra::{Isometry3, Point3, Vector3};
-use ui_pass::UiPass;
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
     PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
@@ -24,10 +21,10 @@ use crate::{
         camera::Camera,
         model::Model,
         model_pass::{self, ModelPass},
-        simple_texture::SimpleTexture,
-        texture::{LoadableTexture, Texture},
-        ui_context::{self, UiContext, WindowSize},
-        ui_pass,
+        ui::{
+            ui_context::{self, UiContext, WindowSize},
+            ui_pass::{self, UiPass},
+        },
     },
 };
 
@@ -48,6 +45,18 @@ pub struct App {
     // TODO: use small vec instead
     command_receivers: Vec<Receiver<CommandBuffer>>,
     pub size: PhysicalSize<u32>,
+}
+
+fn init_ui_resources(resources: &mut Resources, size: &PhysicalSize<u32>, scale_factor: f32) {
+    let window_size = WindowSize {
+        physical_width: size.width,
+        physical_height: size.height,
+        scale_factor,
+    };
+
+    let ui_context = UiContext::new(&window_size);
+    resources.insert(ui_context);
+    resources.insert(window_size);
 }
 
 impl App {
@@ -85,14 +94,6 @@ impl App {
         //window.set_cursor_visible(false);
 
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
-        let window_size = WindowSize {
-            physical_width: size.width,
-            physical_height: size.height,
-            scale_factor: window.scale_factor() as f32,
-        };
-
-        let ui_context = UiContext::new(&window_size);
-
         let mut assets: Assets<Model> = Assets::new();
         let mut world = World::default();
         let mut resources = Resources::default();
@@ -109,15 +110,12 @@ impl App {
             .build();
         resources.insert(ModelPass::new(&device, &sc_desc, model_sender));
         resources.insert(device);
-        resources.insert(ui_context);
-        resources.insert(window_size);
         resources.insert(queue);
-
         resources.insert(Time {
             current_time: std::time::Instant::now(),
             delta_time: 0.0,
         });
-
+        init_ui_resources(&mut resources, &size, window.scale_factor() as f32);
         // This should be in a game state
         let suit = assets.load("nanosuit/nanosuit.obj").unwrap();
         resources.insert(assets);

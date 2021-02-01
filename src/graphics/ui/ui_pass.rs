@@ -43,7 +43,7 @@ pub struct UiPass {
     texture_bind_group_layout: wgpu::BindGroupLayout,
     texture_bind_group: Option<wgpu::BindGroup>,
     texture_version: Option<u64>,
-    next_user_texture_id: u64,
+    _next_user_texture_id: u64,
     pending_user_textures: Vec<(u64, egui::Texture)>,
     user_textures: Vec<Option<wgpu::BindGroup>>,
     command_sender: Sender<CommandBuffer>,
@@ -51,8 +51,8 @@ pub struct UiPass {
 
 impl UiPass {
     pub fn new(device: &Device, command_sender: Sender<CommandBuffer>) -> UiPass {
-        let vs_module = device.create_shader_module(include_spirv!("shaders/ui.vert.spv"));
-        let fs_module = device.create_shader_module(include_spirv!("shaders/ui.frag.spv"));
+        let vs_module = device.create_shader_module(include_spirv!("../shaders/ui.vert.spv"));
+        let fs_module = device.create_shader_module(include_spirv!("../shaders/ui.frag.spv"));
 
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("ui_uniform_buffer"),
@@ -185,7 +185,7 @@ impl UiPass {
             texture_bind_group_layout,
             texture_version: None,
             texture_bind_group: None,
-            next_user_texture_id: 0,
+            _next_user_texture_id: 0,
             pending_user_textures: Vec::new(),
             user_textures: Vec::new(),
             command_sender,
@@ -217,7 +217,7 @@ impl UiPass {
             }],
             depth_stencil_attachment: None,
         });
-        pass.push_debug_group("egui_pass");
+        pass.push_debug_group("ui_pass");
         pass.set_pipeline(&self.render_pipeline);
 
         pass.set_bind_group(0, &self.uniform_bind_group, &[]);
@@ -270,7 +270,6 @@ impl UiPass {
                 .expect("egui texture was not set before the first draw"),
             egui::TextureId::User(id) => {
                 let id = id as usize;
-                assert!(id < self.user_textures.len());
                 self.user_textures
                     .get(id)
                     .unwrap_or_else(|| panic!("user texture {} not found", id))
@@ -478,6 +477,7 @@ fn as_byte_slice<T>(slice: &[T]) -> &[u8] {
     unsafe { std::slice::from_raw_parts(ptr, len) }
 }
 
+
 #[system]
 pub fn begin_ui_frame(#[state] time_since_start: &Instant, #[resource] ui_context: &mut UiContext) {
     ui_context.update_time(time_since_start.elapsed().as_secs_f64());
@@ -494,7 +494,11 @@ pub fn draw_fps_counter(#[resource] ui_context: &UiContext, #[resource] time: &T
             ui.add(label);
         });
 }
+
+
 // TODO: handle user textures here
+// Basicall simply load texture data to create a egui::Texture and then run egui texture to wgpu texture
+// However, better to map texture id = already loaded texture (via Aseets<>) and handle it from there
 #[system]
 pub fn end_ui_frame(
     #[state] pass: &mut UiPass,

@@ -120,20 +120,6 @@ pub fn handle_input<T>(context: &mut UiContext, window_size: &mut WindowSize, ev
                     let pressed = input.state == winit::event::ElementState::Pressed;
 
                     if pressed {
-                        // Needed? use the copy, cut virtual keys?
-                        /*  let is_ctrl = context.modifier_state.ctrl();
-                        if is_ctrl && virtual_keycode == VirtualKeyCode::C {
-                            self.raw_input.events.push(egui::Event::Copy)
-                        } else if is_ctrl && virtual_keycode == VirtualKeyCode::X {
-                            self.raw_input.events.push(egui::Event::Cut)
-                        } else if is_ctrl && virtual_keycode == VirtualKeyCode::V {
-                            #[cfg(feature = "clipboard")]
-                            if let Some(ref mut clipboard) = self.clipboard {
-                                if let Ok(contents) = clipboard.get_contents() {
-                                    self.raw_input.events.push(egui::Event::Text(contents))
-                                }
-                            }
-                        } else*/
                         if let Some(key) = winit_to_egui_key_code(virtual_keycode) {
                             context.raw_input.events.push(egui::Event::Key {
                                 key,
@@ -215,9 +201,9 @@ fn winit_to_egui_modifiers(modifiers: ModifiersState) -> egui::Modifiers {
 /// We only want printable characters and ignore all special keys.
 #[inline]
 fn is_printable(chr: char) -> bool {
-    let is_in_private_use_area = '\u{e000}' <= chr && chr <= '\u{f8ff}'
-        || '\u{f0000}' <= chr && chr <= '\u{ffffd}'
-        || '\u{100000}' <= chr && chr <= '\u{10fffd}';
+    let is_in_private_use_area = ('\u{e000}'..='\u{f8ff}').contains(&chr)
+        || ('\u{f0000}'..='\u{ffffd}').contains(&chr)
+        || ('\u{100000}'..='\u{10fffd}').contains(&chr);
 
     !is_in_private_use_area && !chr.is_ascii_control()
 }

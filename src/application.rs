@@ -1,11 +1,11 @@
-use std::time::Instant;
+use std::{sync::Mutex, time::Instant};
 
 use crossbeam_channel::Receiver;
 use egui::{FontDefinitions, SidePanel};
 use image::{GenericImageView, ImageFormat};
 use legion::{Resources, Schedule, World};
 use nalgebra::{Isometry3, Point3, Vector3};
-use ui_pass::{ScreenDescriptor, UiPass};
+use ui_pass::UiPass;
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
     PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
@@ -26,12 +26,10 @@ use crate::{
         model_pass::{self, ModelPass},
         simple_texture::SimpleTexture,
         texture::{LoadableTexture, Texture},
+        ui_context::{self, UiContext, WindowSize},
         ui_pass,
     },
 };
-
-//use egui_wgpu_backend::ScreenDescriptor;
-use egui_winit_platform::{Platform, PlatformDescriptor};
 
 const CAMERA_SPEED: f32 = 6.5;
 
@@ -87,19 +85,13 @@ impl App {
         //window.set_cursor_visible(false);
 
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
-
-        let screen_descriptor = ScreenDescriptor {
+        let window_size = WindowSize {
             physical_width: size.width,
             physical_height: size.height,
             scale_factor: window.scale_factor() as f32,
         };
-        let platform = Platform::new(PlatformDescriptor {
-            physical_width: size.width as u32,
-            physical_height: size.height as u32,
-            scale_factor: window.scale_factor(),
-            font_definitions: FontDefinitions::default(),
-            style: Default::default(),
-        });
+
+        let ui_context = UiContext::new(&window_size);
 
         let mut assets: Assets<Model> = Assets::new();
         let mut world = World::default();
@@ -117,8 +109,8 @@ impl App {
             .build();
         resources.insert(ModelPass::new(&device, &sc_desc, model_sender));
         resources.insert(device);
-        resources.insert(platform);
-        resources.insert(screen_descriptor);
+        resources.insert(ui_context);
+        resources.insert(window_size);
         resources.insert(queue);
 
         resources.insert(Time {
@@ -170,15 +162,21 @@ impl App {
         self.sc_desc.width = new_size.width;
         self.sc_desc.height = new_size.height;
         self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
-        let mut screen_descriptor = self.resources.get_mut::<ScreenDescriptor>().expect("Screen descriptor not available");
-        screen_descriptor.physical_width = new_size.width;
-        screen_descriptor.physical_height = new_size.height;
+        let mut window_size = self
+            .resources
+            .get_mut::<WindowSize>()
+            .expect("WindowSize not available");
+        window_size.physical_width = new_size.width;
+        window_size.physical_height = new_size.height;
         if let Some(scale_factor) = updated_scale_factor {
-            screen_descriptor.scale_factor = scale_factor;
+            window_size.scale_factor = scale_factor;
         }
         let mut camera = self.resources.get_mut::<Camera>().unwrap();
         camera.update_aspect_ratio(new_size.width, new_size.height);
-        self.resources.get_mut::<ModelPass>().unwrap().handle_resize(&device, &self.sc_desc);
+        self.resources
+            .get_mut::<ModelPass>()
+            .unwrap()
+            .handle_resize(&device, &self.sc_desc);
     }
 
     pub fn event_handler(&mut self, event: &Event<()>) {
@@ -221,8 +219,9 @@ impl App {
                 }
             }
             _ => {
-                let mut platform = self.resources.get_mut::<Platform>().unwrap();
-                platform.handle_event(event);
+                let mut ui_context = self.resources.get_mut::<UiContext>().unwrap();
+                let mut window_size = self.resources.get_mut::<WindowSize>().unwrap();
+                ui_context::handle_input(&mut ui_context, &mut window_size, &event);
             }
         }
     }

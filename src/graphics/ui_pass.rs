@@ -3,16 +3,18 @@ use std::time::Instant;
 use bytemuck::{Pod, Zeroable};
 use crossbeam_channel::Sender;
 use egui::Color32;
-use egui_winit_platform::Platform;
 use legion::*;
 use wgpu::{
     include_spirv,
     util::{BufferInitDescriptor, DeviceExt},
-    CommandBuffer, CommandEncoderDescriptor, Device, Queue, SwapChainDescriptor, SwapChainTexture,
-    TextureFormat,
+    CommandBuffer, CommandEncoderDescriptor, Device, Queue, SwapChainTexture, TextureFormat,
 };
 
 use crate::application::Time;
+
+use super::{
+    ui_context::{UiContext, WindowSize},
+};
 
 #[derive(Debug)]
 enum BufferType {
@@ -21,23 +23,6 @@ enum BufferType {
     Index,
 }
 
-/// Information about the screen used for rendering.
-pub struct ScreenDescriptor {
-    /// Width of the window in physical pixel.
-    pub physical_width: u32,
-    /// Height of the window in physical pixel.
-    pub physical_height: u32,
-    /// HiDPI scale factor.
-    pub scale_factor: f32,
-}
-
-impl ScreenDescriptor {
-    fn logical_size(&self) -> (u32, u32) {
-        let logical_width = self.physical_width as f32 / self.scale_factor;
-        let logical_height = self.physical_height as f32 / self.scale_factor;
-        (logical_width as u32, logical_height as u32)
-    }
-}
 // Todo move this functionality into the vertex buffers
 struct SizedBuffer {
     buffer: wgpu::Buffer,
@@ -212,7 +197,7 @@ impl UiPass {
         encoder: &mut wgpu::CommandEncoder,
         color_attachment: &wgpu::TextureView,
         paint_jobs: &[egui::paint::PaintJob],
-        screen_descriptor: &ScreenDescriptor,
+        screen_descriptor: &WindowSize,
         clear_color: Option<wgpu::Color>,
     ) {
         let load_operation = if let Some(color) = clear_color {
@@ -396,7 +381,7 @@ impl UiPass {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         paint_jobs: &[egui::paint::PaintJob],
-        screen_descriptor: &ScreenDescriptor,
+        screen_descriptor: &WindowSize,
     ) {
         let index_size = self.index_buffers.len();
         let vertex_size = self.vertex_buffers.len();
@@ -494,17 +479,18 @@ fn as_byte_slice<T>(slice: &[T]) -> &[u8] {
 }
 
 #[system]
-pub fn begin_ui_frame(#[state] time_since_start: &Instant, #[resource] platform: &mut Platform) {
-    platform.update_time(time_since_start.elapsed().as_secs_f64());
-    platform.begin_frame();
+pub fn begin_ui_frame(#[state] time_since_start: &Instant, #[resource] ui_context: &mut UiContext) {
+    ui_context.update_time(time_since_start.elapsed().as_secs_f64());
+    ui_context.begin_frame();
 }
 
 #[system]
-pub fn draw_fps_counter(#[resource] platform: &Platform, #[resource] time: &Time) {
+pub fn draw_fps_counter(#[resource] ui_context: &UiContext, #[resource] time: &Time) {
     egui::Area::new("FPS area")
         .fixed_pos(egui::pos2(0.0, 0.0))
-        .show(&platform.context(), |ui| {
-            let label = egui::Label::new(format!("FPS: {}", 1.0 / time.delta_time)).text_color(Color32::WHITE);
+        .show(&ui_context.context, |ui| {
+            let label = egui::Label::new(format!("FPS: {}", 1.0 / time.delta_time))
+                .text_color(Color32::WHITE);
             ui.add(label);
         });
 }
@@ -512,26 +498,27 @@ pub fn draw_fps_counter(#[resource] platform: &Platform, #[resource] time: &Time
 #[system]
 pub fn end_ui_frame(
     #[state] pass: &mut UiPass,
-    #[resource] platform: &mut Platform,
+    #[resource] ui_context: &mut UiContext,
     #[resource] device: &Device,
     #[resource] queue: &Queue,
     #[resource] current_frame: &SwapChainTexture,
-    #[resource] screen_descriptor: &ScreenDescriptor,
+    #[resource] window_size: &WindowSize,
 ) {
-    let (_output, commands) = platform.end_frame();
-    let paint_jobs = platform.context().tessellate(commands);
+    let (_output, commands) = ui_context.end_frame();
+    let context = &ui_context.context;
+    let paint_jobs = context.tessellate(commands);
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
         label: Some("Ui command encoder"),
     });
-    pass.update_texture(&device, &queue, &platform.context().texture());
+    pass.update_texture(&device, &queue, &context.texture());
     pass.update_user_textures(&device, &queue);
-    pass.update_buffers(&device, &queue, &paint_jobs, &screen_descriptor);
+    pass.update_buffers(&device, &queue, &paint_jobs, &window_size);
     // Record all render passes.
     pass.execute(
         &mut encoder,
         &current_frame.view,
         &paint_jobs,
-        &screen_descriptor,
+        &window_size,
         None,
     );
     pass.command_sender

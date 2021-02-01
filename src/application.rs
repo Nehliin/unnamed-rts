@@ -21,10 +21,10 @@ use crate::{
         camera::Camera,
         model::Model,
         model_pass::{self, ModelPass},
-        ui::{
-            ui_context::{self, UiContext, WindowSize},
-            ui_pass::{self, UiPass},
-        },
+      //  ui::{
+        //    ui_context::{self, UiContext, WindowSize},
+     //       ui_pass::{self, UiPass},
+       // },
     },
 };
 
@@ -47,7 +47,7 @@ pub struct App {
     pub size: PhysicalSize<u32>,
 }
 
-fn init_ui_resources(resources: &mut Resources, size: &PhysicalSize<u32>, scale_factor: f32) {
+/*fn init_ui_resources(resources: &mut Resources, size: &PhysicalSize<u32>, scale_factor: f32) {
     let window_size = WindowSize {
         physical_width: size.width,
         physical_height: size.height,
@@ -57,7 +57,7 @@ fn init_ui_resources(resources: &mut Resources, size: &PhysicalSize<u32>, scale_
     let ui_context = UiContext::new(&window_size);
     resources.insert(ui_context);
     resources.insert(window_size);
-}
+}*/
 
 impl App {
     pub async fn new(window: &Window) -> App {
@@ -76,7 +76,7 @@ impl App {
                 &DeviceDescriptor {
                     features: Features::empty(), // TODO: Set this properly
                     limits: Limits::default(),
-                    shader_validation: true,
+                    label: Some("Device"),
                 },
                 None,
             )
@@ -84,7 +84,7 @@ impl App {
             .expect("Failed to find device");
 
         let sc_desc = SwapChainDescriptor {
-            usage: TextureUsage::OUTPUT_ATTACHMENT,
+            usage: TextureUsage::RENDER_ATTACHMENT,
             format: TextureFormat::Bgra8UnormSrgb,
             width: size.width,
             height: size.height,
@@ -97,16 +97,16 @@ impl App {
         let mut assets: Assets<Model> = Assets::new();
         let mut world = World::default();
         let mut resources = Resources::default();
-        let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
+        //let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
         let (model_sender, model_rc) = crossbeam_channel::bounded(1);
         let schedule = Schedule::builder()
             .add_system(model_pass::update_system())
             .add_system(model_pass::draw_system())
-            .add_system(ui_pass::begin_ui_frame_system(Instant::now()))
-            .add_system(ui_pass::draw_fps_counter_system())
-            .add_system(ui_pass::end_ui_frame_system(UiPass::new(
-                &device, ui_sender,
-            )))
+//            .add_system(ui_pass::begin_ui_frame_system(Instant::now()))
+  //          .add_system(ui_pass::draw_fps_counter_system())
+    //        .add_system(ui_pass::end_ui_frame_system(UiPass::new(
+             //   &device, ui_sender,
+           // )))
             .build();
         resources.insert(ModelPass::new(&device, &sc_desc, model_sender));
         resources.insert(device);
@@ -115,7 +115,7 @@ impl App {
             current_time: std::time::Instant::now(),
             delta_time: 0.0,
         });
-        init_ui_resources(&mut resources, &size, window.scale_factor() as f32);
+      //  init_ui_resources(&mut resources, &size, window.scale_factor() as f32);
         // This should be in a game state
         let suit = assets.load("nanosuit/nanosuit.obj").unwrap();
         resources.insert(assets);
@@ -148,7 +148,7 @@ impl App {
             swap_chain,
             surface,
             sc_desc,
-            command_receivers: vec![model_rc, ui_rc],
+            command_receivers: vec![model_rc, /*ui_rc*/],
         }
     }
     // maybe use a system for this instead?
@@ -160,7 +160,7 @@ impl App {
         self.sc_desc.width = new_size.width;
         self.sc_desc.height = new_size.height;
         self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
-        let mut window_size = self
+     /*    let mut window_size = self
             .resources
             .get_mut::<WindowSize>()
             .expect("WindowSize not available");
@@ -168,7 +168,7 @@ impl App {
         window_size.physical_height = new_size.height;
         if let Some(scale_factor) = updated_scale_factor {
             window_size.scale_factor = scale_factor;
-        }
+        }*/
         let mut camera = self.resources.get_mut::<Camera>().unwrap();
         camera.update_aspect_ratio(new_size.width, new_size.height);
         self.resources
@@ -217,9 +217,9 @@ impl App {
                 }
             }
             _ => {
-                let mut ui_context = self.resources.get_mut::<UiContext>().unwrap();
-                let mut window_size = self.resources.get_mut::<WindowSize>().unwrap();
-                ui_context::handle_input(&mut ui_context, &mut window_size, &event);
+//                let mut ui_context = self.resources.get_mut::<UiContext>().unwrap();
+  //              let mut window_size = self.resources.get_mut::<WindowSize>().unwrap();
+    //            ui_context::handle_input(&mut ui_context, &mut window_size, &event);
             }
         }
     }

@@ -24,4 +24,5 @@ void main() {
     fragment_position = vec3(model * vec4(a_position, 1.0));
     normal = mat3(transpose(inverse(mat3(model)))) * a_normal; //make sure surface normals doesn't become fucked when scaling;
     gl_Position = projection * view * vec4(fragment_position, 1.0);
+    return;
 }

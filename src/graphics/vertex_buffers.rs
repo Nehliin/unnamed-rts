@@ -83,13 +83,13 @@ pub trait VertexBuffer: Pod + Zeroable {
         }
     }
 
-    fn get_descriptor<'a>() -> wgpu::VertexBufferDescriptor<'a> {
-        wgpu::VertexBufferDescriptor {
-            stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
+    fn get_descriptor<'a>() -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: Self::STEP_MODE,
             attributes: Self::get_attributes(),
         }
     }
 
-    fn get_attributes<'a>() -> &'a [wgpu::VertexAttributeDescriptor];
+    fn get_attributes<'a>() -> &'a [wgpu::VertexAttribute];
 }

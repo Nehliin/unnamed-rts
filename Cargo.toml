@@ -16,7 +16,7 @@ futures = "0.3"
 env_logger = "0.8"
 mint = "0.5"
 nalgebra = {version = "0.24", features = ["mint"]}
-wgpu = "0.6"
+wgpu = "0.7"
 log = "0.4"
 legion = "0.3"
 crevice = "0.5"

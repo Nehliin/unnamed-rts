@@ -14,7 +14,7 @@ use std::{
 };
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    Buffer, BufferAddress, Device, Queue, RenderPass, VertexAttributeDescriptor, VertexFormat,
+    Buffer, BufferAddress, Device, Queue, RenderPass, VertexAttribute, VertexFormat,
 };
 
 // Todo make it dynamically growable
@@ -31,19 +31,19 @@ pub struct MeshVertex {
 impl VertexBuffer for MeshVertex {
     const STEP_MODE: wgpu::InputStepMode = wgpu::InputStepMode::Vertex;
 
-    fn get_attributes<'a>() -> &'a [wgpu::VertexAttributeDescriptor] {
+    fn get_attributes<'a>() -> &'a [wgpu::VertexAttribute] {
         &[
-            VertexAttributeDescriptor {
+            VertexAttribute {
                 offset: 0,
                 format: VertexFormat::Float3,
                 shader_location: 0,
             },
-            VertexAttributeDescriptor {
+            VertexAttribute {
                 offset: std::mem::size_of::<[f32; 3]>() as BufferAddress,
                 format: VertexFormat::Float3,
                 shader_location: 1,
             },
-            VertexAttributeDescriptor {
+            VertexAttribute {
                 offset: (std::mem::size_of::<[f32; 3]>() * 2) as BufferAddress,
                 format: VertexFormat::Float2,
                 shader_location: 2,
@@ -78,24 +78,24 @@ const ROW_SIZE: BufferAddress = (std::mem::size_of::<f32>() * 4) as BufferAddres
 impl VertexBuffer for InstanceData {
     const STEP_MODE: wgpu::InputStepMode = wgpu::InputStepMode::Instance;
 
-    fn get_attributes<'a>() -> &'a [wgpu::VertexAttributeDescriptor] {
+    fn get_attributes<'a>() -> &'a [wgpu::VertexAttribute] {
         &[
-            VertexAttributeDescriptor {
+            VertexAttribute {
                 offset: 0,
                 format: VertexFormat::Float4,
                 shader_location: 3,
             },
-            VertexAttributeDescriptor {
+            VertexAttribute {
                 offset: ROW_SIZE,
                 format: VertexFormat::Float4,
                 shader_location: 4,
             },
-            VertexAttributeDescriptor {
+            VertexAttribute {
                 offset: ROW_SIZE * 2,
                 format: VertexFormat::Float4,
                 shader_location: 5,
             },
-            VertexAttributeDescriptor {
+            VertexAttribute {
                 offset: ROW_SIZE * 3,
                 format: VertexFormat::Float4,
                 shader_location: 6,
@@ -185,8 +185,8 @@ impl Model {
                 num_indexes: m.mesh.indices.len() as u32,
             });
         }
-        let instance_buffer_len = INSTANCE_BUFFER_SIZE as usize
-            / std::mem::size_of::<InstanceData>();
+        let instance_buffer_len =
+            INSTANCE_BUFFER_SIZE as usize / std::mem::size_of::<InstanceData>();
         println!("INSTANCE BUFFER LEN: {}", instance_buffer_len);
         let buffer_data = vec![InstanceData::default(); instance_buffer_len];
         let instance_buffer = VertexBuffer::allocate_mutable_buffer(device, &buffer_data);
@@ -224,7 +224,7 @@ where
     ) {
         self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
         self.set_vertex_buffer(1, instance_buffer.slice(..));
-        self.set_index_buffer(mesh.index_buffer.slice(..));
+        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         self.set_bind_group(1, &material.diffuse_texture.bind_group, &[]);
         self.set_bind_group(2, &material.specular_texture.bind_group, &[]);
         self.draw_indexed(0..mesh.num_indexes, 0, instances);
@@ -235,7 +235,7 @@ where
         for mesh in &model.meshes {
             self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
             self.set_vertex_buffer(1, instance_buffer.slice(..));
-            self.set_index_buffer(mesh.index_buffer.slice(..));
+            self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             self.draw_indexed(0..mesh.num_indexes, 0, instances.clone());
         }
     }

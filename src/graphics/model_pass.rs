@@ -3,7 +3,15 @@ use crevice::std140::AsStd140;
 use crevice::std140::Std140;
 use crossbeam_channel::Sender;
 use legion::{world::SubWorld, *};
-use wgpu::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, BlendDescriptor, Buffer, BufferDescriptor, BufferUsage, ColorStateDescriptor, ColorWrite, CommandEncoderDescriptor, CompareFunction, CullMode, DepthStencilStateDescriptor, Device, Extent3d, FrontFace, PipelineLayoutDescriptor, ProgrammableStageDescriptor, Queue, RasterizationStateDescriptor, RenderPassColorAttachmentDescriptor, RenderPassDepthStencilAttachmentDescriptor, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, ShaderStage, StencilStateDescriptor, SwapChainDescriptor, SwapChainTexture, TextureDimension, TextureFormat, TextureViewDescriptor, include_spirv};
+use wgpu::{
+    include_spirv, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
+    BindGroupLayoutEntry, BindingResource, BindingType, Buffer, BufferAddress, BufferDescriptor,
+    BufferUsage, CommandEncoderDescriptor, CompareFunction, CullMode, Device, Extent3d,
+    PipelineLayoutDescriptor, Queue, RenderPassColorAttachmentDescriptor,
+    RenderPassDepthStencilAttachmentDescriptor, RenderPassDescriptor, RenderPipeline,
+    RenderPipelineDescriptor, ShaderStage, SwapChainDescriptor, SwapChainTexture, TextureDimension,
+    TextureViewDescriptor,
+};
 
 use crate::assets::{Assets, Handle};
 use crate::components;
@@ -63,6 +71,7 @@ pub fn draw(
         label: Some("Model pass encoder"),
     });
     let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+        label: Some("Model render pass"),
         color_attachments: &[RenderPassColorAttachmentDescriptor {
             attachment: &current_frame.view,
             resolve_target: None,
@@ -124,7 +133,7 @@ pub fn create_depth_texture(
         sample_count: 1,
         dimension: TextureDimension::D2,
         format: DEPTH_FORMAT,
-        usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+        usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
     };
     device.create_texture(&desc)
 }
@@ -135,8 +144,8 @@ impl ModelPass {
         sc_desc: &SwapChainDescriptor,
         command_sender: Sender<wgpu::CommandBuffer>,
     ) -> ModelPass {
-        let vs_module = device.create_shader_module(include_spirv!("shaders/model.vert.spv"));
-        let fs_module = device.create_shader_module(include_spirv!("shaders/model.frag.spv"));
+        let vs_module = device.create_shader_module(&include_spirv!("shaders/model.vert.spv"));
+        let fs_module = device.create_shader_module(&include_spirv!("shaders/model.frag.spv"));
         let depth_texture = create_depth_texture(device, sc_desc);
         let depth_texture_view = depth_texture.create_view(&TextureViewDescriptor::default());
         let camera_buffer = device.create_buffer(&BufferDescriptor {
@@ -151,8 +160,9 @@ impl ModelPass {
                 entries: &[BindGroupLayoutEntry {
                     binding: 0,
                     visibility: ShaderStage::VERTEX,
-                    ty: BindingType::UniformBuffer {
-                        dynamic: false,
+                    ty: BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
                         min_binding_size: None,
                     },
                     count: None,
@@ -164,7 +174,11 @@ impl ModelPass {
             layout: &camera_bind_group_layout,
             entries: &[BindGroupEntry {
                 binding: 0,
-                resource: BindingResource::Buffer(camera_buffer.slice(..)),
+                resource: BindingResource::Buffer {
+                    buffer: &camera_buffer,
+                    offset: 0 as BufferAddress,
+                    size: None,
+                },
             }],
         });
 
@@ -181,42 +195,29 @@ impl ModelPass {
         let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: Some("pipeline"),
             layout: Some(&render_pipeline_layout),
-            vertex_stage: ProgrammableStageDescriptor {
+            vertex: wgpu::VertexState {
                 module: &vs_module,
                 entry_point: "main",
+                buffers: &[MeshVertex::get_descriptor(), InstanceData::get_descriptor()],
             },
-            fragment_stage: Some(ProgrammableStageDescriptor {
+            fragment: Some(wgpu::FragmentState {
                 module: &fs_module,
                 entry_point: "main",
+                targets: &[sc_desc.format.into()]
             }),
-            rasterization_state: Some(RasterizationStateDescriptor {
-                front_face: FrontFace::Ccw,
+            primitive: wgpu::PrimitiveState {
                 cull_mode: CullMode::Back,
-                clamp_depth: false,
-                depth_bias: 0,
-                depth_bias_slope_scale: 0.0,
-                depth_bias_clamp: 0.0,
-            }),
-            primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: &[ColorStateDescriptor {
-                format: TextureFormat::Bgra8UnormSrgb,
-                alpha_blend: BlendDescriptor::REPLACE,
-                color_blend: BlendDescriptor::REPLACE,
-                write_mask: ColorWrite::ALL,
-            }],
-            depth_stencil_state: Some(DepthStencilStateDescriptor {
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
                 format: DEPTH_FORMAT,
                 depth_write_enabled: true,
                 depth_compare: CompareFunction::Less,
-                stencil: StencilStateDescriptor::default(),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+                clamp_depth: false,
             }),
-            vertex_state: wgpu::VertexStateDescriptor {
-                index_format: wgpu::IndexFormat::Uint32,
-                vertex_buffers: &[MeshVertex::get_descriptor(), InstanceData::get_descriptor()],
-            },
-            sample_count: 1,
-            sample_mask: !0,
-            alpha_to_coverage_enabled: false,
+            multisample: wgpu::MultisampleState::default(),
         });
         ModelPass {
             render_pipeline,
@@ -230,6 +231,8 @@ impl ModelPass {
 
     pub fn handle_resize(&mut self, device: &Device, sc_desc: &SwapChainDescriptor) {
         self.depth_texture = create_depth_texture(&device, &sc_desc);
-        self.depth_texture_view = self.depth_texture.create_view(&TextureViewDescriptor::default());
+        self.depth_texture_view = self
+            .depth_texture
+            .create_view(&TextureViewDescriptor::default());
     }
 }

@@ -7,14 +7,12 @@ use legion::*;
 use wgpu::{
     include_spirv,
     util::{BufferInitDescriptor, DeviceExt},
-    CommandBuffer, CommandEncoderDescriptor, Device, Queue, SwapChainTexture, TextureFormat,
+    CommandBuffer, CommandEncoderDescriptor, Device, Queue, SwapChainTexture,
 };
 
 use crate::application::Time;
 
-use super::{
-    ui_context::{UiContext, WindowSize},
-};
+use super::ui_context::{UiContext, WindowSize};
 
 #[derive(Debug)]
 enum BufferType {
@@ -51,8 +49,8 @@ pub struct UiPass {
 
 impl UiPass {
     pub fn new(device: &Device, command_sender: Sender<CommandBuffer>) -> UiPass {
-        let vs_module = device.create_shader_module(include_spirv!("../shaders/ui.vert.spv"));
-        let fs_module = device.create_shader_module(include_spirv!("../shaders/ui.frag.spv"));
+        let vs_module = device.create_shader_module(&include_spirv!("../shaders/ui.vert.spv"));
+        let fs_module = device.create_shader_module(&include_spirv!("../shaders/ui.frag.spv"));
 
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("ui_uniform_buffer"),
@@ -81,8 +79,9 @@ impl UiPass {
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStage::VERTEX,
-                        ty: wgpu::BindingType::UniformBuffer {
-                            dynamic: false,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
                             min_binding_size: None,
                         },
                         count: None,
@@ -90,7 +89,10 @@ impl UiPass {
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler { comparison: false },
+                        ty: wgpu::BindingType::Sampler {
+                            comparison: false,
+                            filtering: true,
+                        },
                         count: None,
                     },
                 ],
@@ -102,7 +104,11 @@ impl UiPass {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer(uniform_buffer.buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &uniform_buffer.buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -117,10 +123,10 @@ impl UiPass {
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStage::FRAGMENT,
-                    ty: wgpu::BindingType::SampledTexture {
+                    ty: wgpu::BindingType::Texture {
                         multisampled: false,
-                        component_type: wgpu::TextureComponentType::Float,
-                        dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
                     },
                     count: None,
                 }],
@@ -135,35 +141,11 @@ impl UiPass {
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("egui_pipeline"),
             layout: Some(&pipeline_layout),
-            vertex_stage: wgpu::ProgrammableStageDescriptor {
+            vertex: wgpu::VertexState {
                 module: &vs_module,
                 entry_point: "main",
-            },
-            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                module: &fs_module,
-                entry_point: "main",
-            }),
-            rasterization_state: Some(wgpu::RasterizationStateDescriptor::default()),
-            primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: &[wgpu::ColorStateDescriptor {
-                format: TextureFormat::Bgra8UnormSrgb,
-                color_blend: wgpu::BlendDescriptor {
-                    src_factor: wgpu::BlendFactor::One,
-                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                    operation: wgpu::BlendOperation::Add,
-                },
-                alpha_blend: wgpu::BlendDescriptor {
-                    src_factor: wgpu::BlendFactor::OneMinusDstAlpha,
-                    dst_factor: wgpu::BlendFactor::One,
-                    operation: wgpu::BlendOperation::Add,
-                },
-                write_mask: wgpu::ColorWrite::ALL,
-            }],
-            depth_stencil_state: None,
-            vertex_state: wgpu::VertexStateDescriptor {
-                index_format: wgpu::IndexFormat::Uint32,
-                vertex_buffers: &[wgpu::VertexBufferDescriptor {
-                    stride: 5 * 4,
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: 5 * 4,
                     step_mode: wgpu::InputStepMode::Vertex,
                     // 0: vec2 position
                     // 1: vec2 texture coordinates
@@ -171,9 +153,27 @@ impl UiPass {
                     attributes: &wgpu::vertex_attr_array![0 => Float2, 1 => Float2, 2 => Uint],
                 }],
             },
-            sample_count: 1,
-            sample_mask: !0,
-            alpha_to_coverage_enabled: false,
+            fragment: Some(wgpu::FragmentState {
+                module: &fs_module,
+                entry_point: "main",
+                targets: &[wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                    color_blend: wgpu::BlendState {
+                        src_factor: wgpu::BlendFactor::One,
+                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                    alpha_blend: wgpu::BlendState {
+                        src_factor: wgpu::BlendFactor::OneMinusDstAlpha,
+                        dst_factor: wgpu::BlendFactor::One,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                    write_mask: wgpu::ColorWrite::ALL,
+                }],
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
         });
 
         UiPass {
@@ -207,6 +207,7 @@ impl UiPass {
         };
 
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("ui_render_pass"),
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: color_attachment,
                 resolve_target: None,
@@ -254,7 +255,7 @@ impl UiPass {
             pass.set_scissor_rect(clip_min_x, clip_min_y, width, height);
             pass.set_bind_group(1, self.get_texture_bind_group(triangles.texture_id), &[]);
 
-            pass.set_index_buffer(index_buffer.buffer.slice(..));
+            pass.set_index_buffer(index_buffer.buffer.slice(..), wgpu::IndexFormat::Uint32);
             pass.set_vertex_buffer(0, vertex_buffer.buffer.slice(..));
             pass.draw_indexed(0..triangles.indices.len() as u32, 0, 0..1);
         }
@@ -477,7 +478,6 @@ fn as_byte_slice<T>(slice: &[T]) -> &[u8] {
     unsafe { std::slice::from_raw_parts(ptr, len) }
 }
 
-
 #[system]
 pub fn begin_ui_frame(#[state] time_since_start: &Instant, #[resource] ui_context: &mut UiContext) {
     ui_context.update_time(time_since_start.elapsed().as_secs_f64());
@@ -494,7 +494,6 @@ pub fn draw_fps_counter(#[resource] ui_context: &UiContext, #[resource] time: &T
             ui.add(label);
         });
 }
-
 
 // TODO: handle user textures here
 // Basicall simply load texture data to create a egui::Texture and then run egui texture to wgpu texture

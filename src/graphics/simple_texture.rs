@@ -29,7 +29,7 @@ impl TextureShaderLayout for SimpleTexture {
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: Self::VISIBILITY,
-                        ty: wgpu::BindingType::Sampler { comparison: true, filtering: true },
+                        ty: wgpu::BindingType::Sampler { comparison: false, filtering: true },
                         count: None,
                     },
                 ],
@@ -91,7 +91,7 @@ impl LoadableTexture for SimpleTexture {
             mipmap_filter: wgpu::FilterMode::Nearest,
             lod_min_clamp: -100.0, // related to mipmaps
             lod_max_clamp: 100.0,  // related to mipmaps
-            compare: Some(wgpu::CompareFunction::Always), // unclear if this and corresponing layout def is needed
+            compare: None,
             ..Default::default()
         });
 

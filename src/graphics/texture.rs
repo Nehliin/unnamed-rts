@@ -1,3 +1,4 @@
+#![allow(unused)]
 use anyhow::Result;
 use std::{marker::PhantomData, path::Path};
 

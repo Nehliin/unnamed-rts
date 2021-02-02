@@ -1,5 +1,5 @@
 [package]
-name = "experimental-rts"
+name = "unnamed-rts"
 version = "0.1.0"
 authors = ["Nehliin <oskar.d.nehlin@gmail.com>"]
 edition = "2018"

@@ -588,31 +588,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "experimental-rts"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytemuck",
- "crevice",
- "crossbeam-channel 0.5.0",
- "egui",
- "env_logger",
- "futures",
- "glob",
- "image",
- "legion",
- "log",
- "mint",
- "nalgebra",
- "once_cell",
- "rayon",
- "shaderc",
- "tobj",
- "wgpu",
- "winit",
-]
-
-[[package]]
 name = "fixedbitset"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2132,6 +2107,31 @@ name = "unicode-xid"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7fe0bb3479651439c9112f72b6c505038574c9fbb575ed1bf3b797fa39dd564"
+
+[[package]]
+name = "unnamed-rts"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "crevice",
+ "crossbeam-channel 0.5.0",
+ "egui",
+ "env_logger",
+ "futures",
+ "glob",
+ "image",
+ "legion",
+ "log",
+ "mint",
+ "nalgebra",
+ "once_cell",
+ "rayon",
+ "shaderc",
+ "tobj",
+ "wgpu",
+ "winit",
+]
 
 [[package]]
 name = "uuid"

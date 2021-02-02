@@ -101,11 +101,6 @@ impl Camera {
     }
 
     #[inline]
-    pub fn get_view_matrix(&self) -> &Matrix4<f32> {
-        &self.view_matrix
-    }
-
-    #[inline]
     pub fn get_projection_matrix(&self) -> &Matrix4<f32> {
         &self.projection_matrix.as_matrix()
     }

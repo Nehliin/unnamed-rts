@@ -203,7 +203,7 @@ impl ModelPass {
             fragment: Some(wgpu::FragmentState {
                 module: &fs_module,
                 entry_point: "main",
-                targets: &[sc_desc.format.into()]
+                targets: &[sc_desc.format.into()],
             }),
             primitive: wgpu::PrimitiveState {
                 cull_mode: CullMode::Back,

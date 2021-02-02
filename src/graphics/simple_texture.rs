@@ -29,7 +29,10 @@ impl TextureShaderLayout for SimpleTexture {
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: Self::VISIBILITY,
-                        ty: wgpu::BindingType::Sampler { comparison: false, filtering: true },
+                        ty: wgpu::BindingType::Sampler {
+                            comparison: false,
+                            filtering: true,
+                        },
                         count: None,
                     },
                 ],

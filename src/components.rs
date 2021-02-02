@@ -1,6 +1,5 @@
 use nalgebra::{Isometry3, Matrix4, Vector3};
 
-
 pub struct model;
 
 #[repr(C)]

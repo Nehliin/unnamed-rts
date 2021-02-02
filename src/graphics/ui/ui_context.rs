@@ -1,4 +1,4 @@
-use egui::{CtxRef, Key, RawInput, paint::ClippedShape, pos2, vec2};
+use egui::{paint::ClippedShape, pos2, vec2, CtxRef, Key, RawInput};
 use winit::event::VirtualKeyCode::*;
 use winit::event::WindowEvent::*;
 use winit::event::{Event, ModifiersState, VirtualKeyCode};

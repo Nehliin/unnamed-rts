@@ -1,8 +1,8 @@
 use anyhow::*;
 use glob::glob;
+use rayon::prelude::*;
 use std::fs::{read_to_string, write};
 use std::path::PathBuf;
-use rayon::prelude::*;
 
 struct ShaderData {
     src: String,
@@ -38,11 +38,10 @@ impl ShaderData {
 }
 
 fn main() -> Result<()> {
-    let mut shader_paths = Vec::new(); 
+    let mut shader_paths = Vec::new();
     shader_paths.extend(glob("./src/graphics/shaders/**/*.vert")?);
     shader_paths.extend(glob("./src/graphics/shaders/**/*.frag")?);
     shader_paths.extend(glob("./src/graphics/shaders/**/*.comp")?);
-
 
     let shaders = shader_paths
         .into_par_iter()
@@ -55,7 +54,10 @@ fn main() -> Result<()> {
 
     for shader in shaders {
         // This tells cargo to rerun this script if something changes.
-        println!("cargo:rerun-if-changed={}", shader.src_path.as_os_str().to_str().unwrap());
+        println!(
+            "cargo:rerun-if-changed={}",
+            shader.src_path.as_os_str().to_str().unwrap()
+        );
         let compiled = compiler.compile_into_spirv(
             &shader.src,
             shader.kind,

@@ -1,5 +1,5 @@
-use std::{any::type_name, marker::PhantomData, ops::RangeBounds};
 use bytemuck::{Pod, Zeroable};
+use std::{any::type_name, marker::PhantomData, ops::RangeBounds};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     BufferAddress,

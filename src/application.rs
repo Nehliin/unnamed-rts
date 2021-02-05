@@ -1,19 +1,5 @@
 use std::time::Instant;
 
-use crossbeam_channel::Receiver;
-use legion::{Resources, Schedule, World};
-use nalgebra::{Isometry3, Point3, Vector3};
-use wgpu::{
-    BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
-    PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
-    TextureFormat, TextureUsage,
-};
-use winit::{
-    dpi::PhysicalSize,
-    event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode},
-    window::Window,
-};
-
 use crate::{
     assets::Assets,
     components::Transform,
@@ -24,12 +10,64 @@ use crate::{
         ui::{
             ui_context::{self, UiContext, WindowSize},
             ui_pass::{self, UiPass},
+            ui_systems,
         },
     },
+    input::{self, FrameEvent, KeyboardState, MouseButtonState, MouseMotion, Text},
+};
+use crossbeam_channel::Receiver;
+use egui_demo_lib::DemoWindows;
+use input::CursorPosition;
+use legion::*;
+use legion::{Resources, Schedule, World};
+use nalgebra::{Isometry3, Point3, Vector3};
+use wgpu::{
+    BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
+    PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
+    TextureFormat, TextureUsage,
+};
+use winit::{
+    dpi::PhysicalSize,
+    event::{
+        DeviceEvent, ElementState, Event, KeyboardInput, ModifiersState, MouseButton,
+        MouseScrollDelta, VirtualKeyCode,
+    },
+    platform::unix::x11::ffi::WindingRule,
+    window::{Window, WindowId},
 };
 
 const CAMERA_SPEED: f32 = 6.5;
 
+/*#[system]
+fn resize(
+    #[resource] window_size: &WindowSize,
+    #[resource] device: &Device,
+    #[resource] camera: &mut Camera,
+    #[resource] swap_chain: &mut SwapChain,
+    #[resource] sc_desc: &mut SwapChainDescriptor,
+    #[resource] surface: &Surface
+) {
+
+    sc_desc.width = window_size.physical_height;
+    sc_desc.height = window_size.physical_width;
+    swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
+    let mut window_size = self
+        .resources
+        .get_mut::<WindowSize>()
+        .expect("WindowSize not available");
+    window_size.physical_width = new_size.width;
+    window_size.physical_height = new_size.height;
+    if let Some(scale_factor) = updated_scale_factor {
+        window_size.scale_factor = scale_factor;
+    }
+    let mut camera = self.resources.get_mut::<Camera>().unwrap();
+    camera.update_aspect_ratio(new_size.width, new_size.height);
+    self.resources
+        .get_mut::<ModelPass>()
+        .unwrap()
+        .handle_resize(&device, &self.sc_desc);
+}
+*/
 pub struct Time {
     current_time: std::time::Instant,
     pub delta_time: f32,
@@ -44,7 +82,16 @@ pub struct App {
     sc_desc: SwapChainDescriptor,
     // TODO: use small vec instead
     command_receivers: Vec<Receiver<CommandBuffer>>,
-    pub size: PhysicalSize<u32>,
+}
+
+fn init_input_resources(resources: &mut Resources) {
+    let mouse_scroll_event: FrameEvent<MouseScrollDelta> = FrameEvent::default();
+    resources.insert(FrameEvent::<Text>::default());
+    resources.insert(mouse_scroll_event);
+    resources.insert(FrameEvent::<MouseMotion>::default());
+    resources.insert(FrameEvent::<ModifiersState>::default());
+    resources.insert(KeyboardState::default());
+    resources.insert(MouseButtonState::default());
 }
 
 fn init_ui_resources(resources: &mut Resources, size: &PhysicalSize<u32>, scale_factor: f32) {
@@ -102,11 +149,14 @@ impl App {
         let schedule = Schedule::builder()
             .add_system(model_pass::update_system())
             .add_system(model_pass::draw_system())
-            .add_system(ui_pass::begin_ui_frame_system(Instant::now()))
-            .add_system(ui_pass::draw_fps_counter_system())
-            .add_system(ui_pass::end_ui_frame_system(UiPass::new(
+            .add_system(ui_systems::update_ui_system())
+            .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
+            .add_thread_local(ui_systems::test_system(DemoWindows::default()))
+            .add_system(ui_systems::draw_fps_counter_system())
+            .add_system(ui_systems::end_ui_frame_system(UiPass::new(
                 &device, ui_sender,
             )))
+            .add_system(input::input_system())
             .build();
         resources.insert(ModelPass::new(&device, &sc_desc, model_sender));
         resources.insert(device);
@@ -115,6 +165,8 @@ impl App {
             current_time: std::time::Instant::now(),
             delta_time: 0.0,
         });
+
+        init_input_resources(&mut resources);
         init_ui_resources(&mut resources, &size, window.scale_factor() as f32);
         // This should be in a game state
         let suit = assets.load("nanosuit/nanosuit.obj").unwrap();
@@ -141,7 +193,6 @@ impl App {
             ),
         ));
         App {
-            size,
             world,
             schedule,
             resources,
@@ -152,33 +203,31 @@ impl App {
         }
     }
     // maybe use a system for this instead?
-    pub fn resize(&mut self, new_size: PhysicalSize<u32>, updated_scale_factor: Option<f32>) {
+    pub fn resize(&mut self, window_size: &WindowSize) {
         let device = self
             .resources
             .get::<Device>()
             .expect("Device to be registerd");
-        self.sc_desc.width = new_size.width;
-        self.sc_desc.height = new_size.height;
+        self.sc_desc.width = window_size.physical_width;
+        self.sc_desc.height = window_size.physical_height;
         self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
-        let mut window_size = self
-            .resources
-            .get_mut::<WindowSize>()
-            .expect("WindowSize not available");
-        window_size.physical_width = new_size.width;
-        window_size.physical_height = new_size.height;
-        if let Some(scale_factor) = updated_scale_factor {
-            window_size.scale_factor = scale_factor;
-        }
         let mut camera = self.resources.get_mut::<Camera>().unwrap();
-        camera.update_aspect_ratio(new_size.width, new_size.height);
+        camera.update_aspect_ratio(window_size.physical_width, window_size.physical_height);
         self.resources
             .get_mut::<ModelPass>()
             .unwrap()
             .handle_resize(&device, &self.sc_desc);
     }
 
-    pub fn event_handler(&mut self, event: &Event<()>) {
-        match event {
+    pub fn recreate_swap_chain(&mut self) {
+        let window_size = self.resources.get::<WindowSize>().unwrap();
+        let old_size = *window_size;
+        drop(window_size);
+        self.resize(&old_size);
+    }
+
+    pub fn event_handler(&mut self, event: &Event<()>, current_window: &WindowId) -> bool {
+        /*match event {
             Event::DeviceEvent { ref event, .. } => {
                 let mut camera = self.resources.get_mut::<Camera>().unwrap();
                 let time = self.resources.get::<Time>().unwrap();
@@ -221,6 +270,137 @@ impl App {
                 let mut window_size = self.resources.get_mut::<WindowSize>().unwrap();
                 ui_context::handle_input(&mut ui_context, &mut window_size, &event);
             }
+        }*/
+        match event {
+            Event::WindowEvent {
+                ref event,
+                window_id,
+            } if window_id == current_window => match event {
+                winit::event::WindowEvent::Resized(physical_size) => {
+                    let mut window_size = self.resources.get_mut::<WindowSize>().unwrap();
+                    window_size.physical_height = physical_size.height;
+                    window_size.physical_width = physical_size.width;
+                    let new_size = *window_size;
+                    drop(window_size);
+                    self.resize(&new_size);
+                    true
+                }
+                winit::event::WindowEvent::ScaleFactorChanged {
+                    scale_factor,
+                    new_inner_size,
+                } => {
+                    let mut window_size = self.resources.get_mut::<WindowSize>().unwrap();
+                    // this might actually be incorrect...
+                    window_size.physical_height = new_inner_size.height;
+                    window_size.physical_width = new_inner_size.width;
+                    window_size.scale_factor = *scale_factor as f32;
+                    let new_size = *window_size;
+                    drop(window_size);
+                    self.resize(&new_size);
+                    true
+                }
+                winit::event::WindowEvent::ModifiersChanged(modifier_state) => {
+                    self.resources.insert(FrameEvent::new(*modifier_state));
+                    true
+                }
+                winit::event::WindowEvent::CursorMoved { position, .. } => {
+                    self.resources.insert(CursorPosition {
+                        x: position.x,
+                        y: position.y,
+                    });
+                    true
+                }
+                winit::event::WindowEvent::ReceivedCharacter(char) => {
+                    self.resources
+                        .insert(FrameEvent::new(Text { codepoint: *char }));
+                    println!("RECEIVED TEXT!");
+                    true
+                }
+                //todo?
+                //winit::event::WindowEvent::CursorLeft { device_id } => {}
+                _ => false,
+            },
+            Event::DeviceEvent { event, .. } => match *event {
+                DeviceEvent::MouseMotion { delta } => {
+                    self.resources.insert(FrameEvent::new(MouseMotion {
+                        delta_x: delta.0,
+                        delta_y: delta.1,
+                    }));
+                    true
+                }
+                DeviceEvent::MouseWheel { delta } => {
+                    self.resources.insert(FrameEvent::new(delta));
+                    true
+                }
+                DeviceEvent::Button { button, state } => {
+                    let mut mouse_button_state =
+                        self.resources.get_mut::<MouseButtonState>().unwrap();
+                    if state == ElementState::Pressed {
+                        match button {
+                            1 => {
+                                mouse_button_state.pressed.insert(MouseButton::Left);
+                                mouse_button_state
+                                    .pressed_current_frame
+                                    .insert(MouseButton::Left);
+                                true
+                            }
+                            2 => {
+                                mouse_button_state.pressed.insert(MouseButton::Middle);
+                                mouse_button_state
+                                    .pressed_current_frame
+                                    .insert(MouseButton::Middle);
+                                true
+                            }
+                            3 => {
+                                mouse_button_state.pressed.insert(MouseButton::Right);
+                                mouse_button_state
+                                    .pressed_current_frame
+                                    .insert(MouseButton::Right);
+                                true
+                            }
+                            _ => false,
+                        }
+                    } else {
+                        match button {
+                            1 => {
+                                mouse_button_state.pressed.remove(&MouseButton::Left);
+                                mouse_button_state
+                                    .released_current_frame
+                                    .insert(MouseButton::Left);
+                                true
+                            }
+                            2 => {
+                                mouse_button_state.pressed.remove(&MouseButton::Right);
+                                mouse_button_state
+                                    .released_current_frame
+                                    .insert(MouseButton::Right);
+                                true
+                            }
+                            _ => false,
+                        }
+                    }
+                }
+                DeviceEvent::Key(KeyboardInput {
+                    state,
+                    virtual_keycode,
+                    ..
+                }) => {
+                    let mut keyboard_state = self.resources.get_mut::<KeyboardState>().unwrap();
+                    if state == ElementState::Pressed {
+                        if let Some(key) = virtual_keycode {
+                            keyboard_state.set_pressed(key);
+                        }
+                        true
+                    } else {
+                        if let Some(key) = virtual_keycode {
+                            keyboard_state.set_released(key);
+                        }
+                        true
+                    }
+                }
+                _ => false,
+            },
+            _ => false,
         }
     }
 

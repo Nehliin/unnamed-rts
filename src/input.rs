@@ -1,12 +1,8 @@
+use crossbeam_channel::Receiver;
 use legion::*;
-use std::{collections::HashSet, hash::Hash};
-use winit::{dpi::PhysicalPosition, event::{ModifiersState, MouseButton, MouseScrollDelta, *, self}};
+use std::collections::HashSet;
+use winit::event::{ModifiersState, MouseButton, MouseScrollDelta, *};
 
-// EventReader? store event at frame start and clear at frame end?
-// Input<KeyboardInput> input <MouseMotion> Input <MouseButton>
-// input<MouseWheel>
-// ResizeEvent
-//
 #[derive(Debug, Default)]
 pub struct Text {
     pub codepoint: char,
@@ -20,45 +16,56 @@ pub struct MouseMotion {
 #[derive(Debug, Default)]
 pub struct CursorPosition {
     pub x: f64,
-    pub y: f64
+    pub y: f64,
 }
 
 #[derive(Debug)]
-pub struct FrameEvent<T> {
-    pub event: Option<T>,
+pub struct EventReader<T> {
+    receiver: Receiver<T>,
+    // smallvec?
+    storage: Vec<T>,
 }
 
-impl<T> FrameEvent<T> {
-    pub fn new(event: T) -> Self {
-        FrameEvent { event: Some(event) }
-    }
-}
-
-impl<T> Default for FrameEvent<T> {
-    fn default() -> Self {
-        Self {
-            event: None
+impl<T> EventReader<T> {
+    pub fn new(receiver: Receiver<T>) -> Self {
+        EventReader {
+            receiver,
+            storage: Vec::with_capacity(5),
         }
     }
+
+    pub fn events(&self) -> impl Iterator<Item = &T> {
+        self.storage.iter()
+    }
+
+    pub fn last_event(&self) -> Option<&T> {
+        self.storage.last()
+    }
+
+    pub fn frame_update(&mut self) {
+        self.storage = self.receiver.try_iter().collect();
+    }
 }
 
+// Resize event?
 #[system]
-pub fn input(
-    #[resource] text_input: &mut FrameEvent<Text>,
-    #[resource] mouse_scroll: &mut FrameEvent<MouseScrollDelta>,
-    #[resource] mouse_motion: &mut FrameEvent<MouseMotion>,
-    #[resource] modifiers_state: &mut FrameEvent<ModifiersState>,
+pub fn event(
+    #[resource] text_input: &mut EventReader<Text>,
+    #[resource] mouse_scroll: &mut EventReader<MouseScrollDelta>,
+    #[resource] mouse_motion: &mut EventReader<MouseMotion>,
+    #[resource] modifiers_state: &mut EventReader<ModifiersState>,
+    #[resource] cursor_position: &mut EventReader<CursorPosition>,
     #[resource] keyboard_state: &mut KeyboardState,
     #[resource] mousebutton_state: &mut MouseButtonState,
 ) {
     keyboard_state.frame_update();
-    mousebutton_state.pressed_current_frame.clear();
-    mousebutton_state.released_current_frame.clear();
+    mousebutton_state.frame_update();
 
-    mouse_scroll.event = None;
-    mouse_motion.event = None;
-    text_input.event = None;
-    modifiers_state.event = None;
+    text_input.frame_update();
+    cursor_position.frame_update();
+    mouse_motion.frame_update();
+    mouse_scroll.frame_update();
+    modifiers_state.frame_update();
 }
 
 #[derive(Default, Debug)]
@@ -108,13 +115,28 @@ impl BitSet {
 }
 #[derive(Debug, Default)]
 pub struct MouseButtonState {
-    pub pressed: HashSet<MouseButton>,
-    pub pressed_current_frame: HashSet<MouseButton>,
-    pub released_current_frame: HashSet<MouseButton>,
+    pressed: HashSet<MouseButton>,
+    pressed_current_frame: HashSet<MouseButton>,
+    released_current_frame: HashSet<MouseButton>,
 }
-/*
+
 impl MouseButtonState {
-    pub fn pressed(&self, button: &MouseButton) -> bool {
+    pub fn set_pressed(&mut self, button: &MouseButton) {
+        self.pressed.insert(*button);
+        self.pressed_current_frame.insert(*button);
+    }
+
+    pub fn set_released(&mut self, button: &MouseButton) {
+        self.pressed.remove(button);
+        self.released_current_frame.insert(*button);
+    }
+
+    pub fn frame_update(&mut self) {
+        self.pressed_current_frame.clear();
+        self.released_current_frame.clear();
+    }
+
+    pub fn is_pressed(&self, button: &MouseButton) -> bool {
         self.pressed.contains(button)
     }
 
@@ -126,8 +148,10 @@ impl MouseButtonState {
         self.released_current_frame.contains(button)
     }
 
-    pub
-}*/
+    pub fn all_pressed(&self) -> &HashSet<MouseButton> {
+        &self.pressed
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct KeyboardState {
@@ -178,7 +202,7 @@ impl KeyboardState {
     pub fn all_release_current_frame(&self) -> HashSet<VirtualKeyCode> {
         Self::convert_to_virtual_keyset(&self.released_current_frame)
     }
-    // unclear if this even faster than just using allocating some hashsets...
+
     #[inline]
     fn convert_to_virtual_keyset(storage: &BitSet) -> HashSet<VirtualKeyCode> {
         let mut result = HashSet::with_capacity(32);
@@ -187,7 +211,7 @@ impl KeyboardState {
                 // SAFETY: Since the fields are private the only modification should have been made
                 // by set_pressed or simlilar meaning the code must be a valid enum discriminant
                 // I know these are unecessary optimisations compared to storing in a HashSet but
-                // getting rid of allocations + bittwiddling is fun for something that isn't in prod :)
+                // getting rid of allocations + bittwiddling is fun
                 result.insert(unsafe { std::mem::transmute(bit) });
             }
         }

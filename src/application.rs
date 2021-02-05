@@ -13,13 +13,14 @@ use crate::{
             ui_systems,
         },
     },
-    input::{self, FrameEvent, KeyboardState, MouseButtonState, MouseMotion, Text},
+    input::{self, KeyboardState, MouseButtonState, MouseMotion, Text},
 };
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{Receiver, Sender};
 use egui_demo_lib::DemoWindows;
 use input::CursorPosition;
 use legion::*;
 use legion::{Resources, Schedule, World};
+use log::warn;
 use nalgebra::{Isometry3, Point3, Vector3};
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
@@ -32,12 +33,14 @@ use winit::{
         DeviceEvent, ElementState, Event, KeyboardInput, ModifiersState, MouseButton,
         MouseScrollDelta, VirtualKeyCode,
     },
-    platform::unix::x11::ffi::WindingRule,
     window::{Window, WindowId},
 };
 
 const CAMERA_SPEED: f32 = 6.5;
-
+// TODO:
+// also add the cursor moved out of window potentially
+// 2. decide how resize should work i.e system or not. Probably worth moving more stuff to resources from the app though
+// 3. Clean up
 /*#[system]
 fn resize(
     #[resource] window_size: &WindowSize,
@@ -80,18 +83,13 @@ pub struct App {
     swap_chain: SwapChain,
     surface: Surface,
     sc_desc: SwapChainDescriptor,
+    text_input_sender: Sender<Text>,
+    mouse_scroll_sender: Sender<MouseScrollDelta>,
+    mouse_motion_sender: Sender<MouseMotion>,
+    cursor_position_sender: Sender<CursorPosition>,
+    modifiers_state_sender: Sender<ModifiersState>,
     // TODO: use small vec instead
     command_receivers: Vec<Receiver<CommandBuffer>>,
-}
-
-fn init_input_resources(resources: &mut Resources) {
-    let mouse_scroll_event: FrameEvent<MouseScrollDelta> = FrameEvent::default();
-    resources.insert(FrameEvent::<Text>::default());
-    resources.insert(mouse_scroll_event);
-    resources.insert(FrameEvent::<MouseMotion>::default());
-    resources.insert(FrameEvent::<ModifiersState>::default());
-    resources.insert(KeyboardState::default());
-    resources.insert(MouseButtonState::default());
 }
 
 fn init_ui_resources(resources: &mut Resources, size: &PhysicalSize<u32>, scale_factor: f32) {
@@ -156,7 +154,7 @@ impl App {
             .add_system(ui_systems::end_ui_frame_system(UiPass::new(
                 &device, ui_sender,
             )))
-            .add_system(input::input_system())
+            .add_system(input::event_system())
             .build();
         resources.insert(ModelPass::new(&device, &sc_desc, model_sender));
         resources.insert(device);
@@ -166,7 +164,21 @@ impl App {
             delta_time: 0.0,
         });
 
-        init_input_resources(&mut resources);
+        // Event readers and input
+        let (text_input_sender, rc) = crossbeam_channel::unbounded();
+        resources.insert(input::EventReader::<Text>::new(rc));
+        let (cursor_position_sender, rc) = crossbeam_channel::unbounded();
+        resources.insert(input::EventReader::<CursorPosition>::new(rc));
+        let (mouse_scroll_sender, rc) = crossbeam_channel::unbounded();
+        resources.insert(input::EventReader::<MouseScrollDelta>::new(rc));
+        let (mouse_motion_sender, rc) = crossbeam_channel::unbounded();
+        resources.insert(input::EventReader::<MouseMotion>::new(rc));
+        let (modifiers_state_sender, rc) = crossbeam_channel::unbounded();
+        resources.insert(input::EventReader::<ModifiersState>::new(rc));
+
+        resources.insert(KeyboardState::default());
+        resources.insert(MouseButtonState::default());
+
         init_ui_resources(&mut resources, &size, window.scale_factor() as f32);
         // This should be in a game state
         let suit = assets.load("nanosuit/nanosuit.obj").unwrap();
@@ -200,8 +212,14 @@ impl App {
             surface,
             sc_desc,
             command_receivers: vec![model_rc, ui_rc],
+            text_input_sender,
+            mouse_scroll_sender,
+            mouse_motion_sender,
+            cursor_position_sender,
+            modifiers_state_sender,
         }
     }
+
     // maybe use a system for this instead?
     pub fn resize(&mut self, window_size: &WindowSize) {
         let device = self
@@ -227,50 +245,6 @@ impl App {
     }
 
     pub fn event_handler(&mut self, event: &Event<()>, current_window: &WindowId) -> bool {
-        /*match event {
-            Event::DeviceEvent { ref event, .. } => {
-                let mut camera = self.resources.get_mut::<Camera>().unwrap();
-                let time = self.resources.get::<Time>().unwrap();
-                match event {
-                    DeviceEvent::Key(KeyboardInput {
-                        state,
-                        virtual_keycode: Some(key),
-                        ..
-                    }) => match *key {
-                        VirtualKeyCode::A if *state == ElementState::Pressed => {
-                            camera.move_sideways(-CAMERA_SPEED * time.delta_time);
-                        }
-                        VirtualKeyCode::D if *state == ElementState::Pressed => {
-                            camera.move_sideways(CAMERA_SPEED * time.delta_time);
-                        }
-                        VirtualKeyCode::W if *state == ElementState::Pressed => {
-                            camera.move_in_direction(CAMERA_SPEED * time.delta_time);
-                        }
-                        VirtualKeyCode::S if *state == ElementState::Pressed => {
-                            camera.move_in_direction(-CAMERA_SPEED * time.delta_time);
-                        }
-                        _ => {}
-                    },
-                    DeviceEvent::MouseMotion { delta } => {
-                        let mut xoffset = delta.0 as f32;
-                        let mut yoffset = delta.1 as f32; // reversed since y-coordinates go from bottom to top
-                        let sensitivity: f32 = 0.05; // change this value to your liking
-                        xoffset *= sensitivity;
-                        yoffset *= sensitivity;
-                        let yaw = camera.get_yaw();
-                        let pitch = camera.get_pitch();
-                        camera.set_yaw(xoffset + yaw);
-                        camera.set_pitch(yoffset + pitch);
-                    }
-                    _ => {}
-                }
-            }
-            _ => {
-                let mut ui_context = self.resources.get_mut::<UiContext>().unwrap();
-                let mut window_size = self.resources.get_mut::<WindowSize>().unwrap();
-                ui_context::handle_input(&mut ui_context, &mut window_size, &event);
-            }
-        }*/
         match event {
             Event::WindowEvent {
                 ref event,
@@ -300,7 +274,7 @@ impl App {
                     true
                 }
                 winit::event::WindowEvent::ModifiersChanged(modifier_state) => {
-                    self.resources.insert(FrameEvent::new(*modifier_state));
+                    self.modifiers_state_sender.send(*modifier_state);
                     true
                 }
                 winit::event::WindowEvent::CursorMoved { position, .. } => {
@@ -311,9 +285,7 @@ impl App {
                     true
                 }
                 winit::event::WindowEvent::ReceivedCharacter(char) => {
-                    self.resources
-                        .insert(FrameEvent::new(Text { codepoint: *char }));
-                    println!("RECEIVED TEXT!");
+                    self.text_input_sender.send(Text { codepoint: *char });
                     true
                 }
                 //todo?
@@ -322,14 +294,14 @@ impl App {
             },
             Event::DeviceEvent { event, .. } => match *event {
                 DeviceEvent::MouseMotion { delta } => {
-                    self.resources.insert(FrameEvent::new(MouseMotion {
+                    self.mouse_motion_sender.send(MouseMotion {
                         delta_x: delta.0,
                         delta_y: delta.1,
-                    }));
+                    });
                     true
                 }
                 DeviceEvent::MouseWheel { delta } => {
-                    self.resources.insert(FrameEvent::new(delta));
+                    self.mouse_scroll_sender.send(delta);
                     true
                 }
                 DeviceEvent::Button { button, state } => {
@@ -338,24 +310,15 @@ impl App {
                     if state == ElementState::Pressed {
                         match button {
                             1 => {
-                                mouse_button_state.pressed.insert(MouseButton::Left);
-                                mouse_button_state
-                                    .pressed_current_frame
-                                    .insert(MouseButton::Left);
+                                mouse_button_state.set_pressed(&MouseButton::Left);
                                 true
                             }
                             2 => {
-                                mouse_button_state.pressed.insert(MouseButton::Middle);
-                                mouse_button_state
-                                    .pressed_current_frame
-                                    .insert(MouseButton::Middle);
+                                mouse_button_state.set_pressed(&MouseButton::Middle);
                                 true
                             }
                             3 => {
-                                mouse_button_state.pressed.insert(MouseButton::Right);
-                                mouse_button_state
-                                    .pressed_current_frame
-                                    .insert(MouseButton::Right);
+                                mouse_button_state.set_pressed(&MouseButton::Right);
                                 true
                             }
                             _ => false,
@@ -363,17 +326,11 @@ impl App {
                     } else {
                         match button {
                             1 => {
-                                mouse_button_state.pressed.remove(&MouseButton::Left);
-                                mouse_button_state
-                                    .released_current_frame
-                                    .insert(MouseButton::Left);
+                                mouse_button_state.set_released(&MouseButton::Left);
                                 true
                             }
                             2 => {
-                                mouse_button_state.pressed.remove(&MouseButton::Right);
-                                mouse_button_state
-                                    .released_current_frame
-                                    .insert(MouseButton::Right);
+                                mouse_button_state.set_released(&MouseButton::Right);
                                 true
                             }
                             _ => false,
@@ -389,11 +346,15 @@ impl App {
                     if state == ElementState::Pressed {
                         if let Some(key) = virtual_keycode {
                             keyboard_state.set_pressed(key);
+                        } else {
+                            warn!("Couldn't read keyboard input!");
                         }
                         true
                     } else {
                         if let Some(key) = virtual_keycode {
                             keyboard_state.set_released(key);
+                        } else {
+                            warn!("Couldn't read keyboard input!");
                         }
                         true
                     }

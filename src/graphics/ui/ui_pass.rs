@@ -224,6 +224,7 @@ impl UiPass {
             .zip(self.vertex_buffers.iter())
             .zip(self.index_buffers.iter())
         {
+            // TODO: feels like some of these checks can be removed
             // Transform clip rect to physical pixels.
             let clip_min_x = scale_factor * clip_rect.min.x;
             let clip_min_y = scale_factor * clip_rect.min.y;
@@ -244,20 +245,19 @@ impl UiPass {
             let width = (clip_max_x - clip_min_x).max(1);
             let height = (clip_max_y - clip_min_y).max(1);
 
-           {
-                // clip scissor rectangle to target size
-                let x = clip_min_x.min(physical_width);
-                let y = clip_min_y.min(physical_height);
-                let width = width.min(physical_width - x);
-                let height = height.min(physical_height - y);
+            // clip scissor rectangle to target size
+            let x = clip_min_x.min(physical_width);
+            let y = clip_min_y.min(physical_height);
+            let width = width.min(physical_width - x);
+            let height = height.min(physical_height - y);
 
-                // skip rendering with zero-sized clip areas
-                if width == 0 || height == 0 {
-                    continue;
-                }
-
-                pass.set_scissor_rect(x, y, width, height);
+            // skip rendering with zero-sized clip areas
+            if width == 0 || height == 0 {
+                continue;
             }
+
+            pass.set_scissor_rect(x, y, width, height);
+
             pass.set_bind_group(1, self.get_texture_bind_group(triangles.texture_id), &[]);
 
             pass.set_index_buffer(index_buffer.buffer.slice(..), wgpu::IndexFormat::Uint32);

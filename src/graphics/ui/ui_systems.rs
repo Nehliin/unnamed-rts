@@ -1,30 +1,31 @@
 use std::time::Instant;
 
-use egui::{pos2, vec2, Color32, Modifiers};
+use egui::{pos2, vec2, Color32};
 use egui_demo_lib::DemoWindows;
-use input::{CursorPosition, MouseMotion, Text};
+use input::{CursorPosition, Text};
 use legion::*;
 use wgpu::{CommandEncoderDescriptor, Device, Queue, SwapChainTexture};
 use winit::event::{ModifiersState, MouseButton, MouseScrollDelta};
 
 use crate::{
     application::Time,
-    input::{self, FrameEvent},
+    input::{self, EventReader},
 };
 
 use super::{
-    ui_context::{self, UiContext, WindowSize},
+    ui_context::{UiContext, WindowSize},
     ui_pass::UiPass,
 };
 
+#[allow(clippy::clippy::too_many_arguments)]
 #[system]
 pub fn update_ui(
     #[resource] ui_ctx: &mut UiContext,
     #[resource] window_size: &WindowSize,
-    #[resource] modifiers_changed: &FrameEvent<ModifiersState>,
+    #[resource] modifiers_changed: &EventReader<ModifiersState>,
     #[resource] mouse_position: &CursorPosition,
-    #[resource] mouse_scroll: &FrameEvent<MouseScrollDelta>,
-    #[resource] text_input: &FrameEvent<Text>,
+    #[resource] mouse_scroll: &EventReader<MouseScrollDelta>,
+    #[resource] text_input: &EventReader<Text>,
     #[resource] mouse_input: &input::MouseButtonState,
     #[resource] key_input: &input::KeyboardState,
 ) {
@@ -36,30 +37,25 @@ pub fn update_ui(
             window_size.physical_height as f32 / window_size.scale_factor as f32,
         ),
     ));
-    // checkcursor moved after cursor left
 
     ui_ctx.raw_input.mouse_pos = Some(pos2(
         mouse_position.x as f32 / ui_ctx.raw_input.pixels_per_point.unwrap(),
         mouse_position.y as f32 / ui_ctx.raw_input.pixels_per_point.unwrap(),
     ));
-    // println!("{:?}", mouse_input);
-    ui_ctx.raw_input.mouse_down = mouse_input.pressed.contains(&MouseButton::Left);
-
-    if let Some(scroll_delta) = mouse_scroll.event {
+    ui_ctx.raw_input.mouse_down = mouse_input.is_pressed(&MouseButton::Left);
+    for scroll_delta in mouse_scroll.events() {
         match scroll_delta {
             MouseScrollDelta::LineDelta(x, y) => {
-                let line_height = 24.0; // TODO as in egui_glium
-                ui_ctx.raw_input.scroll_delta = vec2(x, y) * line_height;
+                ui_ctx.raw_input.scroll_delta += vec2(*x, *y);
             }
             MouseScrollDelta::PixelDelta(delta) => {
                 // Actually point delta
-                ui_ctx.raw_input.scroll_delta = vec2(delta.x as f32, delta.y as f32);
+                ui_ctx.raw_input.scroll_delta += vec2(delta.x as f32, delta.y as f32);
             }
         }
     }
 
-    if let Some(text) = &text_input.event {
-        println!("TEXT: {:?}", text);
+    for text in text_input.events() {
         if is_printable(text.codepoint)
             && !ui_ctx.modifier_state.ctrl()
             && !ui_ctx.modifier_state.logo()
@@ -71,16 +67,14 @@ pub fn update_ui(
         }
     }
 
-    let modifiers = if let Some(modifier_state) = modifiers_changed.event {
-        input::winit_to_egui_modifiers(modifier_state)
+    let modifiers = if let Some(modifier_state) = modifiers_changed.last_event() {
+        input::winit_to_egui_modifiers(*modifier_state)
     } else {
         ui_ctx.raw_input.modifiers
     };
 
     for key in key_input.all_pressed_current_frame() {
-        println!("virt Key: {:?}", key);
         if let Some(key) = input::winit_to_egui_key_code(key) {
-            println!("Key: {:?}", key);
             ui_ctx.raw_input.events.push(egui::Event::Key {
                 key,
                 pressed: true,
@@ -154,12 +148,7 @@ pub fn end_ui_frame(
     pass.update_user_textures(&device, &queue);
     pass.update_buffers(&device, &queue, &paint_jobs, &window_size);
     // Record all render passes.
-    pass.execute(
-        &mut encoder,
-        &current_frame.view,
-        &paint_jobs,
-        &window_size,
-    );
+    pass.execute(&mut encoder, &current_frame.view, &paint_jobs, &window_size);
     pass.command_sender
         .send(encoder.finish())
         .expect("Failed to send ui_render commands");

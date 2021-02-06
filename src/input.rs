@@ -60,7 +60,6 @@ pub fn event(
 ) {
     keyboard_state.frame_update();
     mousebutton_state.frame_update();
-
     text_input.frame_update();
     cursor_position.frame_update();
     mouse_motion.frame_update();
@@ -120,6 +119,7 @@ pub struct MouseButtonState {
     released_current_frame: HashSet<MouseButton>,
 }
 
+#[allow(dead_code)]
 impl MouseButtonState {
     pub fn set_pressed(&mut self, button: &MouseButton) {
         self.pressed.insert(*button);
@@ -161,6 +161,7 @@ pub struct KeyboardState {
     // modifiers?
 }
 
+#[allow(dead_code)]
 impl KeyboardState {
     pub fn set_pressed(&mut self, key: VirtualKeyCode) {
         self.pressed.set_bit(key as u32);

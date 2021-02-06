@@ -1,18 +1,12 @@
-use std::time::Instant;
-
 use bytemuck::{Pod, Zeroable};
 use crossbeam_channel::Sender;
-use egui::Color32;
-use legion::*;
 use wgpu::{
     include_spirv,
     util::{BufferInitDescriptor, DeviceExt},
-    CommandBuffer, CommandEncoderDescriptor, Device, Queue, SwapChainTexture,
+    CommandBuffer, Device,
 };
 
-use crate::application::Time;
-
-use super::ui_context::{UiContext, WindowSize};
+use super::ui_context::WindowSize;
 
 #[derive(Debug)]
 enum BufferType {
@@ -54,7 +48,6 @@ impl UiPass {
 
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("ui_uniform_buffer"),
-            // slice?
             contents: bytemuck::cast_slice(&[UniformBuffer {
                 screen_size: [0.0, 0.0],
             }]),

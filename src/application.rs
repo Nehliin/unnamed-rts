@@ -1,24 +1,12 @@
 use std::time::Instant;
 
-use crate::{
-    assets::Assets,
-    components::Transform,
-    graphics::{
-        camera::Camera,
-        model::Model,
-        model_pass::{self, ModelPass},
-        ui::{
-            ui_context::{self, UiContext, WindowSize},
-            ui_pass::{self, UiPass},
+use crate::{assets::Assets, components::Transform, graphics::{camera::{self, Camera}, model::Model, model_pass::{self, ModelPass}, ui::{
+            ui_context::{UiContext, WindowSize},
+            ui_pass::UiPass,
             ui_systems,
-        },
-    },
-    input::{self, KeyboardState, MouseButtonState, MouseMotion, Text},
-};
+        }}, input::{self, KeyboardState, MouseButtonState, MouseMotion, Text}};
 use crossbeam_channel::{Receiver, Sender};
-use egui_demo_lib::DemoWindows;
 use input::CursorPosition;
-use legion::*;
 use legion::{Resources, Schedule, World};
 use log::warn;
 use nalgebra::{Isometry3, Point3, Vector3};
@@ -31,46 +19,11 @@ use winit::{
     dpi::PhysicalSize,
     event::{
         DeviceEvent, ElementState, Event, KeyboardInput, ModifiersState, MouseButton,
-        MouseScrollDelta, VirtualKeyCode,
+        MouseScrollDelta,
     },
     window::{Window, WindowId},
 };
 
-const CAMERA_SPEED: f32 = 6.5;
-// TODO:
-// also add the cursor moved out of window potentially
-// 2. decide how resize should work i.e system or not. Probably worth moving more stuff to resources from the app though
-// 3. Clean up
-/*#[system]
-fn resize(
-    #[resource] window_size: &WindowSize,
-    #[resource] device: &Device,
-    #[resource] camera: &mut Camera,
-    #[resource] swap_chain: &mut SwapChain,
-    #[resource] sc_desc: &mut SwapChainDescriptor,
-    #[resource] surface: &Surface
-) {
-
-    sc_desc.width = window_size.physical_height;
-    sc_desc.height = window_size.physical_width;
-    swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
-    let mut window_size = self
-        .resources
-        .get_mut::<WindowSize>()
-        .expect("WindowSize not available");
-    window_size.physical_width = new_size.width;
-    window_size.physical_height = new_size.height;
-    if let Some(scale_factor) = updated_scale_factor {
-        window_size.scale_factor = scale_factor;
-    }
-    let mut camera = self.resources.get_mut::<Camera>().unwrap();
-    camera.update_aspect_ratio(new_size.width, new_size.height);
-    self.resources
-        .get_mut::<ModelPass>()
-        .unwrap()
-        .handle_resize(&device, &self.sc_desc);
-}
-*/
 pub struct Time {
     current_time: std::time::Instant,
     pub delta_time: f32,
@@ -149,8 +102,8 @@ impl App {
             .add_system(model_pass::draw_system())
             .add_system(ui_systems::update_ui_system())
             .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
-            .add_thread_local(ui_systems::test_system(DemoWindows::default()))
             .add_system(ui_systems::draw_fps_counter_system())
+            .add_system(camera::free_flying_camera_system())
             .add_system(ui_systems::end_ui_frame_system(UiPass::new(
                 &device, ui_sender,
             )))
@@ -228,6 +181,7 @@ impl App {
             .expect("Device to be registerd");
         self.sc_desc.width = window_size.physical_width;
         self.sc_desc.height = window_size.physical_height;
+        // This will lead to crashes becase the swapchain is created before the old one is dropped
         self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
         let mut camera = self.resources.get_mut::<Camera>().unwrap();
         camera.update_aspect_ratio(window_size.physical_width, window_size.physical_height);
@@ -264,7 +218,6 @@ impl App {
                     new_inner_size,
                 } => {
                     let mut window_size = self.resources.get_mut::<WindowSize>().unwrap();
-                    // this might actually be incorrect...
                     window_size.physical_height = new_inner_size.height;
                     window_size.physical_width = new_inner_size.width;
                     window_size.scale_factor = *scale_factor as f32;
@@ -274,18 +227,18 @@ impl App {
                     true
                 }
                 winit::event::WindowEvent::ModifiersChanged(modifier_state) => {
-                    self.modifiers_state_sender.send(*modifier_state);
+                    let _ = self.modifiers_state_sender.send(*modifier_state);
                     true
                 }
                 winit::event::WindowEvent::CursorMoved { position, .. } => {
-                    self.resources.insert(CursorPosition {
+                    let _ = self.cursor_position_sender.send(CursorPosition {
                         x: position.x,
                         y: position.y,
                     });
                     true
                 }
                 winit::event::WindowEvent::ReceivedCharacter(char) => {
-                    self.text_input_sender.send(Text { codepoint: *char });
+                    let _ = self.text_input_sender.send(Text { codepoint: *char });
                     true
                 }
                 //todo?
@@ -294,14 +247,14 @@ impl App {
             },
             Event::DeviceEvent { event, .. } => match *event {
                 DeviceEvent::MouseMotion { delta } => {
-                    self.mouse_motion_sender.send(MouseMotion {
+                    let _ = self.mouse_motion_sender.send(MouseMotion {
                         delta_x: delta.0,
                         delta_y: delta.1,
                     });
                     true
                 }
                 DeviceEvent::MouseWheel { delta } => {
-                    self.mouse_scroll_sender.send(delta);
+                    let _ = self.mouse_scroll_sender.send(delta);
                     true
                 }
                 DeviceEvent::Button { button, state } => {

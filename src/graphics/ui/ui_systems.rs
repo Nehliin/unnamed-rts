@@ -1,7 +1,6 @@
 use std::time::Instant;
 
 use egui::{pos2, vec2, Color32};
-use egui_demo_lib::DemoWindows;
 use input::{CursorPosition, Text};
 use legion::*;
 use wgpu::{CommandEncoderDescriptor, Device, Queue, SwapChainTexture};
@@ -23,7 +22,7 @@ pub fn update_ui(
     #[resource] ui_ctx: &mut UiContext,
     #[resource] window_size: &WindowSize,
     #[resource] modifiers_changed: &EventReader<ModifiersState>,
-    #[resource] mouse_position: &CursorPosition,
+    #[resource] mouse_position: &EventReader<CursorPosition>,
     #[resource] mouse_scroll: &EventReader<MouseScrollDelta>,
     #[resource] text_input: &EventReader<Text>,
     #[resource] mouse_input: &input::MouseButtonState,
@@ -38,10 +37,13 @@ pub fn update_ui(
         ),
     ));
 
-    ui_ctx.raw_input.mouse_pos = Some(pos2(
-        mouse_position.x as f32 / ui_ctx.raw_input.pixels_per_point.unwrap(),
-        mouse_position.y as f32 / ui_ctx.raw_input.pixels_per_point.unwrap(),
-    ));
+    // Keep in mind that the cursor left event isn't handled
+    if let Some(mouse_position) = mouse_position.last_event() {
+        ui_ctx.raw_input.mouse_pos = Some(pos2(
+            mouse_position.x as f32 / ui_ctx.raw_input.pixels_per_point.unwrap(),
+            mouse_position.y as f32 / ui_ctx.raw_input.pixels_per_point.unwrap(),
+        ));
+    }
     ui_ctx.raw_input.mouse_down = mouse_input.is_pressed(&MouseButton::Left);
     for scroll_delta in mouse_scroll.events() {
         match scroll_delta {
@@ -94,11 +96,6 @@ pub fn update_ui(
     }
 }
 
-#[system]
-pub fn test(#[state] demo: &mut DemoWindows, #[resource] ui: &UiContext) {
-    demo.ui(&ui.context)
-}
-
 /// We only want printable characters and ignore all special keys.
 #[inline]
 pub fn is_printable(chr: char) -> bool {
@@ -110,8 +107,13 @@ pub fn is_printable(chr: char) -> bool {
 }
 
 #[system]
-pub fn begin_ui_frame(#[state] time_since_start: &Instant, #[resource] ui_context: &mut UiContext) {
+pub fn begin_ui_frame(
+    #[state] time_since_start: &Instant,
+    #[resource] time: &Time,
+    #[resource] ui_context: &mut UiContext,
+) {
     ui_context.update_time(time_since_start.elapsed().as_secs_f64());
+    ui_context.raw_input.predicted_dt = time.delta_time;
     ui_context.begin_frame();
 }
 

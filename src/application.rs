@@ -1,7 +1,14 @@
 use std::time::Instant;
 
-use crossbeam_channel::Receiver;
+use crate::{assets::Assets, components::Transform, graphics::{camera::{self, Camera}, model::Model, model_pass::{self, ModelPass}, ui::{
+            ui_context::{UiContext, WindowSize},
+            ui_pass::UiPass,
+            ui_systems,
+        }}, input::{self, KeyboardState, MouseButtonState, MouseMotion, Text}};
+use crossbeam_channel::{Receiver, Sender};
+use input::CursorPosition;
 use legion::{Resources, Schedule, World};
+use log::warn;
 use nalgebra::{Isometry3, Point3, Vector3};
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
@@ -10,25 +17,12 @@ use wgpu::{
 };
 use winit::{
     dpi::PhysicalSize,
-    event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode},
-    window::Window,
-};
-
-use crate::{
-    assets::Assets,
-    components::Transform,
-    graphics::{
-        camera::Camera,
-        model::Model,
-        model_pass::{self, ModelPass},
-        ui::{
-            ui_context::{self, UiContext, WindowSize},
-            ui_pass::{self, UiPass},
-        },
+    event::{
+        DeviceEvent, ElementState, Event, KeyboardInput, ModifiersState, MouseButton,
+        MouseScrollDelta,
     },
+    window::{Window, WindowId},
 };
-
-const CAMERA_SPEED: f32 = 6.5;
 
 pub struct Time {
     current_time: std::time::Instant,
@@ -42,9 +36,13 @@ pub struct App {
     swap_chain: SwapChain,
     surface: Surface,
     sc_desc: SwapChainDescriptor,
+    text_input_sender: Sender<Text>,
+    mouse_scroll_sender: Sender<MouseScrollDelta>,
+    mouse_motion_sender: Sender<MouseMotion>,
+    cursor_position_sender: Sender<CursorPosition>,
+    modifiers_state_sender: Sender<ModifiersState>,
     // TODO: use small vec instead
     command_receivers: Vec<Receiver<CommandBuffer>>,
-    pub size: PhysicalSize<u32>,
 }
 
 fn init_ui_resources(resources: &mut Resources, size: &PhysicalSize<u32>, scale_factor: f32) {
@@ -102,11 +100,14 @@ impl App {
         let schedule = Schedule::builder()
             .add_system(model_pass::update_system())
             .add_system(model_pass::draw_system())
-            .add_system(ui_pass::begin_ui_frame_system(Instant::now()))
-            .add_system(ui_pass::draw_fps_counter_system())
-            .add_system(ui_pass::end_ui_frame_system(UiPass::new(
+            .add_system(ui_systems::update_ui_system())
+            .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
+            .add_system(ui_systems::draw_fps_counter_system())
+            .add_system(camera::free_flying_camera_system())
+            .add_system(ui_systems::end_ui_frame_system(UiPass::new(
                 &device, ui_sender,
             )))
+            .add_system(input::event_system())
             .build();
         resources.insert(ModelPass::new(&device, &sc_desc, model_sender));
         resources.insert(device);
@@ -115,6 +116,22 @@ impl App {
             current_time: std::time::Instant::now(),
             delta_time: 0.0,
         });
+
+        // Event readers and input
+        let (text_input_sender, rc) = crossbeam_channel::unbounded();
+        resources.insert(input::EventReader::<Text>::new(rc));
+        let (cursor_position_sender, rc) = crossbeam_channel::unbounded();
+        resources.insert(input::EventReader::<CursorPosition>::new(rc));
+        let (mouse_scroll_sender, rc) = crossbeam_channel::unbounded();
+        resources.insert(input::EventReader::<MouseScrollDelta>::new(rc));
+        let (mouse_motion_sender, rc) = crossbeam_channel::unbounded();
+        resources.insert(input::EventReader::<MouseMotion>::new(rc));
+        let (modifiers_state_sender, rc) = crossbeam_channel::unbounded();
+        resources.insert(input::EventReader::<ModifiersState>::new(rc));
+
+        resources.insert(KeyboardState::default());
+        resources.insert(MouseButtonState::default());
+
         init_ui_resources(&mut resources, &size, window.scale_factor() as f32);
         // This should be in a game state
         let suit = assets.load("nanosuit/nanosuit.obj").unwrap();
@@ -141,7 +158,6 @@ impl App {
             ),
         ));
         App {
-            size,
             world,
             schedule,
             resources,
@@ -149,78 +165,156 @@ impl App {
             surface,
             sc_desc,
             command_receivers: vec![model_rc, ui_rc],
+            text_input_sender,
+            mouse_scroll_sender,
+            mouse_motion_sender,
+            cursor_position_sender,
+            modifiers_state_sender,
         }
     }
+
     // maybe use a system for this instead?
-    pub fn resize(&mut self, new_size: PhysicalSize<u32>, updated_scale_factor: Option<f32>) {
+    pub fn resize(&mut self, window_size: &WindowSize) {
         let device = self
             .resources
             .get::<Device>()
             .expect("Device to be registerd");
-        self.sc_desc.width = new_size.width;
-        self.sc_desc.height = new_size.height;
+        self.sc_desc.width = window_size.physical_width;
+        self.sc_desc.height = window_size.physical_height;
+        // This will lead to crashes becase the swapchain is created before the old one is dropped
         self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
-        let mut window_size = self
-            .resources
-            .get_mut::<WindowSize>()
-            .expect("WindowSize not available");
-        window_size.physical_width = new_size.width;
-        window_size.physical_height = new_size.height;
-        if let Some(scale_factor) = updated_scale_factor {
-            window_size.scale_factor = scale_factor;
-        }
         let mut camera = self.resources.get_mut::<Camera>().unwrap();
-        camera.update_aspect_ratio(new_size.width, new_size.height);
+        camera.update_aspect_ratio(window_size.physical_width, window_size.physical_height);
         self.resources
             .get_mut::<ModelPass>()
             .unwrap()
             .handle_resize(&device, &self.sc_desc);
     }
 
-    pub fn event_handler(&mut self, event: &Event<()>) {
+    pub fn recreate_swap_chain(&mut self) {
+        let window_size = self.resources.get::<WindowSize>().unwrap();
+        let old_size = *window_size;
+        drop(window_size);
+        self.resize(&old_size);
+    }
+
+    pub fn event_handler(&mut self, event: &Event<()>, current_window: &WindowId) -> bool {
         match event {
-            Event::DeviceEvent { ref event, .. } => {
-                let mut camera = self.resources.get_mut::<Camera>().unwrap();
-                let time = self.resources.get::<Time>().unwrap();
-                match event {
-                    DeviceEvent::Key(KeyboardInput {
-                        state,
-                        virtual_keycode: Some(key),
-                        ..
-                    }) => match *key {
-                        VirtualKeyCode::A if *state == ElementState::Pressed => {
-                            camera.move_sideways(-CAMERA_SPEED * time.delta_time);
-                        }
-                        VirtualKeyCode::D if *state == ElementState::Pressed => {
-                            camera.move_sideways(CAMERA_SPEED * time.delta_time);
-                        }
-                        VirtualKeyCode::W if *state == ElementState::Pressed => {
-                            camera.move_in_direction(CAMERA_SPEED * time.delta_time);
-                        }
-                        VirtualKeyCode::S if *state == ElementState::Pressed => {
-                            camera.move_in_direction(-CAMERA_SPEED * time.delta_time);
-                        }
-                        _ => {}
-                    },
-                    DeviceEvent::MouseMotion { delta } => {
-                        let mut xoffset = delta.0 as f32;
-                        let mut yoffset = delta.1 as f32; // reversed since y-coordinates go from bottom to top
-                        let sensitivity: f32 = 0.05; // change this value to your liking
-                        xoffset *= sensitivity;
-                        yoffset *= sensitivity;
-                        let yaw = camera.get_yaw();
-                        let pitch = camera.get_pitch();
-                        camera.set_yaw(xoffset + yaw);
-                        camera.set_pitch(yoffset + pitch);
-                    }
-                    _ => {}
+            Event::WindowEvent {
+                ref event,
+                window_id,
+            } if window_id == current_window => match event {
+                winit::event::WindowEvent::Resized(physical_size) => {
+                    let mut window_size = self.resources.get_mut::<WindowSize>().unwrap();
+                    window_size.physical_height = physical_size.height;
+                    window_size.physical_width = physical_size.width;
+                    let new_size = *window_size;
+                    drop(window_size);
+                    self.resize(&new_size);
+                    true
                 }
-            }
-            _ => {
-                let mut ui_context = self.resources.get_mut::<UiContext>().unwrap();
-                let mut window_size = self.resources.get_mut::<WindowSize>().unwrap();
-                ui_context::handle_input(&mut ui_context, &mut window_size, &event);
-            }
+                winit::event::WindowEvent::ScaleFactorChanged {
+                    scale_factor,
+                    new_inner_size,
+                } => {
+                    let mut window_size = self.resources.get_mut::<WindowSize>().unwrap();
+                    window_size.physical_height = new_inner_size.height;
+                    window_size.physical_width = new_inner_size.width;
+                    window_size.scale_factor = *scale_factor as f32;
+                    let new_size = *window_size;
+                    drop(window_size);
+                    self.resize(&new_size);
+                    true
+                }
+                winit::event::WindowEvent::ModifiersChanged(modifier_state) => {
+                    let _ = self.modifiers_state_sender.send(*modifier_state);
+                    true
+                }
+                winit::event::WindowEvent::CursorMoved { position, .. } => {
+                    let _ = self.cursor_position_sender.send(CursorPosition {
+                        x: position.x,
+                        y: position.y,
+                    });
+                    true
+                }
+                winit::event::WindowEvent::ReceivedCharacter(char) => {
+                    let _ = self.text_input_sender.send(Text { codepoint: *char });
+                    true
+                }
+                //todo?
+                //winit::event::WindowEvent::CursorLeft { device_id } => {}
+                _ => false,
+            },
+            Event::DeviceEvent { event, .. } => match *event {
+                DeviceEvent::MouseMotion { delta } => {
+                    let _ = self.mouse_motion_sender.send(MouseMotion {
+                        delta_x: delta.0,
+                        delta_y: delta.1,
+                    });
+                    true
+                }
+                DeviceEvent::MouseWheel { delta } => {
+                    let _ = self.mouse_scroll_sender.send(delta);
+                    true
+                }
+                DeviceEvent::Button { button, state } => {
+                    let mut mouse_button_state =
+                        self.resources.get_mut::<MouseButtonState>().unwrap();
+                    if state == ElementState::Pressed {
+                        match button {
+                            1 => {
+                                mouse_button_state.set_pressed(&MouseButton::Left);
+                                true
+                            }
+                            2 => {
+                                mouse_button_state.set_pressed(&MouseButton::Middle);
+                                true
+                            }
+                            3 => {
+                                mouse_button_state.set_pressed(&MouseButton::Right);
+                                true
+                            }
+                            _ => false,
+                        }
+                    } else {
+                        match button {
+                            1 => {
+                                mouse_button_state.set_released(&MouseButton::Left);
+                                true
+                            }
+                            2 => {
+                                mouse_button_state.set_released(&MouseButton::Right);
+                                true
+                            }
+                            _ => false,
+                        }
+                    }
+                }
+                DeviceEvent::Key(KeyboardInput {
+                    state,
+                    virtual_keycode,
+                    ..
+                }) => {
+                    let mut keyboard_state = self.resources.get_mut::<KeyboardState>().unwrap();
+                    if state == ElementState::Pressed {
+                        if let Some(key) = virtual_keycode {
+                            keyboard_state.set_pressed(key);
+                        } else {
+                            warn!("Couldn't read keyboard input!");
+                        }
+                        true
+                    } else {
+                        if let Some(key) = virtual_keycode {
+                            keyboard_state.set_released(key);
+                        } else {
+                            warn!("Couldn't read keyboard input!");
+                        }
+                        true
+                    }
+                }
+                _ => false,
+            },
+            _ => false,
         }
     }
 

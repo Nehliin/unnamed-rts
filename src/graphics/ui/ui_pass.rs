@@ -1,18 +1,12 @@
-use std::time::Instant;
-
 use bytemuck::{Pod, Zeroable};
 use crossbeam_channel::Sender;
-use egui::Color32;
-use legion::*;
 use wgpu::{
     include_spirv,
     util::{BufferInitDescriptor, DeviceExt},
-    CommandBuffer, CommandEncoderDescriptor, Device, Queue, SwapChainTexture,
+    CommandBuffer, Device,
 };
 
-use crate::application::Time;
-
-use super::ui_context::{UiContext, WindowSize};
+use super::ui_context::WindowSize;
 
 #[derive(Debug)]
 enum BufferType {
@@ -44,7 +38,7 @@ pub struct UiPass {
     _next_user_texture_id: u64,
     pending_user_textures: Vec<(u64, egui::Texture)>,
     user_textures: Vec<Option<wgpu::BindGroup>>,
-    command_sender: Sender<CommandBuffer>,
+    pub command_sender: Sender<CommandBuffer>,
 }
 
 impl UiPass {
@@ -54,7 +48,6 @@ impl UiPass {
 
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("ui_uniform_buffer"),
-            // slice?
             contents: bytemuck::cast_slice(&[UniformBuffer {
                 screen_size: [0.0, 0.0],
             }]),
@@ -191,28 +184,20 @@ impl UiPass {
             command_sender,
         }
     }
-    /// Executes the egui render pass. When `clear_on_draw` is set, the output target will get cleared before writing to it.
     pub fn execute(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         color_attachment: &wgpu::TextureView,
         paint_jobs: &[egui::paint::PaintJob],
         screen_descriptor: &WindowSize,
-        clear_color: Option<wgpu::Color>,
     ) {
-        let load_operation = if let Some(color) = clear_color {
-            wgpu::LoadOp::Clear(color)
-        } else {
-            wgpu::LoadOp::Load
-        };
-
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("ui_render_pass"),
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: color_attachment,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: load_operation,
+                    load: wgpu::LoadOp::Load,
                     store: true,
                 },
             }],
@@ -232,6 +217,7 @@ impl UiPass {
             .zip(self.vertex_buffers.iter())
             .zip(self.index_buffers.iter())
         {
+            // TODO: feels like some of these checks can be removed
             // Transform clip rect to physical pixels.
             let clip_min_x = scale_factor * clip_rect.min.x;
             let clip_min_y = scale_factor * clip_rect.min.y;
@@ -252,7 +238,19 @@ impl UiPass {
             let width = (clip_max_x - clip_min_x).max(1);
             let height = (clip_max_y - clip_min_y).max(1);
 
-            pass.set_scissor_rect(clip_min_x, clip_min_y, width, height);
+            // clip scissor rectangle to target size
+            let x = clip_min_x.min(physical_width);
+            let y = clip_min_y.min(physical_height);
+            let width = width.min(physical_width - x);
+            let height = height.min(physical_height - y);
+
+            // skip rendering with zero-sized clip areas
+            if width == 0 || height == 0 {
+                continue;
+            }
+
+            pass.set_scissor_rect(x, y, width, height);
+
             pass.set_bind_group(1, self.get_texture_bind_group(triangles.texture_id), &[]);
 
             pass.set_index_buffer(index_buffer.buffer.slice(..), wgpu::IndexFormat::Uint32);
@@ -476,55 +474,4 @@ fn as_byte_slice<T>(slice: &[T]) -> &[u8] {
     let len = slice.len() * std::mem::size_of::<T>();
     let ptr = slice.as_ptr() as *const u8;
     unsafe { std::slice::from_raw_parts(ptr, len) }
-}
-
-#[system]
-pub fn begin_ui_frame(#[state] time_since_start: &Instant, #[resource] ui_context: &mut UiContext) {
-    ui_context.update_time(time_since_start.elapsed().as_secs_f64());
-    ui_context.begin_frame();
-}
-
-#[system]
-pub fn draw_fps_counter(#[resource] ui_context: &UiContext, #[resource] time: &Time) {
-    egui::Area::new("FPS area")
-        .fixed_pos(egui::pos2(0.0, 0.0))
-        .show(&ui_context.context, |ui| {
-            let label = egui::Label::new(format!("FPS: {}", 1.0 / time.delta_time))
-                .text_color(Color32::WHITE);
-            ui.add(label);
-        });
-}
-
-// TODO: handle user textures here
-// Basicall simply load texture data to create a egui::Texture and then run egui texture to wgpu texture
-// However, better to map texture id = already loaded texture (via Aseets<>) and handle it from there
-#[system]
-pub fn end_ui_frame(
-    #[state] pass: &mut UiPass,
-    #[resource] ui_context: &mut UiContext,
-    #[resource] device: &Device,
-    #[resource] queue: &Queue,
-    #[resource] current_frame: &SwapChainTexture,
-    #[resource] window_size: &WindowSize,
-) {
-    let (_output, commands) = ui_context.end_frame();
-    let context = &ui_context.context;
-    let paint_jobs = context.tessellate(commands);
-    let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-        label: Some("Ui command encoder"),
-    });
-    pass.update_texture(&device, &queue, &context.texture());
-    pass.update_user_textures(&device, &queue);
-    pass.update_buffers(&device, &queue, &paint_jobs, &window_size);
-    // Record all render passes.
-    pass.execute(
-        &mut encoder,
-        &current_frame.view,
-        &paint_jobs,
-        &window_size,
-        None,
-    );
-    pass.command_sender
-        .send(encoder.finish())
-        .expect("Failed to send ui_render commands");
 }

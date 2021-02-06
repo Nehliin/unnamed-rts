@@ -1,7 +1,14 @@
 use crevice::std140::AsStd140;
+use legion::*;
 use nalgebra::geometry::Perspective3;
 use nalgebra::{Matrix4, Point3, Vector3};
 use once_cell::sync::Lazy;
+use winit::event::VirtualKeyCode;
+
+use crate::{
+    application::Time,
+    input::{EventReader, KeyboardState, MouseMotion},
+};
 #[derive(Debug, Clone)]
 pub struct Camera {
     direction: Vector3<f32>,
@@ -43,6 +50,55 @@ fn to_vec(point: &Point3<f32>) -> Vector3<f32> {
     Vector3::new(point.x, point.y, point.z)
 }
 
+pub const CAMERA_SPEED: f32 = 2.5;
+
+#[system]
+pub fn free_flying_camera(
+    #[resource] camera: &mut Camera,
+    #[resource] time: &Time,
+    #[resource] keyboard_state: &KeyboardState,
+    #[resource] mouse_motion: &EventReader<MouseMotion>,
+) {
+    if keyboard_state.is_pressed(VirtualKeyCode::A) {
+        camera.position += camera
+            .direction
+            .cross(&Vector3::new(0.0, 1.0, 0.0))
+            .normalize()
+            * -CAMERA_SPEED
+            * time.delta_time;
+    }
+    if keyboard_state.is_pressed(VirtualKeyCode::D) {
+        camera.position += camera
+            .direction
+            .cross(&Vector3::new(0.0, 1.0, 0.0))
+            .normalize()
+            * CAMERA_SPEED
+            * time.delta_time;
+    }
+    if keyboard_state.is_pressed(VirtualKeyCode::W) {
+        camera.position += camera.direction * CAMERA_SPEED * time.delta_time;
+    }
+    if keyboard_state.is_pressed(VirtualKeyCode::S) {
+        camera.position += camera.direction * -CAMERA_SPEED * time.delta_time;
+    }
+    for delta in mouse_motion.events() {
+        let mut xoffset = delta.delta_x as f32;
+        let mut yoffset = delta.delta_y as f32;
+        let sensitivity: f32 = 0.1; // change this value to your liking
+        xoffset *= sensitivity;
+        yoffset *= sensitivity;
+        camera.yaw += xoffset;
+        camera.pitch += yoffset;
+        if camera.pitch < -89.0 {
+            camera.pitch = -89.0;
+        } else if 89.0 < camera.pitch {
+            camera.pitch = 89.0;
+        }
+    }
+    camera.update_view_matrix();
+}
+
+#[allow(dead_code)]
 impl Camera {
     pub fn new(
         position: Point3<f32>,
@@ -114,13 +170,13 @@ impl Camera {
         } else {
             self.pitch = pitch;
         }
-        self.update_rotation();
+        self.update_view_matrix();
     }
 
     #[inline]
     pub fn set_yaw(&mut self, yaw: f32) {
         self.yaw = yaw;
-        self.update_rotation();
+        self.update_view_matrix();
     }
 
     #[inline]
@@ -134,7 +190,7 @@ impl Camera {
     }
 
     #[inline]
-    fn update_rotation(&mut self) {
+    fn update_view_matrix(&mut self) {
         self.direction.x = self.yaw.to_radians().cos() * self.pitch.to_radians().cos();
         self.direction.y = self.pitch.to_radians().sin();
         self.direction.z = self.yaw.to_radians().sin() * self.pitch.to_radians().cos();

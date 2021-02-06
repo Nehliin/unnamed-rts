@@ -122,7 +122,7 @@ pub fn draw_fps_counter(#[resource] ui_context: &UiContext, #[resource] time: &T
     egui::Area::new("FPS area")
         .fixed_pos(egui::pos2(0.0, 0.0))
         .show(&ui_context.context, |ui| {
-            let label = egui::Label::new(format!("FPS: {}", 1.0 / time.delta_time))
+            let label = egui::Label::new(format!("FPS: {:.0}", 1.0 / time.delta_time))
                 .text_color(Color32::WHITE);
             ui.add(label);
         });

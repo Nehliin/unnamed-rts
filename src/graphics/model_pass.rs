@@ -58,7 +58,6 @@ pub fn draw(
         0,
         camera_uniform.as_std140().as_bytes(),
     );
-    // UPDATE CAMERA UNIFORM HERE!
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Model pass encoder"),
     });

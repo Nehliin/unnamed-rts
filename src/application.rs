@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crate::{assets::Assets, components::Transform, graphics::{camera::{self, Camera}, model::Model, model_pass::{self, ModelPass}, ui::{
+use crate::{assets::{self, Assets}, components::Transform, graphics::{camera::{self, Camera}, model::Model, model_pass::{self, ModelPass}, ui::{
             ui_context::{UiContext, WindowSize},
             ui_pass::UiPass,
             ui_systems,
@@ -86,7 +86,7 @@ impl App {
             format: TextureFormat::Bgra8UnormSrgb,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Mailbox,
+            present_mode: wgpu::PresentMode::Immediate,
         };
         //window.set_cursor_grab(true).unwrap();
         //window.set_cursor_visible(false);
@@ -98,6 +98,7 @@ impl App {
         let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
         let (model_sender, model_rc) = crossbeam_channel::bounded(1);
         let schedule = Schedule::builder()
+            .add_system(assets::asset_load_system::<Model>())
             .add_system(model_pass::update_system())
             .add_system(model_pass::draw_system())
             .add_system(ui_systems::update_ui_system())
@@ -317,7 +318,7 @@ impl App {
             _ => false,
         }
     }
-
+    // Use system instead?
     pub fn render(&mut self) -> Result<(), wgpu::SwapChainError> {
         // move this somewhere else:
         let mut time = self.resources.get_mut::<Time>().unwrap();
@@ -329,19 +330,9 @@ impl App {
         self.resources.remove::<SwapChainTexture>();
         self.resources
             .insert(self.swap_chain.get_current_frame()?.output);
-        {
-            let queue = self.resources.get_mut::<Queue>().unwrap();
-            let mut asset_storage = self.resources.get_mut::<Assets<Model>>().unwrap();
-            let device = self.resources.get::<Device>().unwrap();
-            // move to a system instead
-            asset_storage.clear_load_queue(&device, &queue).unwrap();
-        }
-
         self.schedule.execute(&mut self.world, &mut self.resources);
         // How to handle the different uniforms?
-
         let queue = self.resources.get_mut::<Queue>().unwrap();
-
         queue.submit(self.command_receivers.iter().map(|rc| rc.recv().unwrap()));
 
         Ok(())

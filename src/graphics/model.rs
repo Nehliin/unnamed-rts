@@ -12,6 +12,7 @@ use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterato
 use std::{
     ops::Range,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicI32, Ordering},
 };
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
@@ -121,6 +122,8 @@ pub struct Model {
     pub instance_buffer: MutableVertexData<InstanceData>,
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
+    pub min_position: Vector3<i32>,
+    pub max_position: Vector3<i32>,
 }
 
 impl Model {
@@ -164,24 +167,55 @@ impl Model {
                 }
             })
             .collect::<Vec<_>>();
-
+        let min_position = [
+            AtomicI32::new(i32::MAX),
+            AtomicI32::new(i32::MAX),
+            AtomicI32::new(i32::MAX),
+        ];
+        let max_position = [
+            AtomicI32::new(i32::MIN),
+            AtomicI32::new(i32::MIN),
+            AtomicI32::new(i32::MIN),
+        ];
         let meshes = obj_models
             .par_iter()
             .map(|m| {
                 let vertices = (0..m.mesh.positions.len() / 3)
                     .into_par_iter()
-                    .map(|i| MeshVertex {
-                        position: [
-                            m.mesh.positions[i * 3],
-                            m.mesh.positions[i * 3 + 1],
-                            m.mesh.positions[i * 3 + 2],
-                        ],
-                        tex_coords: [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]],
-                        normal: [
-                            m.mesh.normals[i * 3],
-                            m.mesh.normals[i * 3 + 1],
-                            m.mesh.normals[i * 3 + 2],
-                        ],
+                    .map(|i| {
+                        max_position[0]
+                            .fetch_max(m.mesh.positions[i * 3].floor() as i32, Ordering::AcqRel);
+                        max_position[1].fetch_max(
+                            m.mesh.positions[i * 3 + 1].floor() as i32,
+                            Ordering::AcqRel,
+                        );
+                        max_position[2].fetch_max(
+                            m.mesh.positions[i * 3 + 2].floor() as i32,
+                            Ordering::AcqRel,
+                        );
+                        min_position[0]
+                            .fetch_min(m.mesh.positions[i * 3].floor() as i32, Ordering::AcqRel);
+                        min_position[1].fetch_min(
+                            m.mesh.positions[i * 3 + 1].floor() as i32,
+                            Ordering::AcqRel,
+                        );
+                        min_position[2].fetch_min(
+                            m.mesh.positions[i * 3 + 2].floor() as i32,
+                            Ordering::AcqRel,
+                        );
+                        MeshVertex {
+                            position: [
+                                m.mesh.positions[i * 3],
+                                m.mesh.positions[i * 3 + 1],
+                                m.mesh.positions[i * 3 + 2],
+                            ],
+                            tex_coords: [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]],
+                            normal: [
+                                m.mesh.normals[i * 3],
+                                m.mesh.normals[i * 3 + 1],
+                                m.mesh.normals[i * 3 + 2],
+                            ],
+                        }
                     })
                     .collect::<Vec<_>>();
                 let vertex_buffer = VertexBuffer::allocate_immutable_buffer(device, &vertices);
@@ -208,6 +242,16 @@ impl Model {
             meshes,
             materials,
             instance_buffer,
+            min_position: dbg!(Vector3::new(
+                            min_position[0].load(Ordering::Acquire),
+                            min_position[1].load(Ordering::Acquire),
+                            min_position[2].load(Ordering::Acquire),
+                        )),
+            max_position: dbg!(Vector3::new(
+                            max_position[0].load(Ordering::Acquire),
+                            max_position[1].load(Ordering::Acquire),
+                            max_position[2].load(Ordering::Acquire),
+                        )),
         })
     }
 }

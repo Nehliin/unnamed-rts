@@ -9,6 +9,18 @@ edition = "2018"
 [profile.dev]
 debug = true
 opt-level = 1
+debug-assertions = true
+incremental = true
+
+# Unclear if this should be opt 1 or 2
+[profile.dev.package."*"]
+debug = true
+opt-level = 2
+debug-assertions = true
+
+[profile.dev.build-override]
+opt-level = 3
+codegen-units = 1
 
 [dependencies]
 winit = "0.24"

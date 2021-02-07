@@ -12,7 +12,7 @@ layout(location=3) out vec3 out_view_pos;
 
 
 layout(set=0, binding=0, std140)
-uniform Uniforms {
+uniform CameraUniforms {
     mat4 view;
     mat4 projection;
     vec3 view_pos;

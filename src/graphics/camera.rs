@@ -1,15 +1,16 @@
 use crevice::std140::AsStd140;
+use crevice::std140::Std140;
 use legion::*;
 use nalgebra::geometry::Perspective3;
 use nalgebra::{Matrix4, Point3, Vector3};
 use once_cell::sync::Lazy;
-use winit::event::VirtualKeyCode;
+use winit::event::{MouseButton, VirtualKeyCode};
 
 use crate::{
     application::Time,
-    input::{EventReader, KeyboardState, MouseMotion},
+    input::{EventReader, KeyboardState, MouseButtonState, MouseMotion},
 };
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Camera {
     direction: Vector3<f32>,
     position: Point3<f32>,
@@ -17,10 +18,11 @@ pub struct Camera {
     projection_matrix: Perspective3<f32>,
     pitch: f32,
     yaw: f32,
+    gpu_buffer: wgpu::Buffer,
 }
 
 #[derive(Debug, Copy, Clone, AsStd140)]
-pub struct CameraUniform {
+struct CameraUniform {
     pub view_matrix: mint::ColumnMatrix4<f32>,
     pub projection: mint::ColumnMatrix4<f32>,
     pub view_pos: mint::Vector3<f32>,
@@ -35,8 +37,8 @@ static OPENGL_TO_WGPU_COORDS: Lazy<Matrix4<f32>> = Lazy::new(|| {
         0.0, 0.0, 0.0, 1.0)
 });
 
-impl From<Camera> for CameraUniform {
-    fn from(camera: Camera) -> Self {
+impl From<&Camera> for CameraUniform {
+    fn from(camera: &Camera) -> Self {
         CameraUniform {
             view_matrix: camera.view_matrix.into(),
             projection: (*OPENGL_TO_WGPU_COORDS * (camera.get_projection_matrix())).into(),
@@ -50,14 +52,16 @@ fn to_vec(point: &Point3<f32>) -> Vector3<f32> {
     Vector3::new(point.x, point.y, point.z)
 }
 
-pub const CAMERA_SPEED: f32 = 2.5;
+pub const CAMERA_SPEED: f32 = 4.5;
 
 #[system]
 pub fn free_flying_camera(
     #[resource] camera: &mut Camera,
     #[resource] time: &Time,
     #[resource] keyboard_state: &KeyboardState,
+    #[resource] mouse_button_state: &MouseButtonState,
     #[resource] mouse_motion: &EventReader<MouseMotion>,
+    #[resource] queue: &wgpu::Queue,
 ) {
     if keyboard_state.is_pressed(VirtualKeyCode::A) {
         camera.position += camera
@@ -81,26 +85,33 @@ pub fn free_flying_camera(
     if keyboard_state.is_pressed(VirtualKeyCode::S) {
         camera.position += camera.direction * -CAMERA_SPEED * time.delta_time;
     }
-    for delta in mouse_motion.events() {
-        let mut xoffset = delta.delta_x as f32;
-        let mut yoffset = delta.delta_y as f32;
-        let sensitivity: f32 = 0.1; // change this value to your liking
-        xoffset *= sensitivity;
-        yoffset *= sensitivity;
-        camera.yaw += xoffset;
-        camera.pitch += yoffset;
-        if camera.pitch < -89.0 {
-            camera.pitch = -89.0;
-        } else if 89.0 < camera.pitch {
-            camera.pitch = 89.0;
+    if mouse_button_state.is_pressed(&MouseButton::Left) {
+        for delta in mouse_motion.events() {
+            let mut xoffset = delta.delta_x as f32;
+            let mut yoffset = delta.delta_y as f32;
+            let sensitivity: f32 = 0.1; // change this value to your liking
+            xoffset *= sensitivity;
+            yoffset *= sensitivity;
+            camera.yaw += xoffset;
+            camera.pitch += yoffset;
+            if camera.pitch < -89.0 {
+                camera.pitch = -89.0;
+            } else if 89.0 < camera.pitch {
+                camera.pitch = 89.0;
+            }
         }
     }
+
     camera.update_view_matrix();
+    // update uniform buffer
+    let uniform_data: CameraUniform = (&*camera).into();
+    queue.write_buffer(&camera.gpu_buffer, 0, uniform_data.as_std140().as_bytes());
 }
 
 #[allow(dead_code)]
 impl Camera {
     pub fn new(
+        device: &wgpu::Device,
         position: Point3<f32>,
         direction: Vector3<f32>,
         window_width: u32,
@@ -108,6 +119,12 @@ impl Camera {
     ) -> Self {
         // what POINT should the camera look at?
         let view_target = position + direction;
+        let gpu_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Camera buffer"),
+            size: std::mem::size_of::<<CameraUniform as AsStd140>::Std140Type>() as u64,
+            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+            mapped_at_creation: false,
+        });
         Camera {
             direction,
             position,
@@ -120,6 +137,23 @@ impl Camera {
             ),
             yaw: -90.0,
             pitch: 0.0,
+            gpu_buffer,
+        }
+    }
+
+    pub fn get_binding_type() -> wgpu::BindingType {
+        wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        }
+    }
+
+    pub fn get_binding_resource(&self) -> wgpu::BindingResource {
+        wgpu::BindingResource::Buffer {
+            buffer: &self.gpu_buffer,
+            offset: 0,
+            size: None,
         }
     }
 

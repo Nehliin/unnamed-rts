@@ -1,11 +1,11 @@
 use anyhow::Result;
+use legion::*;
 use log::error;
 use std::{
     collections::{HashMap, VecDeque},
     marker::PhantomData,
     sync::atomic::Ordering,
 };
-use legion::*;
 use std::{
     fmt::Debug,
     hash::Hash,
@@ -109,8 +109,15 @@ impl<T: AssetLoader> Assets<T> {
 }
 
 #[system]
-pub fn asset_load<T: AssetLoader + 'static>(#[resource] device: &Device, #[resource] queue: &Queue, #[resource] asset_storage: &mut Assets<T>) {
+pub fn asset_load<T: AssetLoader + 'static>(
+    #[resource] device: &Device,
+    #[resource] queue: &Queue,
+    #[resource] asset_storage: &mut Assets<T>,
+) {
     if asset_storage.clear_load_queue(device, queue).is_err() {
-        error!("Failed to clear load queue for asset type: {}", std::any::type_name::<T>());
+        error!(
+            "Failed to clear load queue for asset type: {}",
+            std::any::type_name::<T>()
+        );
     }
 }

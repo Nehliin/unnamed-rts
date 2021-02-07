@@ -1,3 +1,5 @@
+use crate::application::DebugMenueSettings;
+
 use super::{
     camera::Camera,
     common::{DepthTexture, DEPTH_FORMAT},
@@ -9,6 +11,7 @@ use wgpu::include_spirv;
 #[system]
 pub fn draw(
     #[state] pass: &GridPass,
+    #[resource] debug_settings: &DebugMenueSettings,
     #[resource] device: &wgpu::Device,
     #[resource] depth_texture: &DepthTexture,
     #[resource] current_frame: &wgpu::SwapChainTexture,
@@ -38,7 +41,12 @@ pub fn draw(
     render_pass.push_debug_group("Grid pass");
     render_pass.set_pipeline(&pass.render_pipeline);
     render_pass.set_bind_group(0, &pass.camera_bind_group, &[]);
-    render_pass.draw(0..6, 0..1);
+    // This is kindof hacky because the render pass isn't actually needed here
+    // but the main loop expects an command encoder or it will freeze so until
+    // that is changed this will have to do
+    if debug_settings.show_grid {
+        render_pass.draw(0..6, 0..1);
+    }
     render_pass.pop_debug_group();
     drop(render_pass);
     pass.command_sender.send(encoder.finish()).unwrap();

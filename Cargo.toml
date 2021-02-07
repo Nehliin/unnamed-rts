@@ -8,7 +8,7 @@ edition = "2018"
 
 [profile.dev]
 debug = true
-opt-level = 1
+opt-level = 0
 debug-assertions = true
 incremental = true
 

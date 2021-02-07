@@ -19,6 +19,7 @@ use crate::{
 };
 use crossbeam_channel::{Receiver, Sender};
 use input::CursorPosition;
+use legion::*;
 use legion::{Resources, Schedule, World};
 use log::warn;
 use nalgebra::{Isometry3, Point3, Vector3};
@@ -41,6 +42,37 @@ pub struct Time {
     pub delta_time: f32,
 }
 
+// TODO move this and the system somewhere else
+pub struct DebugMenueSettings {
+    pub show_grid: bool,
+    pub show_bounding_cylinder: bool,
+}
+
+#[system]
+pub fn draw_debug_ui(
+    #[resource] ui_context: &UiContext,
+    #[resource] debug_settings: &mut DebugMenueSettings,
+    #[resource] time: &Time,
+) {
+    /*egui::Area::new("FPS area")
+        .fixed_pos(egui::pos2(0.0, 0.0))
+        .show(&ui_context.context, |ui| {
+            let label = egui::Label::new(format!("FPS: {:.0}", 1.0 / time.delta_time))
+                .text_color(egui::Color32::WHITE);
+            ui.add(label);
+        });*/
+
+    egui::SidePanel::left("Debug menue", 80.0).show(&ui_context.context, |ui| {
+        let label = egui::Label::new(format!("FPS: {:.0}", 1.0 / time.delta_time))
+            .text_color(egui::Color32::WHITE);
+        ui.add(label);
+        ui.checkbox(
+            &mut debug_settings.show_bounding_cylinder,
+            "Show bounding cylinders",
+        );
+        ui.checkbox(&mut debug_settings.show_grid, "Show debug grid")
+    });
+}
 pub struct App {
     world: World,
     resources: Resources,
@@ -132,7 +164,7 @@ impl App {
                 debug_sender,
             )))
             .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
-            .add_system(ui_systems::draw_fps_counter_system())
+            .add_system(draw_debug_ui_system())
             .add_system(ui_systems::end_ui_frame_system(UiPass::new(
                 &device, ui_sender,
             )))
@@ -166,6 +198,10 @@ impl App {
         // This should be in a game state
         let suit = assets.load("nanosuit/nanosuit.obj").unwrap();
         resources.insert(assets);
+        resources.insert(DebugMenueSettings {
+            show_grid: true,
+            show_bounding_cylinder: false,
+        });
 
         world.push((
             suit.clone(),

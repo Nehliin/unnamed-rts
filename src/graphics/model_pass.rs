@@ -37,7 +37,7 @@ pub fn update(
 #[read_component(Handle<Model>)]
 pub fn draw(
     world: &SubWorld,
-    #[resource] pass: &ModelPass,
+    #[state] pass: &ModelPass,
     #[resource] asset_storage: &Assets<Model>,
     #[resource] depth_texture: &DepthTexture,
     #[resource] device: &wgpu::Device,
@@ -70,6 +70,7 @@ pub fn draw(
             stencil_ops: None,
         }),
     });
+    render_pass.push_debug_group("Model pass");
     render_pass.set_pipeline(&pass.render_pipeline);
     render_pass.set_bind_group(0, &pass.camera_bind_group, &[]);
     let mut query = <(Read<Transform>, Read<Handle<Model>>)>::query();
@@ -79,6 +80,7 @@ pub fn draw(
         let model = asset_storage.get(model).unwrap();
         render_pass.draw_model_instanced(model, 0..transforms.len() as u32)
     });
+    render_pass.pop_debug_group();
     drop(render_pass);
     pass.command_sender.send(encoder.finish()).unwrap();
 }
@@ -94,7 +96,6 @@ impl ModelPass {
     pub fn new(
         device: &wgpu::Device,
         camera: &Camera,
-        sc_desc: &wgpu::SwapChainDescriptor,
         command_sender: Sender<wgpu::CommandBuffer>,
     ) -> ModelPass {
         let vs_module = device.create_shader_module(&include_spirv!("shaders/model.vert.spv"));
@@ -141,7 +142,7 @@ impl ModelPass {
             fragment: Some(wgpu::FragmentState {
                 module: &fs_module,
                 entry_point: "main",
-                targets: &[sc_desc.format.into()],
+                targets: &[wgpu::TextureFormat::Bgra8UnormSrgb.into()],
             }),
             primitive: wgpu::PrimitiveState {
                 cull_mode: wgpu::CullMode::Back,

@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crate::{assets::{self, Assets}, components::Transform, graphics::{camera::{self, Camera}, common::DepthTexture, grid_pass, model::Model, model_pass::{self, ModelPass}, ui::{
+use crate::{assets::{self, Assets}, components::Transform, graphics::{camera::{self, Camera}, common::DepthTexture, grid_pass::{self, GridPass}, model::Model, model_pass::{self, ModelPass}, ui::{
             ui_context::{UiContext, WindowSize},
             ui_pass::UiPass,
             ui_systems,
@@ -108,9 +108,9 @@ impl App {
             .add_system(assets::asset_load_system::<Model>())
             .add_system(camera::free_flying_camera_system())
             .add_system(model_pass::update_system())
-            .add_system(model_pass::draw_system())
+            .add_system(model_pass::draw_system(ModelPass::new(&device, &camera,  model_sender)))
             .add_system(ui_systems::update_ui_system())
-            .add_system(grid_pass::draw_system(grid_pass::DebugPass::new(
+            .add_system(grid_pass::draw_system(GridPass::new(
                 &device,
                 &camera,
                 debug_sender,
@@ -124,7 +124,6 @@ impl App {
             .build();
 
         resources.insert(DepthTexture::new(&device, &sc_desc));
-        resources.insert(ModelPass::new(&device, &camera, &sc_desc, model_sender));
         resources.insert(device);
         resources.insert(queue);
         resources.insert(Time {

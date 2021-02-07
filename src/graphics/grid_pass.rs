@@ -5,7 +5,7 @@ use wgpu::include_spirv;
 
 #[system]
 pub fn draw(
-    #[state] pass: &DebugPass,
+    #[state] pass: &GridPass,
     #[resource] device: &wgpu::Device,
     #[resource] depth_texture: &DepthTexture,
     #[resource] current_frame: &wgpu::SwapChainTexture,
@@ -32,26 +32,28 @@ pub fn draw(
             stencil_ops: None, 
         }),
     });
+    render_pass.push_debug_group("Grid pass");
     render_pass.set_pipeline(&pass.render_pipeline);
     render_pass.set_bind_group(0, &pass.camera_bind_group, &[]);
     render_pass.draw(0..6, 0..1);
+    render_pass.pop_debug_group();
     drop(render_pass);
     pass.command_sender.send(encoder.finish()).unwrap();
 }
 
 // Render pass to show "editor/debug" grid http://asliceofrendering.com/scene%20helper/2020/01/05/InfiniteGrid/
-pub struct DebugPass {
+pub struct GridPass {
     render_pipeline: wgpu::RenderPipeline,
     camera_bind_group: wgpu::BindGroup,
     command_sender: Sender<wgpu::CommandBuffer>,
 }
 
-impl DebugPass {
+impl GridPass {
     pub fn new(
         device: &wgpu::Device,
         camera: &Camera,
         command_sender: Sender<wgpu::CommandBuffer>,
-    ) -> DebugPass {
+    ) -> GridPass {
         let vs_module = device.create_shader_module(&include_spirv!("shaders/grid.vert.spv"));
         let fs_module = device.create_shader_module(&include_spirv!("shaders/grid.frag.spv"));
 
@@ -123,7 +125,7 @@ impl DebugPass {
             multisample: wgpu::MultisampleState::default(),
         });
 
-        DebugPass {
+        GridPass {
             render_pipeline,
             camera_bind_group,
             command_sender,

@@ -6,7 +6,14 @@ use wgpu::include_spirv;
 use crate::assets::{Assets, Handle};
 use crate::components;
 
-use super::{camera::{Camera}, common::{DEPTH_FORMAT, DepthTexture}, model::{DrawModel, InstanceData, MeshVertex, Model}, simple_texture::SimpleTexture, texture::TextureShaderLayout, vertex_buffers::VertexBuffer};
+use super::{
+    camera::Camera,
+    common::{DepthTexture, DEPTH_FORMAT},
+    model::{DrawModel, InstanceData, MeshVertex, Model},
+    simple_texture::SimpleTexture,
+    texture::TextureShaderLayout,
+    vertex_buffers::VertexBuffer,
+};
 
 #[system]
 #[read_component(Transform)]
@@ -90,7 +97,6 @@ pub struct ModelPass {
     camera_bind_group: wgpu::BindGroup,
     command_sender: Sender<wgpu::CommandBuffer>,
 }
-
 
 impl ModelPass {
     pub fn new(

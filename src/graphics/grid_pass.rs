@@ -1,4 +1,7 @@
-use super::{camera::Camera, common::{DEPTH_FORMAT, DepthTexture}};
+use super::{
+    camera::Camera,
+    common::{DepthTexture, DEPTH_FORMAT},
+};
 use crossbeam_channel::Sender;
 use legion::*;
 use wgpu::include_spirv;
@@ -24,12 +27,12 @@ pub fn draw(
             },
         }],
         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-            attachment: &depth_texture.view, 
+            attachment: &depth_texture.view,
             depth_ops: Some(wgpu::Operations {
-                load: wgpu::LoadOp::Load, 
+                load: wgpu::LoadOp::Load,
                 store: true,
             }),
-            stencil_ops: None, 
+            stencil_ops: None,
         }),
     });
     render_pass.push_debug_group("Grid pass");

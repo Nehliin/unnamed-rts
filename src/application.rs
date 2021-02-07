@@ -1,10 +1,22 @@
 use std::time::Instant;
 
-use crate::{assets::{self, Assets}, components::Transform, graphics::{camera::{self, Camera}, common::DepthTexture, grid_pass::{self, GridPass}, model::Model, model_pass::{self, ModelPass}, ui::{
+use crate::{
+    assets::{self, Assets},
+    components::Transform,
+    graphics::{
+        camera::{self, Camera},
+        common::DepthTexture,
+        grid_pass::{self, GridPass},
+        model::Model,
+        model_pass::{self, ModelPass},
+        ui::{
             ui_context::{UiContext, WindowSize},
             ui_pass::UiPass,
             ui_systems,
-        }}, input::{self, KeyboardState, MouseButtonState, MouseMotion, Text}};
+        },
+    },
+    input::{self, KeyboardState, MouseButtonState, MouseMotion, Text},
+};
 use crossbeam_channel::{Receiver, Sender};
 use input::CursorPosition;
 use legion::{Resources, Schedule, World};
@@ -108,7 +120,11 @@ impl App {
             .add_system(assets::asset_load_system::<Model>())
             .add_system(camera::free_flying_camera_system())
             .add_system(model_pass::update_system())
-            .add_system(model_pass::draw_system(ModelPass::new(&device, &camera,  model_sender)))
+            .add_system(model_pass::draw_system(ModelPass::new(
+                &device,
+                &camera,
+                model_sender,
+            )))
             .add_system(ui_systems::update_ui_system())
             .add_system(grid_pass::draw_system(GridPass::new(
                 &device,
@@ -193,7 +209,10 @@ impl App {
         self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
         let mut camera = self.resources.get_mut::<Camera>().unwrap();
         camera.update_aspect_ratio(window_size.physical_width, window_size.physical_height);
-        self.resources.get_mut::<DepthTexture>().unwrap().resize(&device, &self.sc_desc);
+        self.resources
+            .get_mut::<DepthTexture>()
+            .unwrap()
+            .resize(&device, &self.sc_desc);
     }
 
     pub fn recreate_swap_chain(&mut self) {

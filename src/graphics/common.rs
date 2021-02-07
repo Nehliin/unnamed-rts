@@ -12,10 +12,7 @@ impl DepthTexture {
         let desc = Self::create_texture_descriptor(sc_desc);
         let texture = device.create_texture(&desc);
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        DepthTexture {
-            texture,
-            view,
-        }
+        DepthTexture { texture, view }
     }
 
     fn create_texture_descriptor(sc_desc: &wgpu::SwapChainDescriptor) -> wgpu::TextureDescriptor {
@@ -36,6 +33,8 @@ impl DepthTexture {
 
     pub fn resize(&mut self, device: &wgpu::Device, sc_desc: &wgpu::SwapChainDescriptor) {
         self.texture = device.create_texture(&Self::create_texture_descriptor(sc_desc));
-        self.view = self.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        self.view = self
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
     }
 }

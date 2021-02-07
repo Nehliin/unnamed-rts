@@ -4,11 +4,11 @@ use legion::*;
 use nalgebra::geometry::Perspective3;
 use nalgebra::{Matrix4, Point3, Vector3};
 use once_cell::sync::Lazy;
-use winit::event::VirtualKeyCode;
+use winit::event::{MouseButton, VirtualKeyCode};
 
 use crate::{
     application::Time,
-    input::{EventReader, KeyboardState, MouseMotion},
+    input::{EventReader, KeyboardState, MouseButtonState, MouseMotion},
 };
 #[derive(Debug)]
 pub struct Camera {
@@ -52,13 +52,14 @@ fn to_vec(point: &Point3<f32>) -> Vector3<f32> {
     Vector3::new(point.x, point.y, point.z)
 }
 
-pub const CAMERA_SPEED: f32 = 2.5;
+pub const CAMERA_SPEED: f32 = 4.5;
 
 #[system]
 pub fn free_flying_camera(
     #[resource] camera: &mut Camera,
     #[resource] time: &Time,
     #[resource] keyboard_state: &KeyboardState,
+    #[resource] mouse_button_state: &MouseButtonState,
     #[resource] mouse_motion: &EventReader<MouseMotion>,
     #[resource] queue: &wgpu::Queue,
 ) {
@@ -84,20 +85,23 @@ pub fn free_flying_camera(
     if keyboard_state.is_pressed(VirtualKeyCode::S) {
         camera.position += camera.direction * -CAMERA_SPEED * time.delta_time;
     }
-    for delta in mouse_motion.events() {
-        let mut xoffset = delta.delta_x as f32;
-        let mut yoffset = delta.delta_y as f32;
-        let sensitivity: f32 = 0.1; // change this value to your liking
-        xoffset *= sensitivity;
-        yoffset *= sensitivity;
-        camera.yaw += xoffset;
-        camera.pitch += yoffset;
-        if camera.pitch < -89.0 {
-            camera.pitch = -89.0;
-        } else if 89.0 < camera.pitch {
-            camera.pitch = 89.0;
+    if mouse_button_state.is_pressed(&MouseButton::Left) {
+        for delta in mouse_motion.events() {
+            let mut xoffset = delta.delta_x as f32;
+            let mut yoffset = delta.delta_y as f32;
+            let sensitivity: f32 = 0.1; // change this value to your liking
+            xoffset *= sensitivity;
+            yoffset *= sensitivity;
+            camera.yaw += xoffset;
+            camera.pitch += yoffset;
+            if camera.pitch < -89.0 {
+                camera.pitch = -89.0;
+            } else if 89.0 < camera.pitch {
+                camera.pitch = 89.0;
+            }
         }
     }
+
     camera.update_view_matrix();
     // update uniform buffer
     let uniform_data: CameraUniform = (&*camera).into();
@@ -133,7 +137,7 @@ impl Camera {
             ),
             yaw: -90.0,
             pitch: 0.0,
-            gpu_buffer
+            gpu_buffer,
         }
     }
 
@@ -141,7 +145,7 @@ impl Camera {
         wgpu::BindingType::Buffer {
             ty: wgpu::BufferBindingType::Uniform,
             has_dynamic_offset: false,
-            min_binding_size: None
+            min_binding_size: None,
         }
     }
 

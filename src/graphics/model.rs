@@ -7,7 +7,8 @@ use super::{
 };
 use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
-use nalgebra::Matrix4;
+use nalgebra::{Matrix4, Vector3};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::{
     ops::Range,
     path::{Path, PathBuf},
@@ -132,59 +133,73 @@ impl Model {
             )
         });
 
-        let mut materials = Vec::with_capacity(obj_materials.len());
+        let materials = obj_materials
+            .par_iter()
+            .map(|material| {
+                let diffuse_path = &material.diffuse_texture;
+                let mut specular_path = &material.specular_texture;
+                //let ambient_path = material.ambient_texture; TODO: Should this be handled?
+                if specular_path.is_empty() {
+                    specular_path = &material.diffuse_texture; // TODO: WORST HACK EVER
+                }
+                let diffuse_texture =
+                    SimpleTexture::load_texture(&device, queue, current_folder.join(diffuse_path))
+                        .unwrap_or_else(|_| {
+                            panic!(
+                                "Texture {} not found, should use default in the future",
+                                diffuse_path
+                            )
+                        });
+                let specular_texture =
+                    SimpleTexture::load_texture(&device, queue, current_folder.join(specular_path))
+                        .unwrap_or_else(|_| {
+                            panic!(
+                                "Texture {} not found, should use default in the future",
+                                diffuse_path
+                            )
+                        });
+                Material {
+                    diffuse_texture,
+                    specular_texture,
+                }
+            })
+            .collect::<Vec<_>>();
 
-        for material in obj_materials {
-            let diffuse_path = material.diffuse_texture;
-            let mut specular_path = material.specular_texture;
-            //let ambient_path = material.ambient_texture; TODO: Should this be handled?
-            if specular_path.is_empty() {
-                specular_path = diffuse_path.clone(); // TODO: WORST HACK EVER
-            }
-            let diffuse_texture =
-                SimpleTexture::load_texture(&device, queue, current_folder.join(diffuse_path))?;
-            let specular_texture =
-                SimpleTexture::load_texture(&device, queue, current_folder.join(specular_path))?;
+        let meshes = obj_models
+            .par_iter()
+            .map(|m| {
+                let vertices = (0..m.mesh.positions.len() / 3)
+                    .into_par_iter()
+                    .map(|i| MeshVertex {
+                        position: [
+                            m.mesh.positions[i * 3],
+                            m.mesh.positions[i * 3 + 1],
+                            m.mesh.positions[i * 3 + 2],
+                        ],
+                        tex_coords: [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]],
+                        normal: [
+                            m.mesh.normals[i * 3],
+                            m.mesh.normals[i * 3 + 1],
+                            m.mesh.normals[i * 3 + 2],
+                        ],
+                    })
+                    .collect::<Vec<_>>();
+                let vertex_buffer = VertexBuffer::allocate_immutable_buffer(device, &vertices);
 
-            materials.push(Material {
-                diffuse_texture,
-                specular_texture,
-            });
-        }
-
-        let mut meshes = Vec::new();
-        for m in obj_models {
-            let mut vertices = Vec::new();
-            for i in 0..m.mesh.positions.len() / 3 {
-                vertices.push(MeshVertex {
-                    position: [
-                        m.mesh.positions[i * 3],
-                        m.mesh.positions[i * 3 + 1],
-                        m.mesh.positions[i * 3 + 2],
-                    ],
-                    tex_coords: [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]],
-                    normal: [
-                        m.mesh.normals[i * 3],
-                        m.mesh.normals[i * 3 + 1],
-                        m.mesh.normals[i * 3 + 2],
-                    ],
+                let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
+                    label: Some("Index buffer"),
+                    usage: wgpu::BufferUsage::INDEX,
+                    contents: bytemuck::cast_slice(&m.mesh.indices),
                 });
-            }
-            let vertex_buffer = VertexBuffer::allocate_immutable_buffer(device, &vertices);
+                Mesh {
+                    vertex_buffer,
+                    index_buffer,
+                    material: m.mesh.material_id.unwrap_or(0),
+                    num_indexes: m.mesh.indices.len() as u32,
+                }
+            })
+            .collect::<Vec<_>>();
 
-            let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
-                label: Some("Index buffer"),
-                usage: wgpu::BufferUsage::INDEX,
-                contents: bytemuck::cast_slice(&m.mesh.indices),
-            });
-
-            meshes.push(Mesh {
-                vertex_buffer,
-                index_buffer,
-                material: m.mesh.material_id.unwrap_or(0),
-                num_indexes: m.mesh.indices.len() as u32,
-            });
-        }
         let instance_buffer_len =
             INSTANCE_BUFFER_SIZE as usize / std::mem::size_of::<InstanceData>();
         let buffer_data = vec![InstanceData::default(); instance_buffer_len];

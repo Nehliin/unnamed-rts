@@ -187,7 +187,6 @@ impl Model {
         }
         let instance_buffer_len =
             INSTANCE_BUFFER_SIZE as usize / std::mem::size_of::<InstanceData>();
-        println!("INSTANCE BUFFER LEN: {}", instance_buffer_len);
         let buffer_data = vec![InstanceData::default(); instance_buffer_len];
         let instance_buffer = VertexBuffer::allocate_mutable_buffer(device, &buffer_data);
         Ok(Model {

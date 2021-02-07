@@ -5,3 +5,5 @@ pub mod simple_texture;
 pub mod texture;
 pub mod ui;
 pub mod vertex_buffers;
+pub mod grid_pass;
+pub mod common;

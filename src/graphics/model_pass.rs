@@ -1,6 +1,4 @@
 use components::Transform;
-use crevice::std140::AsStd140;
-use crevice::std140::Std140;
 use crossbeam_channel::Sender;
 use legion::{world::SubWorld, *};
 use wgpu::include_spirv;
@@ -8,13 +6,7 @@ use wgpu::include_spirv;
 use crate::assets::{Assets, Handle};
 use crate::components;
 
-use super::{
-    camera::{Camera, CameraUniform},
-    model::{DrawModel, InstanceData, MeshVertex, Model},
-    simple_texture::SimpleTexture,
-    texture::TextureShaderLayout,
-    vertex_buffers::VertexBuffer,
-};
+use super::{camera::{Camera}, common::{DEPTH_FORMAT, DepthTexture}, model::{DrawModel, InstanceData, MeshVertex, Model}, simple_texture::SimpleTexture, texture::TextureShaderLayout, vertex_buffers::VertexBuffer};
 
 #[system]
 #[read_component(Transform)]
@@ -46,18 +38,11 @@ pub fn update(
 pub fn draw(
     world: &SubWorld,
     #[resource] pass: &ModelPass,
-    #[resource] camera: &Camera,
-    #[resource] queue: &wgpu::Queue,
     #[resource] asset_storage: &Assets<Model>,
+    #[resource] depth_texture: &DepthTexture,
     #[resource] device: &wgpu::Device,
     #[resource] current_frame: &wgpu::SwapChainTexture,
 ) {
-    let camera_uniform: CameraUniform = camera.clone().into();
-    queue.write_buffer(
-        &pass.camera_buffer,
-        0,
-        camera_uniform.as_std140().as_bytes(),
-    );
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Model pass encoder"),
     });
@@ -77,7 +62,7 @@ pub fn draw(
             },
         }],
         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-            attachment: &pass.depth_texture_view,
+            attachment: &depth_texture.view,
             depth_ops: Some(wgpu::Operations {
                 load: wgpu::LoadOp::Clear(1.0),
                 store: true,
@@ -100,62 +85,27 @@ pub fn draw(
 
 pub struct ModelPass {
     render_pipeline: wgpu::RenderPipeline,
-    depth_texture: wgpu::Texture,
-    depth_texture_view: wgpu::TextureView,
-    // temporary
     camera_bind_group: wgpu::BindGroup,
-    camera_buffer: wgpu::Buffer,
     command_sender: Sender<wgpu::CommandBuffer>,
 }
 
-pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-pub fn create_depth_texture(
-    device: &wgpu::Device,
-    sc_desc: &wgpu::SwapChainDescriptor,
-) -> wgpu::Texture {
-    let desc = wgpu::TextureDescriptor {
-        label: None,
-        size: wgpu::Extent3d {
-            width: sc_desc.width,
-            height: sc_desc.height,
-            depth: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: DEPTH_FORMAT,
-        usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
-    };
-    device.create_texture(&desc)
-}
 
 impl ModelPass {
     pub fn new(
         device: &wgpu::Device,
+        camera: &Camera,
         sc_desc: &wgpu::SwapChainDescriptor,
         command_sender: Sender<wgpu::CommandBuffer>,
     ) -> ModelPass {
         let vs_module = device.create_shader_module(&include_spirv!("shaders/model.vert.spv"));
         let fs_module = device.create_shader_module(&include_spirv!("shaders/model.frag.spv"));
-        let depth_texture = create_depth_texture(device, sc_desc);
-        let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Camera buffer"),
-            size: std::mem::size_of::<<CameraUniform as AsStd140>::Std140Type>() as u64,
-            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
-            mapped_at_creation: false,
-        });
         let camera_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Camera layout"),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStage::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
+                    ty: Camera::get_binding_type(),
                     count: None,
                 }],
             });
@@ -165,11 +115,7 @@ impl ModelPass {
             layout: &camera_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer {
-                    buffer: &camera_buffer,
-                    offset: 0,
-                    size: None,
-                },
+                resource: camera.get_binding_resource(),
             }],
         });
 
@@ -185,7 +131,7 @@ impl ModelPass {
             });
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("pipeline"),
+            label: Some("Model pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &vs_module,
@@ -215,16 +161,6 @@ impl ModelPass {
             render_pipeline,
             camera_bind_group,
             command_sender,
-            camera_buffer,
-            depth_texture,
-            depth_texture_view,
         }
-    }
-
-    pub fn handle_resize(&mut self, device: &wgpu::Device, sc_desc: &wgpu::SwapChainDescriptor) {
-        self.depth_texture = create_depth_texture(&device, &sc_desc);
-        self.depth_texture_view = self
-            .depth_texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
     }
 }

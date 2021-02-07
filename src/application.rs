@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crate::{assets::{self, Assets}, components::Transform, graphics::{camera::{self, Camera}, model::Model, model_pass::{self, ModelPass}, ui::{
+use crate::{assets::{self, Assets}, components::Transform, graphics::{camera::{self, Camera}, common::DepthTexture, grid_pass, model::Model, model_pass::{self, ModelPass}, ui::{
             ui_context::{UiContext, WindowSize},
             ui_pass::UiPass,
             ui_systems,
@@ -90,34 +90,48 @@ impl App {
         };
         //window.set_cursor_grab(true).unwrap();
         //window.set_cursor_visible(false);
-
+        let camera = Camera::new(
+            &device,
+            Point3::new(0., 2., 3.5),
+            Vector3::new(0.0, 0.0, -1.0),
+            size.width,
+            size.height,
+        );
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
         let mut assets: Assets<Model> = Assets::new();
         let mut world = World::default();
         let mut resources = Resources::default();
         let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
+        let (debug_sender, debug_rc) = crossbeam_channel::bounded(1);
         let (model_sender, model_rc) = crossbeam_channel::bounded(1);
         let schedule = Schedule::builder()
             .add_system(assets::asset_load_system::<Model>())
+            .add_system(camera::free_flying_camera_system())
             .add_system(model_pass::update_system())
             .add_system(model_pass::draw_system())
             .add_system(ui_systems::update_ui_system())
+            .add_system(grid_pass::draw_system(grid_pass::DebugPass::new(
+                &device,
+                &camera,
+                debug_sender,
+            )))
             .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
             .add_system(ui_systems::draw_fps_counter_system())
-            .add_system(camera::free_flying_camera_system())
             .add_system(ui_systems::end_ui_frame_system(UiPass::new(
                 &device, ui_sender,
             )))
             .add_system(input::event_system())
             .build();
-        resources.insert(ModelPass::new(&device, &sc_desc, model_sender));
+
+        resources.insert(DepthTexture::new(&device, &sc_desc));
+        resources.insert(ModelPass::new(&device, &camera, &sc_desc, model_sender));
         resources.insert(device);
         resources.insert(queue);
         resources.insert(Time {
             current_time: std::time::Instant::now(),
             delta_time: 0.0,
         });
-
+        resources.insert(camera);
         // Event readers and input
         let (text_input_sender, rc) = crossbeam_channel::unbounded();
         resources.insert(input::EventReader::<Text>::new(rc));
@@ -137,24 +151,18 @@ impl App {
         // This should be in a game state
         let suit = assets.load("nanosuit/nanosuit.obj").unwrap();
         resources.insert(assets);
-        resources.insert(Camera::new(
-            Point3::new(0., 0., 3.),
-            Vector3::new(0.0, 0.0, -1.0),
-            size.width,
-            size.height,
-        ));
 
         world.push((
             suit.clone(),
             Transform::new(
-                Isometry3::translation(2.0, -1.75, 0.0),
+                Isometry3::translation(2.0, 0.0, 0.0),
                 Vector3::new(0.2, 0.2, 0.2),
             ),
         ));
         world.push((
             suit,
             Transform::new(
-                Isometry3::translation(-2.0, -1.75, 0.0),
+                Isometry3::translation(-2.0, 0.0, 0.0),
                 Vector3::new(0.2, 0.2, 0.2),
             ),
         ));
@@ -165,7 +173,7 @@ impl App {
             swap_chain,
             surface,
             sc_desc,
-            command_receivers: vec![model_rc, ui_rc],
+            command_receivers: vec![model_rc, debug_rc, ui_rc],
             text_input_sender,
             mouse_scroll_sender,
             mouse_motion_sender,
@@ -186,10 +194,7 @@ impl App {
         self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
         let mut camera = self.resources.get_mut::<Camera>().unwrap();
         camera.update_aspect_ratio(window_size.physical_width, window_size.physical_height);
-        self.resources
-            .get_mut::<ModelPass>()
-            .unwrap()
-            .handle_resize(&device, &self.sc_desc);
+        self.resources.get_mut::<DepthTexture>().unwrap().resize(&device, &self.sc_desc);
     }
 
     pub fn recreate_swap_chain(&mut self) {

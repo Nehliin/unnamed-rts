@@ -6,4 +6,5 @@ pub mod model_pass;
 pub mod simple_texture;
 pub mod texture;
 pub mod ui;
+pub mod debug_lines_pass;
 pub mod vertex_buffers;

@@ -1,23 +1,12 @@
 use std::time::Instant;
 
-use crate::{
-    assets::{self, Assets},
-    components::Transform,
-    graphics::{
-        camera::{self, Camera},
-        common::DepthTexture,
-        grid_pass::{self, GridPass},
-        model::Model,
-        model_pass::{self, ModelPass},
-        ui::{
+use crate::{assets::{self, Assets}, components::Transform, graphics::{camera::{self, Camera}, common::DepthTexture, debug_lines_pass::{self, DebugLinesPass}, grid_pass::{self, GridPass}, model::Model, model_pass::{self, ModelPass}, ui::{
             ui_context::{UiContext, WindowSize},
             ui_pass::UiPass,
             ui_systems,
-        },
-    },
-    input::{self, KeyboardState, MouseButtonState, MouseMotion, Text},
-};
+        }}, input::{self, KeyboardState, MouseButtonState, MouseMotion, Text}};
 use crossbeam_channel::{Receiver, Sender};
+use debug_lines_pass::BoundingBoxMap;
 use input::CursorPosition;
 use legion::*;
 use legion::{Resources, Schedule, World};
@@ -55,12 +44,12 @@ pub fn draw_debug_ui(
     #[resource] time: &Time,
 ) {
     /*egui::Area::new("FPS area")
-        .fixed_pos(egui::pos2(0.0, 0.0))
-        .show(&ui_context.context, |ui| {
-            let label = egui::Label::new(format!("FPS: {:.0}", 1.0 / time.delta_time))
-                .text_color(egui::Color32::WHITE);
-            ui.add(label);
-        });*/
+    .fixed_pos(egui::pos2(0.0, 0.0))
+    .show(&ui_context.context, |ui| {
+        let label = egui::Label::new(format!("FPS: {:.0}", 1.0 / time.delta_time))
+            .text_color(egui::Color32::WHITE);
+        ui.add(label);
+    });*/
 
     egui::SidePanel::left("Debug menue", 80.0).show(&ui_context.context, |ui| {
         let label = egui::Label::new(format!("FPS: {:.0}", 1.0 / time.delta_time))
@@ -116,7 +105,7 @@ impl App {
         let (device, queue) = adapter
             .request_device(
                 &DeviceDescriptor {
-                    features: Features::empty(), // TODO: Set this properly
+                    features: Features::NON_FILL_POLYGON_MODE, // TODO: Set this properly
                     limits: Limits::default(),
                     label: Some("Device"),
                 },
@@ -148,6 +137,7 @@ impl App {
         let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
         let (debug_sender, debug_rc) = crossbeam_channel::bounded(1);
         let (model_sender, model_rc) = crossbeam_channel::bounded(1);
+        let (lines_sender, lines_rc) = crossbeam_channel::bounded(1);
         let schedule = Schedule::builder()
             .add_system(assets::asset_load_system::<Model>())
             .add_system(camera::free_flying_camera_system())
@@ -162,6 +152,12 @@ impl App {
                 &device,
                 &camera,
                 debug_sender,
+            )))
+            .add_system(debug_lines_pass::update_bounding_boxes_system())
+            .add_system(debug_lines_pass::draw_system(DebugLinesPass::new(
+                &device,
+                &camera,
+                lines_sender,
             )))
             .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
             .add_system(draw_debug_ui_system())
@@ -179,6 +175,7 @@ impl App {
             delta_time: 0.0,
         });
         resources.insert(camera);
+        resources.insert(BoundingBoxMap::default());
         // Event readers and input
         let (text_input_sender, rc) = crossbeam_channel::unbounded();
         resources.insert(input::EventReader::<Text>::new(rc));
@@ -200,7 +197,7 @@ impl App {
         resources.insert(assets);
         resources.insert(DebugMenueSettings {
             show_grid: true,
-            show_bounding_cylinder: false,
+            show_bounding_cylinder: true,
         });
 
         world.push((
@@ -224,7 +221,7 @@ impl App {
             swap_chain,
             surface,
             sc_desc,
-            command_receivers: vec![model_rc, debug_rc, ui_rc],
+            command_receivers: vec![model_rc, debug_rc, lines_rc, ui_rc],
             text_input_sender,
             mouse_scroll_sender,
             mouse_motion_sender,

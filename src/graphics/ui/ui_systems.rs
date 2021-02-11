@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use egui::{pos2, vec2, Color32};
+use egui::{pos2, vec2};
 use input::{CursorPosition, Text};
 use legion::*;
 use wgpu::{CommandEncoderDescriptor, Device, Queue, SwapChainTexture};
@@ -115,17 +115,6 @@ pub fn begin_ui_frame(
     ui_context.update_time(time_since_start.elapsed().as_secs_f64());
     ui_context.raw_input.predicted_dt = time.delta_time;
     ui_context.begin_frame();
-}
-
-#[system]
-pub fn draw_fps_counter(#[resource] ui_context: &UiContext, #[resource] time: &Time) {
-    egui::Area::new("FPS area")
-        .fixed_pos(egui::pos2(0.0, 0.0))
-        .show(&ui_context.context, |ui| {
-            let label = egui::Label::new(format!("FPS: {:.0}", 1.0 / time.delta_time))
-                .text_color(Color32::WHITE);
-            ui.add(label);
-        });
 }
 
 // TODO: handle user textures here

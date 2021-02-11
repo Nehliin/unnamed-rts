@@ -6,6 +6,7 @@ use crate::{
     graphics::{
         camera::{self, Camera},
         common::DepthTexture,
+        debug_lines_pass::{self, DebugLinesPass},
         grid_pass::{self, GridPass},
         model::Model,
         model_pass::{self, ModelPass},
@@ -18,7 +19,9 @@ use crate::{
     input::{self, KeyboardState, MouseButtonState, MouseMotion, Text},
 };
 use crossbeam_channel::{Receiver, Sender};
+use debug_lines_pass::BoundingBoxMap;
 use input::CursorPosition;
+use legion::*;
 use legion::{Resources, Schedule, World};
 use log::warn;
 use nalgebra::{Isometry3, Point3, Vector3};
@@ -41,6 +44,29 @@ pub struct Time {
     pub delta_time: f32,
 }
 
+// TODO move this and the system somewhere else
+pub struct DebugMenueSettings {
+    pub show_grid: bool,
+    pub show_bounding_boxes: bool,
+}
+
+#[system]
+pub fn draw_debug_ui(
+    #[resource] ui_context: &UiContext,
+    #[resource] debug_settings: &mut DebugMenueSettings,
+    #[resource] time: &Time,
+) {
+    egui::SidePanel::left("Debug menue", 80.0).show(&ui_context.context, |ui| {
+        let label = egui::Label::new(format!("FPS: {:.0}", 1.0 / time.delta_time))
+            .text_color(egui::Color32::WHITE);
+        ui.add(label);
+        ui.checkbox(
+            &mut debug_settings.show_bounding_boxes,
+            "Show bounding boxes",
+        );
+        ui.checkbox(&mut debug_settings.show_grid, "Show debug grid")
+    });
+}
 pub struct App {
     world: World,
     resources: Resources,
@@ -53,7 +79,6 @@ pub struct App {
     mouse_motion_sender: Sender<MouseMotion>,
     cursor_position_sender: Sender<CursorPosition>,
     modifiers_state_sender: Sender<ModifiersState>,
-    // TODO: use small vec instead
     command_receivers: Vec<Receiver<CommandBuffer>>,
 }
 
@@ -84,7 +109,7 @@ impl App {
         let (device, queue) = adapter
             .request_device(
                 &DeviceDescriptor {
-                    features: Features::empty(), // TODO: Set this properly
+                    features: Features::NON_FILL_POLYGON_MODE, // TODO: Set this properly
                     limits: Limits::default(),
                     label: Some("Device"),
                 },
@@ -116,6 +141,7 @@ impl App {
         let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
         let (debug_sender, debug_rc) = crossbeam_channel::bounded(1);
         let (model_sender, model_rc) = crossbeam_channel::bounded(1);
+        let (lines_sender, lines_rc) = crossbeam_channel::bounded(1);
         let schedule = Schedule::builder()
             .add_system(assets::asset_load_system::<Model>())
             .add_system(camera::free_flying_camera_system())
@@ -131,8 +157,14 @@ impl App {
                 &camera,
                 debug_sender,
             )))
+            .add_system(debug_lines_pass::update_bounding_boxes_system())
+            .add_system(debug_lines_pass::draw_system(DebugLinesPass::new(
+                &device,
+                &camera,
+                lines_sender,
+            )))
             .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
-            .add_system(ui_systems::draw_fps_counter_system())
+            .add_system(draw_debug_ui_system())
             .add_system(ui_systems::end_ui_frame_system(UiPass::new(
                 &device, ui_sender,
             )))
@@ -147,6 +179,7 @@ impl App {
             delta_time: 0.0,
         });
         resources.insert(camera);
+        resources.insert(BoundingBoxMap::default());
         // Event readers and input
         let (text_input_sender, rc) = crossbeam_channel::unbounded();
         resources.insert(input::EventReader::<Text>::new(rc));
@@ -166,6 +199,10 @@ impl App {
         // This should be in a game state
         let suit = assets.load("nanosuit/nanosuit.obj").unwrap();
         resources.insert(assets);
+        resources.insert(DebugMenueSettings {
+            show_grid: true,
+            show_bounding_boxes: true,
+        });
 
         world.push((
             suit.clone(),
@@ -188,7 +225,7 @@ impl App {
             swap_chain,
             surface,
             sc_desc,
-            command_receivers: vec![model_rc, debug_rc, ui_rc],
+            command_receivers: vec![model_rc, debug_rc, lines_rc, ui_rc],
             text_input_sender,
             mouse_scroll_sender,
             mouse_motion_sender,

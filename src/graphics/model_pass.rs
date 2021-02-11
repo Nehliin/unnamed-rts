@@ -85,7 +85,7 @@ pub fn draw(
         let transforms = chunk.component_slice::<Transform>().unwrap();
         let model = &chunk.component_slice::<Handle<Model>>().unwrap()[0];
         let model = asset_storage.get(model).unwrap();
-        render_pass.draw_model_instanced(model, 0..transforms.len() as u32)
+        render_pass.draw_model_instanced(model, 0..transforms.len() as u32);
     });
     render_pass.pop_debug_group();
     drop(render_pass);

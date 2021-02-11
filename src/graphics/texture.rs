@@ -7,6 +7,7 @@ pub trait TextureShaderLayout: 'static {
     fn get_layout(device: &wgpu::Device) -> &'static wgpu::BindGroupLayout;
 }
 
+#[derive(Debug)]
 pub struct TextureData<T: TextureShaderLayout> {
     pub _marker: PhantomData<T>,
     pub bind_group: wgpu::BindGroup,

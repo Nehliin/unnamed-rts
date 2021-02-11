@@ -1,5 +1,6 @@
 pub mod camera;
 pub mod common;
+pub mod debug_lines_pass;
 pub mod grid_pass;
 pub mod model;
 pub mod model_pass;

@@ -7,6 +7,7 @@ use wgpu::TextureViewDescriptor;
 
 use super::texture;
 
+#[derive(Debug)]
 pub struct SimpleTexture;
 
 impl TextureShaderLayout for SimpleTexture {

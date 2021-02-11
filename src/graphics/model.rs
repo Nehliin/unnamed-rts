@@ -7,10 +7,12 @@ use super::{
 };
 use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
-use nalgebra::Matrix4;
+use nalgebra::{Matrix4, Vector3};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::{
     ops::Range,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicI32, Ordering},
 };
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
@@ -53,6 +55,7 @@ impl VertexBuffer for MeshVertex {
 }
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
+//TODO: The perspective part isn't needed here
 pub struct InstanceData {
     model_matrix: [[f32; 4]; 4],
 }
@@ -104,22 +107,25 @@ impl VertexBuffer for InstanceData {
     }
 }
 // TODO: This should be its own texture type
+#[derive(Debug)]
 pub struct Material {
     pub diffuse_texture: TextureData<SimpleTexture>,
     pub specular_texture: TextureData<SimpleTexture>,
 }
-
+#[derive(Debug)]
 pub struct Mesh {
     pub vertex_buffer: ImmutableVertexData<MeshVertex>,
     pub index_buffer: Buffer,
     pub material: usize,
     pub num_indexes: u32,
 }
-
+#[derive(Debug)]
 pub struct Model {
     pub instance_buffer: MutableVertexData<InstanceData>,
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
+    pub min_position: Vector3<f32>,
+    pub max_position: Vector3<f32>,
 }
 
 impl Model {
@@ -132,59 +138,100 @@ impl Model {
             )
         });
 
-        let mut materials = Vec::with_capacity(obj_materials.len());
+        let materials = obj_materials
+            .par_iter()
+            .map(|material| {
+                let diffuse_path = &material.diffuse_texture;
+                let mut specular_path = &material.specular_texture;
+                //let ambient_path = material.ambient_texture; TODO: Should this be handled?
+                if specular_path.is_empty() {
+                    specular_path = &material.diffuse_texture; // TODO: WORST HACK EVER
+                }
+                let diffuse_texture =
+                    SimpleTexture::load_texture(&device, queue, current_folder.join(diffuse_path))
+                        .unwrap_or_else(|_| {
+                            panic!(
+                                "Texture {} not found, should use default in the future",
+                                diffuse_path
+                            )
+                        });
+                let specular_texture =
+                    SimpleTexture::load_texture(&device, queue, current_folder.join(specular_path))
+                        .unwrap_or_else(|_| {
+                            panic!(
+                                "Texture {} not found, should use default in the future",
+                                diffuse_path
+                            )
+                        });
+                Material {
+                    diffuse_texture,
+                    specular_texture,
+                }
+            })
+            .collect::<Vec<_>>();
+        let min_position = [
+            AtomicI32::new(i32::MAX),
+            AtomicI32::new(i32::MAX),
+            AtomicI32::new(i32::MAX),
+        ];
+        let max_position = [
+            AtomicI32::new(i32::MIN),
+            AtomicI32::new(i32::MIN),
+            AtomicI32::new(i32::MIN),
+        ];
+        let meshes = obj_models
+            .par_iter()
+            .map(|m| {
+                let vertices = (0..m.mesh.positions.len() / 3)
+                    .into_par_iter()
+                    .map(|i| {
+                        max_position[0]
+                            .fetch_max(m.mesh.positions[i * 3].ceil() as i32, Ordering::AcqRel);
+                        max_position[1]
+                            .fetch_max(m.mesh.positions[i * 3 + 1].ceil() as i32, Ordering::AcqRel);
+                        max_position[2]
+                            .fetch_max(m.mesh.positions[i * 3 + 2].ceil() as i32, Ordering::AcqRel);
+                        min_position[0]
+                            .fetch_min(m.mesh.positions[i * 3].floor() as i32, Ordering::AcqRel);
+                        min_position[1].fetch_min(
+                            m.mesh.positions[i * 3 + 1].floor() as i32,
+                            Ordering::AcqRel,
+                        );
+                        min_position[2].fetch_min(
+                            m.mesh.positions[i * 3 + 2].floor() as i32,
+                            Ordering::AcqRel,
+                        );
+                        MeshVertex {
+                            position: [
+                                m.mesh.positions[i * 3],
+                                m.mesh.positions[i * 3 + 1],
+                                m.mesh.positions[i * 3 + 2],
+                            ],
+                            tex_coords: [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]],
+                            normal: [
+                                m.mesh.normals[i * 3],
+                                m.mesh.normals[i * 3 + 1],
+                                m.mesh.normals[i * 3 + 2],
+                            ],
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                let vertex_buffer = VertexBuffer::allocate_immutable_buffer(device, &vertices);
 
-        for material in obj_materials {
-            let diffuse_path = material.diffuse_texture;
-            let mut specular_path = material.specular_texture;
-            //let ambient_path = material.ambient_texture; TODO: Should this be handled?
-            if specular_path.is_empty() {
-                specular_path = diffuse_path.clone(); // TODO: WORST HACK EVER
-            }
-            let diffuse_texture =
-                SimpleTexture::load_texture(&device, queue, current_folder.join(diffuse_path))?;
-            let specular_texture =
-                SimpleTexture::load_texture(&device, queue, current_folder.join(specular_path))?;
-
-            materials.push(Material {
-                diffuse_texture,
-                specular_texture,
-            });
-        }
-
-        let mut meshes = Vec::new();
-        for m in obj_models {
-            let mut vertices = Vec::new();
-            for i in 0..m.mesh.positions.len() / 3 {
-                vertices.push(MeshVertex {
-                    position: [
-                        m.mesh.positions[i * 3],
-                        m.mesh.positions[i * 3 + 1],
-                        m.mesh.positions[i * 3 + 2],
-                    ],
-                    tex_coords: [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]],
-                    normal: [
-                        m.mesh.normals[i * 3],
-                        m.mesh.normals[i * 3 + 1],
-                        m.mesh.normals[i * 3 + 2],
-                    ],
+                let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
+                    label: Some("Index buffer"),
+                    usage: wgpu::BufferUsage::INDEX,
+                    contents: bytemuck::cast_slice(&m.mesh.indices),
                 });
-            }
-            let vertex_buffer = VertexBuffer::allocate_immutable_buffer(device, &vertices);
+                Mesh {
+                    vertex_buffer,
+                    index_buffer,
+                    material: m.mesh.material_id.unwrap_or(0),
+                    num_indexes: m.mesh.indices.len() as u32,
+                }
+            })
+            .collect::<Vec<_>>();
 
-            let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
-                label: Some("Index buffer"),
-                usage: wgpu::BufferUsage::INDEX,
-                contents: bytemuck::cast_slice(&m.mesh.indices),
-            });
-
-            meshes.push(Mesh {
-                vertex_buffer,
-                index_buffer,
-                material: m.mesh.material_id.unwrap_or(0),
-                num_indexes: m.mesh.indices.len() as u32,
-            });
-        }
         let instance_buffer_len =
             INSTANCE_BUFFER_SIZE as usize / std::mem::size_of::<InstanceData>();
         let buffer_data = vec![InstanceData::default(); instance_buffer_len];
@@ -193,6 +240,16 @@ impl Model {
             meshes,
             materials,
             instance_buffer,
+            min_position: Vector3::new(
+                min_position[0].load(Ordering::Acquire) as f32,
+                min_position[1].load(Ordering::Acquire) as f32,
+                min_position[2].load(Ordering::Acquire) as f32,
+            ),
+            max_position: Vector3::new(
+                max_position[0].load(Ordering::Acquire) as f32,
+                max_position[1].load(Ordering::Acquire) as f32,
+                max_position[2].load(Ordering::Acquire) as f32,
+            ),
         })
     }
 }

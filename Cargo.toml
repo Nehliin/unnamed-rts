@@ -12,12 +12,6 @@ opt-level = 1
 debug-assertions = true
 incremental = true
 
-# Unclear if this should be opt 1 or 2
-[profile.dev.package."*"]
-debug = true
-opt-level = 2
-debug-assertions = true
-
 [profile.dev.build-override]
 opt-level = 3
 codegen-units = 1
@@ -39,6 +33,7 @@ once_cell = "1"
 crossbeam-channel = "0.5"
 anyhow = "1"
 egui = "0.8"
+rayon = "1"
 
 [build-dependencies]
 shaderc = "0.7"

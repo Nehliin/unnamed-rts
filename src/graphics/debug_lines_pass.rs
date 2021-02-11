@@ -17,6 +17,7 @@ use wgpu::{include_spirv, SwapChainTexture};
 use world::SubWorld;
 
 #[derive(Debug, Default)]
+// This should be refactored to be component based instead of using this resource
 pub struct BoundingBoxMap {
     vertex_info_map: HashMap<Handle<Model>, ImmutableVertexData<BoxVert>>,
 }
@@ -86,7 +87,7 @@ pub fn draw(
     render_pass.push_debug_group("Debug lines debug group");
     render_pass.set_pipeline(pipeline);
     render_pass.set_bind_group(0, &pass.camera_bind_group, &[]);
-    if debug_settings.show_bounding_cylinder {
+    if debug_settings.show_bounding_boxes {
         let mut query = <(Read<Transform>, Read<Handle<Model>>)>::query();
 
         query.for_each_chunk(world, |chunk| {

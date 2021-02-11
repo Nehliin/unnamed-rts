@@ -187,14 +187,10 @@ impl Model {
                     .map(|i| {
                         max_position[0]
                             .fetch_max(m.mesh.positions[i * 3].ceil() as i32, Ordering::AcqRel);
-                        max_position[1].fetch_max(
-                            m.mesh.positions[i * 3 + 1].ceil() as i32,
-                            Ordering::AcqRel,
-                        );
-                        max_position[2].fetch_max(
-                            m.mesh.positions[i * 3 + 2].ceil() as i32,
-                            Ordering::AcqRel,
-                        );
+                        max_position[1]
+                            .fetch_max(m.mesh.positions[i * 3 + 1].ceil() as i32, Ordering::AcqRel);
+                        max_position[2]
+                            .fetch_max(m.mesh.positions[i * 3 + 2].ceil() as i32, Ordering::AcqRel);
                         min_position[0]
                             .fetch_min(m.mesh.positions[i * 3].floor() as i32, Ordering::AcqRel);
                         min_position[1].fetch_min(
@@ -245,15 +241,15 @@ impl Model {
             materials,
             instance_buffer,
             min_position: Vector3::new(
-                            min_position[0].load(Ordering::Acquire) as f32,
-                            min_position[1].load(Ordering::Acquire) as f32,
-                            min_position[2].load(Ordering::Acquire) as f32,
-                        ),
+                min_position[0].load(Ordering::Acquire) as f32,
+                min_position[1].load(Ordering::Acquire) as f32,
+                min_position[2].load(Ordering::Acquire) as f32,
+            ),
             max_position: Vector3::new(
-                            max_position[0].load(Ordering::Acquire) as f32,
-                            max_position[1].load(Ordering::Acquire) as f32,
-                            max_position[2].load(Ordering::Acquire) as f32,
-                        ),
+                max_position[0].load(Ordering::Acquire) as f32,
+                max_position[1].load(Ordering::Acquire) as f32,
+                max_position[2].load(Ordering::Acquire) as f32,
+            ),
         })
     }
 }

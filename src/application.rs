@@ -1,10 +1,23 @@
 use std::time::Instant;
 
-use crate::{assets::{self, Assets}, components::Transform, graphics::{camera::{self, Camera}, common::DepthTexture, debug_lines_pass::{self, DebugLinesPass}, grid_pass::{self, GridPass}, model::Model, model_pass::{self, ModelPass}, ui::{
+use crate::{
+    assets::{self, Assets},
+    components::Transform,
+    graphics::{
+        camera::{self, Camera},
+        common::DepthTexture,
+        debug_lines_pass::{self, DebugLinesPass},
+        grid_pass::{self, GridPass},
+        model::Model,
+        model_pass::{self, ModelPass},
+        ui::{
             ui_context::{UiContext, WindowSize},
             ui_pass::UiPass,
             ui_systems,
-        }}, input::{self, KeyboardState, MouseButtonState, MouseMotion, Text}};
+        },
+    },
+    input::{self, KeyboardState, MouseButtonState, MouseMotion, Text},
+};
 use crossbeam_channel::{Receiver, Sender};
 use debug_lines_pass::BoundingBoxMap;
 use input::CursorPosition;
@@ -34,7 +47,7 @@ pub struct Time {
 // TODO move this and the system somewhere else
 pub struct DebugMenueSettings {
     pub show_grid: bool,
-    pub show_bounding_cylinder: bool,
+    pub show_bounding_boxes: bool,
 }
 
 #[system]
@@ -43,21 +56,13 @@ pub fn draw_debug_ui(
     #[resource] debug_settings: &mut DebugMenueSettings,
     #[resource] time: &Time,
 ) {
-    /*egui::Area::new("FPS area")
-    .fixed_pos(egui::pos2(0.0, 0.0))
-    .show(&ui_context.context, |ui| {
-        let label = egui::Label::new(format!("FPS: {:.0}", 1.0 / time.delta_time))
-            .text_color(egui::Color32::WHITE);
-        ui.add(label);
-    });*/
-
     egui::SidePanel::left("Debug menue", 80.0).show(&ui_context.context, |ui| {
         let label = egui::Label::new(format!("FPS: {:.0}", 1.0 / time.delta_time))
             .text_color(egui::Color32::WHITE);
         ui.add(label);
         ui.checkbox(
-            &mut debug_settings.show_bounding_cylinder,
-            "Show bounding cylinders",
+            &mut debug_settings.show_bounding_boxes,
+            "Show bounding boxes",
         );
         ui.checkbox(&mut debug_settings.show_grid, "Show debug grid")
     });
@@ -74,7 +79,6 @@ pub struct App {
     mouse_motion_sender: Sender<MouseMotion>,
     cursor_position_sender: Sender<CursorPosition>,
     modifiers_state_sender: Sender<ModifiersState>,
-    // TODO: use small vec instead
     command_receivers: Vec<Receiver<CommandBuffer>>,
 }
 
@@ -197,7 +201,7 @@ impl App {
         resources.insert(assets);
         resources.insert(DebugMenueSettings {
             show_grid: true,
-            show_bounding_cylinder: true,
+            show_bounding_boxes: true,
         });
 
         world.push((

@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use egui::{pos2, vec2 };
+use egui::{pos2, vec2};
 use input::{CursorPosition, Text};
 use legion::*;
 use wgpu::{CommandEncoderDescriptor, Device, Queue, SwapChainTexture};
@@ -116,7 +116,6 @@ pub fn begin_ui_frame(
     ui_context.raw_input.predicted_dt = time.delta_time;
     ui_context.begin_frame();
 }
-
 
 // TODO: handle user textures here
 // Basicall simply load texture data to create a egui::Texture and then run egui texture to wgpu texture

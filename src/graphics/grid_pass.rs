@@ -17,10 +17,10 @@ pub fn draw(
     #[resource] current_frame: &wgpu::SwapChainTexture,
 ) {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("Debug pass encoder"),
+        label: Some("Grid pass encoder"),
     });
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("Debug pass"),
+        label: Some("Grid pass"),
         color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
             attachment: &current_frame.view,
             resolve_target: None,
@@ -90,13 +90,13 @@ impl GridPass {
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Debug pass pipeline layout"),
+                label: Some("Grid pass pipeline layout"),
                 bind_group_layouts: &[&camera_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Debug pipeline"),
+            label: Some("Grid pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &vs_module,

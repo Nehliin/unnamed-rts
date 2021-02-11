@@ -55,6 +55,7 @@ impl VertexBuffer for MeshVertex {
 }
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
+//TODO: The perspective part isn't needed here
 pub struct InstanceData {
     model_matrix: [[f32; 4]; 4],
 }
@@ -106,24 +107,25 @@ impl VertexBuffer for InstanceData {
     }
 }
 // TODO: This should be its own texture type
+#[derive(Debug)]
 pub struct Material {
     pub diffuse_texture: TextureData<SimpleTexture>,
     pub specular_texture: TextureData<SimpleTexture>,
 }
-
+#[derive(Debug)]
 pub struct Mesh {
     pub vertex_buffer: ImmutableVertexData<MeshVertex>,
     pub index_buffer: Buffer,
     pub material: usize,
     pub num_indexes: u32,
 }
-
+#[derive(Debug)]
 pub struct Model {
     pub instance_buffer: MutableVertexData<InstanceData>,
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
-    pub min_position: Vector3<i32>,
-    pub max_position: Vector3<i32>,
+    pub min_position: Vector3<f32>,
+    pub max_position: Vector3<f32>,
 }
 
 impl Model {
@@ -184,13 +186,13 @@ impl Model {
                     .into_par_iter()
                     .map(|i| {
                         max_position[0]
-                            .fetch_max(m.mesh.positions[i * 3].floor() as i32, Ordering::AcqRel);
+                            .fetch_max(m.mesh.positions[i * 3].ceil() as i32, Ordering::AcqRel);
                         max_position[1].fetch_max(
-                            m.mesh.positions[i * 3 + 1].floor() as i32,
+                            m.mesh.positions[i * 3 + 1].ceil() as i32,
                             Ordering::AcqRel,
                         );
                         max_position[2].fetch_max(
-                            m.mesh.positions[i * 3 + 2].floor() as i32,
+                            m.mesh.positions[i * 3 + 2].ceil() as i32,
                             Ordering::AcqRel,
                         );
                         min_position[0]
@@ -242,16 +244,16 @@ impl Model {
             meshes,
             materials,
             instance_buffer,
-            min_position: dbg!(Vector3::new(
-                            min_position[0].load(Ordering::Acquire),
-                            min_position[1].load(Ordering::Acquire),
-                            min_position[2].load(Ordering::Acquire),
-                        )),
-            max_position: dbg!(Vector3::new(
-                            max_position[0].load(Ordering::Acquire),
-                            max_position[1].load(Ordering::Acquire),
-                            max_position[2].load(Ordering::Acquire),
-                        )),
+            min_position: Vector3::new(
+                            min_position[0].load(Ordering::Acquire) as f32,
+                            min_position[1].load(Ordering::Acquire) as f32,
+                            min_position[2].load(Ordering::Acquire) as f32,
+                        ),
+            max_position: Vector3::new(
+                            max_position[0].load(Ordering::Acquire) as f32,
+                            max_position[1].load(Ordering::Acquire) as f32,
+                            max_position[2].load(Ordering::Acquire) as f32,
+                        ),
         })
     }
 }

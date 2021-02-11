@@ -11,11 +11,13 @@ pub trait VertexBufferData {
     fn slice<S: RangeBounds<BufferAddress>>(&self, bounds: S) -> wgpu::BufferSlice;
 }
 
+#[derive(Debug)]
 pub struct ImmutableVertexData<T: Pod + Zeroable> {
     pub(crate) buffer: wgpu::Buffer,
     _marker: PhantomData<T>,
 }
 
+#[derive(Debug)]
 pub struct MutableVertexData<T: Pod + Zeroable> {
     pub(crate) buffer: wgpu::Buffer,
     _marker: PhantomData<T>,

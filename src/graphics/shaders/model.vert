@@ -5,6 +5,7 @@ layout(location=1) in vec3 a_normal;
 layout(location=2) in vec2 tex_coords;
 layout(location=3) in mat4 model;
 
+
 layout(location=0) out vec2 out_tex_coords;
 layout(location=1) out vec3 normal;
 layout(location=2) out vec3 fragment_position;
@@ -24,5 +25,4 @@ void main() {
     fragment_position = vec3(model * vec4(a_position, 1.0));
     normal = mat3(transpose(inverse(mat3(model)))) * a_normal; //make sure surface normals doesn't become fucked when scaling;
     gl_Position = projection * view * vec4(fragment_position, 1.0);
-    return;
 }

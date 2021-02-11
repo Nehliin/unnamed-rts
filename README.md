@@ -10,3 +10,7 @@ Current goals:
 - [ ] RTS game mechanics
 - [ ] Map editor
 - [ ] Basic Online multiplayer support
+
+### Screenshot
+Not much to look at currently but feels like all graphical repos should have at least a one screenshot
+![Alt text](rts.png?raw=true "A screenshot")

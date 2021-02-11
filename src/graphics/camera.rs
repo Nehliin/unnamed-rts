@@ -85,7 +85,7 @@ pub fn free_flying_camera(
     if keyboard_state.is_pressed(VirtualKeyCode::S) {
         camera.position += camera.direction * -CAMERA_SPEED * time.delta_time;
     }
-    if mouse_button_state.is_pressed(&MouseButton::Left) {
+    if mouse_button_state.is_pressed(&MouseButton::Right) {
         for delta in mouse_motion.events() {
             let mut xoffset = delta.delta_x as f32;
             let mut yoffset = delta.delta_y as f32;

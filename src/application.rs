@@ -344,6 +344,10 @@ impl App {
                                 true
                             }
                             2 => {
+                                mouse_button_state.set_released(&MouseButton::Middle);
+                                true
+                            }
+                            3 => {
                                 mouse_button_state.set_released(&MouseButton::Right);
                                 true
                             }

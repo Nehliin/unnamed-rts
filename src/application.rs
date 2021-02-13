@@ -1,8 +1,8 @@
-use std::time::Instant;
+use std::{cmp::Ordering, time::Instant};
 
 use crate::{
-    assets::{self, Assets},
-    components::Transform,
+    assets::{self, Assets, Handle},
+    components::{Selectable, Transform},
     graphics::{
         camera::{self, Camera},
         common::DepthTexture,
@@ -24,7 +24,7 @@ use input::CursorPosition;
 use legion::*;
 use legion::{Resources, Schedule, World};
 use log::warn;
-use nalgebra::{Isometry3, Point3, Vector3};
+use nalgebra::{Isometry3, Point3, Vector3, Vector4};
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
     PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
@@ -38,6 +38,7 @@ use winit::{
     },
     window::{Window, WindowId},
 };
+use world::SubWorld;
 
 pub struct Time {
     current_time: std::time::Instant,
@@ -51,7 +52,9 @@ pub struct DebugMenueSettings {
 }
 
 #[system]
+#[read_component(Selectable)]
 pub fn draw_debug_ui(
+    world: &SubWorld,
     #[resource] ui_context: &UiContext,
     #[resource] debug_settings: &mut DebugMenueSettings,
     #[resource] time: &Time,
@@ -64,9 +67,108 @@ pub fn draw_debug_ui(
             &mut debug_settings.show_bounding_boxes,
             "Show bounding boxes",
         );
-        ui.checkbox(&mut debug_settings.show_grid, "Show debug grid")
+        ui.checkbox(&mut debug_settings.show_grid, "Show debug grid");
+        let mut query = <Read<Selectable>>::query();
+        for selectable in query.iter(world) {
+            ui.label(format!("Selected: {}", selectable.is_selected));
+        }
     });
 }
+
+#[system]
+#[write_component(Selectable)]
+#[read_component(Transform)]
+#[read_component(Handle<Model>)]
+pub fn selection(
+    world: &mut SubWorld,
+    #[resource] camera: &Camera,
+    #[resource] mouse_button_state: &MouseButtonState,
+    #[resource] mouse_pos: &CursorPosition,
+    #[resource] asset_storage: &Assets<Model>,
+    #[resource] window_size: &WindowSize,
+) {
+    if mouse_button_state.pressed_current_frame(&MouseButton::Left) {
+        let screen_pos = mouse_pos;
+        let view_inverse = camera.get_view_matrix().try_inverse().unwrap();
+        let proj_inverse = camera.get_projection_matrix().try_inverse().unwrap();
+        // normalised device space position TODO: take scaling into account
+        let normalised = Vector3::new(
+            (2.0 * screen_pos.x as f32) / window_size.physical_width as f32 - 1.0,
+            1.0 - (2.0 * screen_pos.y as f32) / window_size.physical_height as f32,
+            1.0,
+        );
+        let clip_space = Vector4::new(normalised.x, normalised.y, -1.0, 1.0);
+        let view_space = proj_inverse * clip_space;
+        let view_space = Vector4::new(view_space.x, view_space.y, -1.0, 0.0);
+
+        let ray_dir_world_space = (view_inverse * view_space).xyz().normalize();
+        let mut query = <(Read<Transform>, Read<Handle<Model>>, Write<Selectable>)>::query();
+        for (transform, handle, mut selectable) in query.iter_mut(world) {
+            let model = asset_storage.get(&handle).unwrap();
+            let (min, max) = (model.min_position, model.max_position);
+            let world_min = transform.get_model_matrix() * Vector4::new(min.x, min.y, min.z, 1.0);
+            let world_max = transform.get_model_matrix() * Vector4::new(max.x, max.y, max.z, 1.0);
+            selectable.is_selected = intesercts(
+                camera.get_position(),
+                ray_dir_world_space,
+                world_min.xyz(),
+                world_max.xyz()
+            );
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
+struct NonNan(f32);
+
+impl NonNan {
+    fn new(val: f32) -> Option<NonNan> {
+        if val.is_nan() {
+            None
+        } else {
+            Some(NonNan(val))
+        }
+    }
+}
+
+impl Eq for NonNan {}
+
+impl Ord for NonNan {
+    fn cmp(&self, other: &NonNan) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+fn intesercts(
+    origin: Point3<f32>,
+    ray: Vector3<f32>,
+    aabb_min: Vector3<f32>,
+    aabb_max: Vector3<f32>,
+) -> bool {
+    use std::cmp::{max, min};
+    // can be precomputed
+    let dirfrac = Vector3::new(1.0 / ray.x, 1.0 / ray.y, 1.0 / ray.z);
+
+    let t1 = NonNan::new((aabb_min.x - origin.x) * dirfrac.x).unwrap();
+    let t2 = NonNan::new((aabb_max.x - origin.x) * dirfrac.x).unwrap();
+    let t3 = NonNan::new((aabb_min.y - origin.y) * dirfrac.y).unwrap();
+    let t4 = NonNan::new((aabb_max.y - origin.y) * dirfrac.y).unwrap();
+    let t5 = NonNan::new((aabb_min.z - origin.z) * dirfrac.z).unwrap();
+    let t6 = NonNan::new((aabb_max.z - origin.z) * dirfrac.z).unwrap();
+
+    let tmin = max(max(min(t1, t2), min(t3, t4)), min(t5, t6));
+    let tmax = min(min(max(t1, t2), max(t3, t4)), max(t5, t6));
+
+    if tmax < NonNan::new(0.0).unwrap() {
+        return false;
+    }
+
+    if tmin > tmax {
+        return false;
+    }
+    true
+}
+
 pub struct App {
     world: World,
     resources: Resources,
@@ -77,7 +179,6 @@ pub struct App {
     text_input_sender: Sender<Text>,
     mouse_scroll_sender: Sender<MouseScrollDelta>,
     mouse_motion_sender: Sender<MouseMotion>,
-    cursor_position_sender: Sender<CursorPosition>,
     modifiers_state_sender: Sender<ModifiersState>,
     command_receivers: Vec<Receiver<CommandBuffer>>,
 }
@@ -152,6 +253,7 @@ impl App {
                 model_sender,
             )))
             .add_system(ui_systems::update_ui_system())
+            .add_system(selection_system())
             .add_system(grid_pass::draw_system(GridPass::new(
                 &device,
                 &camera,
@@ -183,8 +285,7 @@ impl App {
         // Event readers and input
         let (text_input_sender, rc) = crossbeam_channel::unbounded();
         resources.insert(input::EventReader::<Text>::new(rc));
-        let (cursor_position_sender, rc) = crossbeam_channel::unbounded();
-        resources.insert(input::EventReader::<CursorPosition>::new(rc));
+        resources.insert(input::CursorPosition::default());
         let (mouse_scroll_sender, rc) = crossbeam_channel::unbounded();
         resources.insert(input::EventReader::<MouseScrollDelta>::new(rc));
         let (mouse_motion_sender, rc) = crossbeam_channel::unbounded();
@@ -206,6 +307,7 @@ impl App {
 
         world.push((
             suit.clone(),
+            Selectable { is_selected: false },
             Transform::new(
                 Isometry3::translation(2.0, 0.0, 0.0),
                 Vector3::new(0.2, 0.2, 0.2),
@@ -213,6 +315,7 @@ impl App {
         ));
         world.push((
             suit,
+            Selectable { is_selected: false },
             Transform::new(
                 Isometry3::translation(-2.0, 0.0, 0.0),
                 Vector3::new(0.2, 0.2, 0.2),
@@ -229,7 +332,6 @@ impl App {
             text_input_sender,
             mouse_scroll_sender,
             mouse_motion_sender,
-            cursor_position_sender,
             modifiers_state_sender,
         }
     }
@@ -292,10 +394,9 @@ impl App {
                     true
                 }
                 winit::event::WindowEvent::CursorMoved { position, .. } => {
-                    let _ = self.cursor_position_sender.send(CursorPosition {
-                        x: position.x,
-                        y: position.y,
-                    });
+                    let mut cursor_position = self.resources.get_mut::<CursorPosition>().unwrap();
+                    cursor_position.x = position.x;
+                    cursor_position.y = position.y;
                     true
                 }
                 winit::event::WindowEvent::ReceivedCharacter(char) => {

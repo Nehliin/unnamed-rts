@@ -53,11 +53,6 @@ fn main() -> Result<()> {
     let mut compiler = shaderc::Compiler::new().context("Unable to create shader compiler")?;
 
     for shader in shaders {
-        // This tells cargo to rerun this script if something changes.
-        println!(
-            "cargo:rerun-if-changed={}",
-            shader.src_path.as_os_str().to_str().unwrap()
-        );
         let compiled = compiler.compile_into_spirv(
             &shader.src,
             shader.kind,
@@ -67,6 +62,7 @@ fn main() -> Result<()> {
         )?;
         write(shader.spv_path, compiled.as_binary_u8())?;
     }
+    println!("cargo:rerun-if-changed=./src/graphics/shaders/");
 
     Ok(())
 }

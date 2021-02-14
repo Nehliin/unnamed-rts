@@ -1,6 +1,10 @@
 #![allow(unused)]
 use nalgebra::{Isometry3, Matrix4, Vector3};
 
+pub struct Selectable {
+    pub is_selected: bool,
+}
+
 #[repr(C)]
 pub struct Transform {
     pub isometry: Isometry3<f32>,

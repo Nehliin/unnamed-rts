@@ -54,14 +54,12 @@ pub fn event(
     #[resource] mouse_scroll: &mut EventReader<MouseScrollDelta>,
     #[resource] mouse_motion: &mut EventReader<MouseMotion>,
     #[resource] modifiers_state: &mut EventReader<ModifiersState>,
-    #[resource] cursor_position: &mut EventReader<CursorPosition>,
     #[resource] keyboard_state: &mut KeyboardState,
     #[resource] mousebutton_state: &mut MouseButtonState,
 ) {
     keyboard_state.frame_update();
     mousebutton_state.frame_update();
     text_input.frame_update();
-    cursor_position.frame_update();
     mouse_motion.frame_update();
     mouse_scroll.frame_update();
     modifiers_state.frame_update();
@@ -205,6 +203,7 @@ impl KeyboardState {
     }
 
     #[inline]
+    // TODO: Return iter here instead
     fn convert_to_virtual_keyset(storage: &BitSet) -> HashSet<VirtualKeyCode> {
         let mut result = HashSet::with_capacity(32);
         for bit in 0..(128 + 64) {

@@ -46,6 +46,7 @@ pub fn update_bounding_boxes(
     });
 }
 
+#[allow(clippy::clippy::too_many_arguments)]
 #[system]
 #[read_component(Transform)]
 #[read_component(Handle<Model>)]

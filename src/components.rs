@@ -2,7 +2,7 @@
 use nalgebra::{Isometry3, Matrix4, Vector3};
 
 pub struct Selectable {
-    pub is_selected: bool
+    pub is_selected: bool,
 }
 
 #[repr(C)]

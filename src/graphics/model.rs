@@ -20,7 +20,7 @@ use wgpu::{
 };
 
 // Todo make it dynamically growable
-const INSTANCE_BUFFER_SIZE: u64 = 16_000;
+pub const INSTANCE_BUFFER_SIZE: u64 = 16_000;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Pod, Zeroable)]
@@ -262,6 +262,13 @@ pub trait DrawModel<'b> {
         instances: Range<u32>,
     );
 
+    fn draw_model_with_instance_buffer(
+        &mut self,
+        model: &'b Model,
+        instance_buffer: &'b MutableVertexData<InstanceData>,
+        instances: Range<u32>,
+    );
+
     fn draw_untextured(&mut self, model: &'b Model, instances: Range<u32>);
 
     fn draw_model_instanced(&mut self, model: &'b Model, instances: Range<u32>);
@@ -298,6 +305,18 @@ where
 
     fn draw_model_instanced(&mut self, model: &'b Model, instances: Range<u32>) {
         let instance_buffer = &model.instance_buffer;
+        for mesh in &model.meshes {
+            let material = &model.materials[mesh.material];
+            self.draw_mesh_instanced(mesh, material, instance_buffer, instances.clone());
+        }
+    }
+
+    fn draw_model_with_instance_buffer(
+        &mut self,
+        model: &'b Model,
+        instance_buffer: &'b MutableVertexData<InstanceData>,
+        instances: Range<u32>,
+    ) {
         for mesh in &model.meshes {
             let material = &model.materials[mesh.material];
             self.draw_mesh_instanced(mesh, material, instance_buffer, instances.clone());

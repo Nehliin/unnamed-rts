@@ -1,4 +1,4 @@
-pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24PlusStencil8;
 #[derive(Debug)]
 pub struct DepthTexture {
     texture: wgpu::Texture,

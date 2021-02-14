@@ -167,6 +167,11 @@ impl Camera {
     }
 
     #[inline]
+    pub fn get_position(&self) -> Point3<f32> {
+        self.position
+    }
+
+    #[inline]
     pub fn move_in_direction(&mut self, amount: f32) {
         self.position += self.direction * amount;
         self.view_matrix = Matrix4::look_at_rh(
@@ -188,6 +193,11 @@ impl Camera {
             &(self.position + self.direction),
             &Vector3::new(0.0, 1.0, 0.0),
         );
+    }
+
+    #[inline]
+    pub fn get_view_matrix(&self) -> &Matrix4<f32> {
+        &self.view_matrix
     }
 
     #[inline]

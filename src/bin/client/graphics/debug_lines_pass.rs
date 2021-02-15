@@ -4,9 +4,9 @@ use super::{
     model::{InstanceData, Model},
     vertex_buffers::{ImmutableVertexData, VertexBuffer, VertexBufferData},
 };
-use crate::components::Transform;
+use unnamed_rts::components::Transform;
 use crate::{
-    application::DebugMenueSettings,
+    client_systems::DebugMenueSettings,
     assets::{Assets, Handle},
 };
 use crossbeam_channel::Sender;

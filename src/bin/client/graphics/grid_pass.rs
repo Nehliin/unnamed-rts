@@ -1,4 +1,4 @@
-use crate::application::DebugMenueSettings;
+use crate::client_systems::DebugMenueSettings;
 
 use super::{
     camera::Camera,

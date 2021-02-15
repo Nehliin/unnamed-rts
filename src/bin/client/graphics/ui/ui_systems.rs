@@ -5,9 +5,10 @@ use input::{CursorPosition, Text};
 use legion::*;
 use wgpu::{CommandEncoderDescriptor, Device, Queue, SwapChainTexture};
 use winit::event::{ModifiersState, MouseButton, MouseScrollDelta};
+use unnamed_rts::resources::Time;
+
 
 use crate::{
-    application::Time,
     input::{self, EventReader},
 };
 

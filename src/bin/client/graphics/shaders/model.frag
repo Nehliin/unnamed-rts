@@ -99,3 +99,7 @@ void main() {
     result += texture(sampler2D(t_specular, s_specular), v_tex_coords);
     f_color = result;
 }
+
+/*void flat_color() {
+    f_color = vec4(1.0, 1.0, 0.0, 1.0);
+}*/

@@ -5,9 +5,8 @@ use nalgebra::geometry::Perspective3;
 use nalgebra::{Matrix4, Point3, Vector3};
 use once_cell::sync::Lazy;
 use winit::event::{MouseButton, VirtualKeyCode};
-
+use unnamed_rts::resources::Time;
 use crate::{
-    application::Time,
     input::{EventReader, KeyboardState, MouseButtonState, MouseMotion},
 };
 #[derive(Debug)]

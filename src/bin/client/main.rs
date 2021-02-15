@@ -6,9 +6,10 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
+
+mod client_systems;
 mod application;
 mod assets;
-mod components;
 mod graphics;
 mod input;
 

@@ -1,10 +1,19 @@
-use std::cmp::Ordering;
-use legion::{*, world::SubWorld};
+use crate::{
+    assets::{Assets, Handle},
+    graphics::{
+        camera::Camera,
+        model::Model,
+        ui::ui_context::{UiContext, WindowSize},
+    },
+    input::{CursorPosition, MouseButtonState},
+};
+use legion::{world::SubWorld, *};
 use nalgebra::{Point3, Vector3, Vector4};
+use rayon::iter::ParallelIterator;
+use std::cmp::Ordering;
+use unnamed_rts::components::*;
 use unnamed_rts::{components::Selectable, resources::Time};
 use winit::event::MouseButton;
-use unnamed_rts::components::*;
-use crate::{assets::{Assets, Handle}, graphics::{camera::Camera, model::Model, ui::ui_context::{UiContext, WindowSize}}, input::{CursorPosition, MouseButtonState}};
 pub struct DebugMenueSettings {
     pub show_grid: bool,
     pub show_bounding_boxes: bool,
@@ -47,35 +56,29 @@ pub fn selection(
     #[resource] window_size: &WindowSize,
 ) {
     if mouse_button_state.pressed_current_frame(&MouseButton::Left) {
-        let screen_pos = mouse_pos;
-        let view_inverse = camera.get_view_matrix().try_inverse().unwrap();
-        let proj_inverse = camera.get_projection_matrix().try_inverse().unwrap();
-        let width = window_size.physical_width as f32 * window_size.scale_factor;
-        let height = window_size.physical_height as f32 * window_size.scale_factor;
-        let normalised = Vector3::new(
-            (2.0 * screen_pos.x as f32) / width - 1.0,
-            1.0 - (2.0 * screen_pos.y as f32) / height as f32,
-            1.0,
+        let ray = camera.raycast(mouse_pos, window_size);
+        let dirfrac = Vector3::new(
+            1.0 / ray.direction.x,
+            1.0 / ray.direction.y,
+            1.0 / ray.direction.z,
         );
-        let clip_space = Vector4::new(normalised.x, normalised.y, -1.0, 1.0);
-        let view_space = proj_inverse * clip_space;
-        let view_space = Vector4::new(view_space.x, view_space.y, -1.0, 0.0);
-        // ray in world space coordinates
-        let ray = (view_inverse * view_space).xyz().normalize();
-        let dirfrac = Vector3::new(1.0 / ray.x, 1.0 / ray.y, 1.0 / ray.z);
         let mut query = <(Read<Transform>, Read<Handle<Model>>, Write<Selectable>)>::query();
-        for (transform, handle, mut selectable) in query.iter_mut(world) {
-            let model = asset_storage.get(&handle).unwrap();
-            let (min, max) = (model.min_position, model.max_position);
-            let world_min = transform.get_model_matrix() * Vector4::new(min.x, min.y, min.z, 1.0);
-            let world_max = transform.get_model_matrix() * Vector4::new(max.x, max.y, max.z, 1.0);
-            selectable.is_selected = intesercts(
-                camera.get_position(),
-                dirfrac,
-                world_min.xyz(),
-                world_max.xyz(),
-            );
-        }
+        query
+            .par_iter_mut(world)
+            .for_each(|(transform, handle, mut selectable)| {
+                let model = asset_storage.get(&handle).unwrap();
+                let (min, max) = (model.min_position, model.max_position);
+                let world_min =
+                    transform.get_model_matrix() * Vector4::new(min.x, min.y, min.z, 1.0);
+                let world_max =
+                    transform.get_model_matrix() * Vector4::new(max.x, max.y, max.z, 1.0);
+                selectable.is_selected = intesercts(
+                    camera.get_position(),
+                    dirfrac,
+                    world_min.xyz(),
+                    world_max.xyz(),
+                );
+            })
     }
 }
 

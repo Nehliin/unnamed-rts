@@ -1,20 +1,20 @@
+use crate::input::{CursorPosition, EventReader, KeyboardState, MouseButtonState, MouseMotion};
 use crevice::std140::AsStd140;
 use crevice::std140::Std140;
 use legion::*;
-use nalgebra::geometry::Perspective3;
+use nalgebra::{Vector4, geometry::Perspective3};
 use nalgebra::{Matrix4, Point3, Vector3};
 use once_cell::sync::Lazy;
-use winit::event::{MouseButton, VirtualKeyCode};
 use unnamed_rts::resources::Time;
-use crate::{
-    input::{EventReader, KeyboardState, MouseButtonState, MouseMotion},
-};
+use winit::event::{MouseButton, VirtualKeyCode};
+
+use super::ui::ui_context::WindowSize;
 #[derive(Debug)]
 pub struct Camera {
     direction: Vector3<f32>,
     position: Point3<f32>,
     view_matrix: Matrix4<f32>,
-    projection_matrix: Perspective3<f32>,
+    perspective: Perspective3<f32>,
     pitch: f32,
     yaw: f32,
     gpu_buffer: wgpu::Buffer,
@@ -52,6 +52,11 @@ fn to_vec(point: &Point3<f32>) -> Vector3<f32> {
 }
 
 pub const CAMERA_SPEED: f32 = 4.5;
+
+pub struct Ray {
+    pub origin: Point3<f32>,
+    pub direction: Vector3<f32>,
+}
 
 #[system]
 pub fn free_flying_camera(
@@ -128,7 +133,7 @@ impl Camera {
             direction,
             position,
             view_matrix: Matrix4::look_at_rh(&position, &view_target, &Vector3::new(0.0, 1.0, 0.0)),
-            projection_matrix: Perspective3::new(
+            perspective: Perspective3::new(
                 window_width as f32 / window_height as f32,
                 45.0,
                 0.1,
@@ -137,6 +142,29 @@ impl Camera {
             yaw: -90.0,
             pitch: 0.0,
             gpu_buffer,
+        }
+    }
+
+    pub fn raycast(&self, mouse_pos: &CursorPosition, window_size: &WindowSize) -> Ray {
+        let view_inverse = self.view_matrix.try_inverse().unwrap();
+        let proj_inverse = self.get_projection_matrix().try_inverse().unwrap();
+
+        let width = window_size.physical_width as f32 * window_size.scale_factor;
+        let height = window_size.physical_height as f32 * window_size.scale_factor;
+        let normalised = Vector3::new(
+            (2.0 * mouse_pos.x as f32) / width - 1.0,
+            1.0 - (2.0 * mouse_pos.y as f32) / height as f32,
+            1.0,
+        );
+        let clip_space = Vector4::new(normalised.x, normalised.y, -1.0, 1.0);
+        let view_space = proj_inverse * clip_space;
+        let view_space = Vector4::new(view_space.x, view_space.y, -1.0, 0.0);
+        // ray direction in world space coordinates
+        let direction = (view_inverse * view_space).xyz().normalize();
+
+        Ray {
+            origin: self.position,
+            direction
         }
     }
 
@@ -157,7 +185,7 @@ impl Camera {
     }
 
     pub fn update_aspect_ratio(&mut self, width: u32, height: u32) {
-        self.projection_matrix = Perspective3::new(width as f32 / height as f32, 45.0, 0.1, 100.0);
+        self.perspective = Perspective3::new(width as f32 / height as f32, 45.0, 0.1, 100.0);
     }
 
     #[inline]
@@ -201,7 +229,7 @@ impl Camera {
 
     #[inline]
     pub fn get_projection_matrix(&self) -> &Matrix4<f32> {
-        &self.projection_matrix.as_matrix()
+        &self.perspective.as_matrix()
     }
 
     #[inline]

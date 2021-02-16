@@ -11,7 +11,7 @@ use crate::{
 };
 use crossbeam_channel::Sender;
 use legion::*;
-use nalgebra::Vector3;
+use glam::Vec3;
 use std::collections::HashMap;
 use wgpu::{include_spirv, SwapChainTexture};
 use world::SubWorld;
@@ -106,7 +106,7 @@ pub fn draw(
     pass.command_sender.send(encoder.finish()).unwrap();
 }
 
-fn calc_buffer(min_pos: &Vector3<f32>, max_pos: &Vector3<f32>) -> Vec<BoxVert> {
+fn calc_buffer(min_pos: &Vec3, max_pos: &Vec3) -> Vec<BoxVert> {
     let height = max_pos.y - min_pos.y;
     let depth = max_pos.z - min_pos.z;
     let widht = max_pos.x - min_pos.x;
@@ -114,31 +114,31 @@ fn calc_buffer(min_pos: &Vector3<f32>, max_pos: &Vector3<f32>) -> Vec<BoxVert> {
     vec![
         //Base
         *min_pos,
-        Vector3::new(min_pos.x, min_pos.y, min_pos.z + depth),
-        Vector3::new(min_pos.x, min_pos.y, min_pos.z + depth),
-        Vector3::new(min_pos.x + widht, min_pos.y, min_pos.z + depth),
-        Vector3::new(min_pos.x + widht, min_pos.y, min_pos.z + depth),
-        Vector3::new(min_pos.x + widht, min_pos.y, min_pos.z),
-        Vector3::new(min_pos.x + widht, min_pos.y, min_pos.z),
+        Vec3::new(min_pos.x, min_pos.y, min_pos.z + depth),
+        Vec3::new(min_pos.x, min_pos.y, min_pos.z + depth),
+        Vec3::new(min_pos.x + widht, min_pos.y, min_pos.z + depth),
+        Vec3::new(min_pos.x + widht, min_pos.y, min_pos.z + depth),
+        Vec3::new(min_pos.x + widht, min_pos.y, min_pos.z),
+        Vec3::new(min_pos.x + widht, min_pos.y, min_pos.z),
         *min_pos,
         //top
-        Vector3::new(min_pos.x, min_pos.y + height, min_pos.z),
-        Vector3::new(min_pos.x, min_pos.y + height, min_pos.z + depth),
-        Vector3::new(min_pos.x, min_pos.y + height, min_pos.z + depth),
-        Vector3::new(min_pos.x + widht, min_pos.y + height, min_pos.z + depth),
-        Vector3::new(min_pos.x + widht, min_pos.y + height, min_pos.z + depth),
-        Vector3::new(min_pos.x + widht, min_pos.y + height, min_pos.z),
-        Vector3::new(min_pos.x + widht, min_pos.y + height, min_pos.z),
-        Vector3::new(min_pos.x, min_pos.y + height, min_pos.z),
+        Vec3::new(min_pos.x, min_pos.y + height, min_pos.z),
+        Vec3::new(min_pos.x, min_pos.y + height, min_pos.z + depth),
+        Vec3::new(min_pos.x, min_pos.y + height, min_pos.z + depth),
+        Vec3::new(min_pos.x + widht, min_pos.y + height, min_pos.z + depth),
+        Vec3::new(min_pos.x + widht, min_pos.y + height, min_pos.z + depth),
+        Vec3::new(min_pos.x + widht, min_pos.y + height, min_pos.z),
+        Vec3::new(min_pos.x + widht, min_pos.y + height, min_pos.z),
+        Vec3::new(min_pos.x, min_pos.y + height, min_pos.z),
         // connecting lines
-        Vector3::new(min_pos.x, min_pos.y + height, min_pos.z),
-        Vector3::new(min_pos.x, min_pos.y, min_pos.z),
-        Vector3::new(min_pos.x, min_pos.y + height, min_pos.z + depth),
-        Vector3::new(min_pos.x, min_pos.y, min_pos.z + depth),
-        Vector3::new(min_pos.x + widht, min_pos.y + height, min_pos.z),
-        Vector3::new(min_pos.x + widht, min_pos.y, min_pos.z),
-        Vector3::new(min_pos.x + widht, min_pos.y + height, min_pos.z + depth),
-        Vector3::new(min_pos.x + widht, min_pos.y, min_pos.z + depth),
+        Vec3::new(min_pos.x, min_pos.y + height, min_pos.z),
+        Vec3::new(min_pos.x, min_pos.y, min_pos.z),
+        Vec3::new(min_pos.x, min_pos.y + height, min_pos.z + depth),
+        Vec3::new(min_pos.x, min_pos.y, min_pos.z + depth),
+        Vec3::new(min_pos.x + widht, min_pos.y + height, min_pos.z),
+        Vec3::new(min_pos.x + widht, min_pos.y, min_pos.z),
+        Vec3::new(min_pos.x + widht, min_pos.y + height, min_pos.z + depth),
+        Vec3::new(min_pos.x + widht, min_pos.y, min_pos.z + depth),
     ]
     .iter()
     .map(|vec| BoxVert {

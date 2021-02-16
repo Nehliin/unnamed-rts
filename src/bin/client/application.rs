@@ -22,10 +22,10 @@ use crate::client_systems::DebugMenueSettings;
 use crate::client_systems;
 use crossbeam_channel::{Receiver, Sender};
 use debug_lines_pass::BoundingBoxMap;
+use glam::{Quat, Vec3};
 use input::CursorPosition;
 use legion::*;
 use log::warn;
-use nalgebra::{Isometry3, Point3, Vector3};
 use unnamed_rts::{components::{Selectable, Transform}, resources::Time};
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
@@ -104,8 +104,8 @@ impl App {
         //window.set_cursor_visible(false);
         let camera = Camera::new(
             &device,
-            Point3::new(0., 2., 3.5),
-            Vector3::new(0.0, 0.0, -1.0),
+            Vec3::new(0., 2., 3.5),
+            Vec3::new(0.0, 0.0, -1.0),
             size.width,
             size.height,
         );
@@ -189,16 +189,18 @@ impl App {
             suit.clone(),
             Selectable { is_selected: false },
             Transform::new(
-                Isometry3::translation(2.0, 0.0, 0.0),
-                Vector3::new(0.2, 0.2, 0.2),
+                Vec3::new(2.0, 0.0, 0.0),
+                Vec3::new(0.2, 0.2, 0.2),
+                Quat::identity(),
             ),
         ));
         world.push((
             suit,
             Selectable { is_selected: false },
             Transform::new(
-                Isometry3::translation(-2.0, 0.0, 0.0),
-                Vector3::new(0.2, 0.2, 0.2),
+                Vec3::new(-2.0, 0.0, 0.0),
+                Vec3::new(0.2, 0.2, 0.2),
+                Quat::identity(),
             ),
         ));
         App {

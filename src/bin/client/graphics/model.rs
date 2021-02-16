@@ -7,7 +7,7 @@ use super::{
 };
 use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
-use nalgebra::{Matrix4, Vector3};
+use glam::{Mat4, Vec2, Vec3};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::{
     ops::Range,
@@ -25,9 +25,9 @@ pub const INSTANCE_BUFFER_SIZE: u64 = 16_000;
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Pod, Zeroable)]
 pub struct MeshVertex {
-    position: [f32; 3],
-    normal: [f32; 3],
-    tex_coords: [f32; 2],
+    position: Vec3,
+    normal: Vec3,
+    tex_coords: Vec2,
 }
 
 impl VertexBuffer for MeshVertex {
@@ -54,24 +54,16 @@ impl VertexBuffer for MeshVertex {
     }
 }
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[derive(Debug, Default, Clone, Copy, Pod, Zeroable)]
 //TODO: The perspective part isn't needed here
 pub struct InstanceData {
-    model_matrix: [[f32; 4]; 4],
+    model_matrix: Mat4,
 }
 
 impl InstanceData {
-    pub fn new(model_matrix: Matrix4<f32>) -> Self {
+    pub fn new(model_matrix: Mat4) -> Self {
         InstanceData {
-            model_matrix: model_matrix.into(),
-        }
-    }
-}
-
-impl Default for InstanceData {
-    fn default() -> Self {
-        InstanceData {
-            model_matrix: Matrix4::identity().into(),
+            model_matrix,
         }
     }
 }
@@ -124,8 +116,8 @@ pub struct Model {
     pub instance_buffer: MutableVertexData<InstanceData>,
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
-    pub min_position: Vector3<f32>,
-    pub max_position: Vector3<f32>,
+    pub min_position: Vec3,
+    pub max_position: Vec3,
 }
 
 impl Model {
@@ -202,17 +194,17 @@ impl Model {
                             Ordering::AcqRel,
                         );
                         MeshVertex {
-                            position: [
+                            position: Vec3::new(
                                 m.mesh.positions[i * 3],
                                 m.mesh.positions[i * 3 + 1],
                                 m.mesh.positions[i * 3 + 2],
-                            ],
-                            tex_coords: [m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]],
-                            normal: [
+                            ),
+                            tex_coords: Vec2::new(m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]),
+                            normal: Vec3::new(
                                 m.mesh.normals[i * 3],
                                 m.mesh.normals[i * 3 + 1],
                                 m.mesh.normals[i * 3 + 2],
-                            ],
+                            ),
                         }
                     })
                     .collect::<Vec<_>>();
@@ -240,12 +232,12 @@ impl Model {
             meshes,
             materials,
             instance_buffer,
-            min_position: Vector3::new(
+            min_position: Vec3::new(
                 min_position[0].load(Ordering::Acquire) as f32,
                 min_position[1].load(Ordering::Acquire) as f32,
                 min_position[2].load(Ordering::Acquire) as f32,
             ),
-            max_position: Vector3::new(
+            max_position: Vec3::new(
                 max_position[0].load(Ordering::Acquire) as f32,
                 max_position[1].load(Ordering::Acquire) as f32,
                 max_position[2].load(Ordering::Acquire) as f32,

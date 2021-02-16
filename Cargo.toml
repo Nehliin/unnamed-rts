@@ -17,11 +17,11 @@ opt-level = 3
 codegen-units = 1
 
 [dependencies]
-winit = "0.24"
+winit = {version = "0.24", default-features = false, features = ["x11"] }
 futures = "0.3"
 env_logger = "0.8"
 mint = "0.5"
-nalgebra = {version = "0.24", features = ["mint"]}
+glam = {version = "0.12", features = ["mint", "debug-glam-assert", "bytemuck"]}
 wgpu = "0.7"
 log = "0.4"
 legion = "0.3"
@@ -34,6 +34,13 @@ crossbeam-channel = "0.5"
 anyhow = "1"
 egui = "0.8"
 rayon = "1"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "intersection_bench"
+harness = false
 
 [build-dependencies]
 shaderc = "0.7"

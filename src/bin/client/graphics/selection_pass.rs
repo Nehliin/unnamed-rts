@@ -8,7 +8,7 @@ use crate::assets::*;
 use unnamed_rts::components::{Selectable, Transform};
 use crossbeam_channel::Sender;
 use legion::{world::SubWorld, *};
-use nalgebra::Matrix4;
+use glam::{Mat4, Vec3};
 use wgpu::include_spirv;
 
 use super::common::DepthTexture;
@@ -38,7 +38,7 @@ pub fn draw(
             .zip(selectable)
             .filter(|(_, selectable)| selectable.is_selected)
             .map(|(trans, _)| {
-                InstanceData::new(trans.get_model_matrix() * Matrix4::new_scaling(1.01))
+                InstanceData::new(trans.get_model_matrix() * Mat4::from_scale(Vec3::splat(1.01)))
             })
             .collect::<Vec<InstanceData>>();
 

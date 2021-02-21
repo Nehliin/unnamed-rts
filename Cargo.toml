@@ -8,7 +8,7 @@ edition = "2018"
 
 [profile.dev]
 debug = true
-opt-level = 1
+opt-level = 0
 debug-assertions = true
 incremental = true
 
@@ -21,19 +21,22 @@ winit = {version = "0.24", default-features = false, features = ["x11"] }
 futures = "0.3"
 env_logger = "0.8"
 mint = "0.5"
-glam = {version = "0.12", features = ["mint", "debug-glam-assert", "bytemuck"]}
+glam = {version = "0.12", features = ["mint", "serde", "debug-glam-assert", "bytemuck"]}
 wgpu = "0.7"
 log = "0.4"
-legion = "0.3"
+legion = {git = "https://github.com/amethyst/legion.git", commit = "45a0049"}
 crevice = "0.5"
 tobj = "2"
 bytemuck = {version = "1.5", features = ["derive"]}
 image = "0.23"
 once_cell = "1"
-crossbeam-channel = "0.5"
+crossbeam-channel = "0.4.4" # use the same version as laminar
 anyhow = "1"
 egui = "0.8"
 rayon = "1"
+laminar = "0.4"
+bincode = "1.3"
+serde = {version = "1", features = ["derive"]}
 
 [dev-dependencies]
 criterion = "0.3"

@@ -12,6 +12,7 @@ mod application;
 mod assets;
 mod graphics;
 mod input;
+mod client_network;
 
 fn main() {
     env_logger::init();

@@ -14,6 +14,8 @@ pub fn movement(world: &mut SubWorld, command_buffer: &mut CommandBuffer, #[reso
         .iter_mut(world)
         .for_each(|(entity, move_target, velocity, transform)| {
             if !transform.translation.abs_diff_eq(move_target.target, 0.01) {
+                // very temporary fix here
+                velocity.velocity = (transform.translation - move_target.target).normalize() * 3.0;
                 transform.translation += velocity.velocity * time.delta_time;
             } else {
                 velocity.velocity = Vec3::splat(0.0);
@@ -21,3 +23,4 @@ pub fn movement(world: &mut SubWorld, command_buffer: &mut CommandBuffer, #[reso
             }
         });
 }
+

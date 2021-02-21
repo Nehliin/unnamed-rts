@@ -1,5 +1,8 @@
 use std::time::Instant;
 
+use crate::client_network::{handle_server_update, init_client_network};
+use crate::client_systems;
+use crate::client_systems::DebugMenueSettings;
 use crate::{
     assets::{self, Assets},
     graphics::{
@@ -18,15 +21,17 @@ use crate::{
     },
     input::{self, KeyboardState, MouseButtonState, MouseMotion, Text},
 };
-use crate::client_systems::DebugMenueSettings;
-use crate::client_systems;
 use crossbeam_channel::{Receiver, Sender};
 use debug_lines_pass::BoundingBoxMap;
 use glam::{Quat, Vec3};
 use input::CursorPosition;
 use legion::*;
 use log::warn;
-use unnamed_rts::{components::{Selectable, Transform, Velocity}, resources::Time};
+use serialize::Canon;
+use unnamed_rts::{
+    components::{Selectable, Transform, Velocity},
+    resources::{NetResource, Time},
+};
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
     PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
@@ -40,8 +45,6 @@ use winit::{
     },
     window::{Window, WindowId},
 };
-
-
 
 pub struct App {
     world: World,
@@ -113,6 +116,7 @@ impl App {
         let mut assets: Assets<Model> = Assets::new();
         let mut world = World::default();
         let mut resources = Resources::default();
+        init_client_network(&mut resources);
         let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
         let (debug_sender, debug_rc) = crossbeam_channel::bounded(1);
         let (model_sender, model_rc) = crossbeam_channel::bounded(1);
@@ -147,7 +151,6 @@ impl App {
             )))
             .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
             .add_system(client_systems::draw_debug_ui_system())
-            .add_system(unnamed_rts::systems::movement_system())
             .add_system(ui_systems::end_ui_frame_system(UiPass::new(
                 &device, ui_sender,
             )))
@@ -178,6 +181,11 @@ impl App {
         resources.insert(KeyboardState::default());
         resources.insert(MouseButtonState::default());
 
+        let mut registry = Registry::<String>::default();
+        resources.insert(Canon::default());
+        registry.register::<Transform>("transform".to_string());
+        resources.insert(registry);
+
         init_ui_resources(&mut resources, &size, window.scale_factor() as f32);
         // This should be in a game state
         let suit = assets.load("nanosuit/nanosuit.obj").unwrap();
@@ -191,7 +199,7 @@ impl App {
             suit.clone(),
             Selectable { is_selected: false },
             Velocity {
-                velocity: Vec3::splat(0.0)
+                velocity: Vec3::splat(0.0),
             },
             Transform::new(
                 Vec3::new(2.0, 0.0, 0.0),
@@ -207,7 +215,7 @@ impl App {
                 Vec3::new(0.2, 0.2, 0.2),
                 Quat::identity(),
             ),
-        ));*/ 
+        ));*/
         App {
             world,
             schedule,
@@ -383,6 +391,10 @@ impl App {
         self.resources
             .insert(self.swap_chain.get_current_frame()?.output);
         self.schedule.execute(&mut self.world, &mut self.resources);
+        let network = self.resources.get::<NetResource>().unwrap();
+        let registry = self.resources.get::<Registry<String>>().unwrap();
+        let canon = self.resources.get::<Canon>().unwrap();
+        handle_server_update(&mut self.world, &registry, &network, &canon);
         // How to handle the different uniforms?
         let queue = self.resources.get_mut::<Queue>().unwrap();
         queue.submit(self.command_receivers.iter().map(|rc| rc.recv().unwrap()));

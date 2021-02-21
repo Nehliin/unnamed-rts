@@ -8,8 +8,9 @@ use crate::{
     input::{CursorPosition, MouseButtonState},
 };
 use glam::*;
-use legion::{world::SubWorld, *};
+use legion::{*, world::SubWorld};
 use rayon::iter::ParallelIterator;
+use systems::CommandBuffer;
 use unnamed_rts::components::*;
 use unnamed_rts::{components::Selectable, resources::Time};
 use winit::event::MouseButton;
@@ -40,6 +41,49 @@ pub fn draw_debug_ui(
             ui.label(format!("Selected: {}", selectable.is_selected));
         }
     });
+}
+
+#[system]
+#[read_component(Transform)]
+#[read_component(Selectable)]
+#[write_component(Velocity)]
+pub fn move_action(
+    world: &mut SubWorld,
+    command: &mut CommandBuffer,
+    #[resource] camera: &Camera,
+    #[resource] mouse_button_state: &MouseButtonState,
+    #[resource] mouse_pos: &CursorPosition,
+    #[resource] window_size: &WindowSize,
+) {
+    let mut query = <(Entity, Read<Transform>,Write<Velocity>, Read<Selectable>)>::query();
+    if mouse_button_state.pressed_current_frame(&MouseButton::Right) {
+        query
+            .iter_mut(world)
+            // filter this instead
+            .for_each(|(entity, trasform, mut velocity, selectable)| if selectable.is_selected {
+                let ray = camera.raycast(mouse_pos, window_size);
+                // check intersection with the regular ground plan
+                let normal = Vec3A::new(0.0, 1.0, 0.0);
+                
+                let denominator = normal.dot(ray.direction);
+                if denominator.abs() > 0.0001 {
+                 // it isn't parallel to the plane 
+                 // (camera can still theoretically be within the plane but don't care about that)
+                 let t = -(normal.dot(ray.origin)) / denominator;   
+                 if t >= 0.0 {
+                     // there was an intersection 
+                     let move_target = (t * ray.direction) + ray.origin;
+                     let new_velocity = move_target - trasform.translation.into();
+                     velocity.velocity = new_velocity.normalize().into();
+                     velocity.velocity *= 3.0;
+                     command.add_component(*entity, MoveTarget {
+                         target: move_target.into(),
+                     });
+                 }
+                }
+
+            });
+    }
 }
 
 #[system]

@@ -26,7 +26,7 @@ use glam::{Quat, Vec3};
 use input::CursorPosition;
 use legion::*;
 use log::warn;
-use unnamed_rts::{components::{Selectable, Transform}, resources::Time};
+use unnamed_rts::{components::{Selectable, Transform, Velocity}, resources::Time};
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
     PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
@@ -147,9 +147,11 @@ impl App {
             )))
             .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
             .add_system(client_systems::draw_debug_ui_system())
+            .add_system(unnamed_rts::systems::movement_system())
             .add_system(ui_systems::end_ui_frame_system(UiPass::new(
                 &device, ui_sender,
             )))
+            .add_system(client_systems::move_action_system())
             .add_system(input::event_system())
             .build();
 
@@ -188,13 +190,16 @@ impl App {
         world.push((
             suit.clone(),
             Selectable { is_selected: false },
+            Velocity {
+                velocity: Vec3::splat(0.0)
+            },
             Transform::new(
                 Vec3::new(2.0, 0.0, 0.0),
                 Vec3::new(0.2, 0.2, 0.2),
                 Quat::identity(),
             ),
         ));
-        world.push((
+        /*world.push((
             suit,
             Selectable { is_selected: false },
             Transform::new(
@@ -202,7 +207,7 @@ impl App {
                 Vec3::new(0.2, 0.2, 0.2),
                 Quat::identity(),
             ),
-        ));
+        ));*/ 
         App {
             world,
             schedule,

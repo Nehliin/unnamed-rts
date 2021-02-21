@@ -4,15 +4,15 @@ use super::{
     model::{InstanceData, Model},
     vertex_buffers::{ImmutableVertexData, VertexBuffer, VertexBufferData},
 };
-use unnamed_rts::components::Transform;
 use crate::{
-    client_systems::DebugMenueSettings,
     assets::{Assets, Handle},
+    client_systems::DebugMenueSettings,
 };
 use crossbeam_channel::Sender;
-use legion::*;
 use glam::Vec3;
+use legion::*;
 use std::collections::HashMap;
+use unnamed_rts::components::Transform;
 use wgpu::{include_spirv, SwapChainTexture};
 use world::SubWorld;
 
@@ -34,14 +34,16 @@ pub fn update_bounding_boxes(
 ) {
     let mut query = <(Read<Transform>, Read<Handle<Model>>)>::query();
     query.for_each_chunk(world, |chunk| {
-        let model_handle = &chunk.component_slice::<Handle<Model>>().unwrap()[0];
-        let model = asset_storage.get(&model_handle).unwrap();
-        if !bounding_box_map.vertex_info_map.contains_key(&model_handle) {
-            let buffer = calc_buffer(&model.min_position, &model.max_position);
-            bounding_box_map.vertex_info_map.insert(
-                model_handle.clone(),
-                VertexBuffer::allocate_immutable_buffer(&device, &buffer),
-            );
+        let (_, models) = chunk.get_components();
+        if let Some(model_handle) = models.get(0) {
+            let model = asset_storage.get(&model_handle).unwrap();
+            if !bounding_box_map.vertex_info_map.contains_key(&model_handle) {
+                let buffer = calc_buffer(&model.min_position, &model.max_position);
+                bounding_box_map.vertex_info_map.insert(
+                    model_handle.clone(),
+                    VertexBuffer::allocate_immutable_buffer(&device, &buffer),
+                );
+            }
         }
     });
 }
@@ -92,13 +94,14 @@ pub fn draw(
         let mut query = <(Read<Transform>, Read<Handle<Model>>)>::query();
 
         query.for_each_chunk(world, |chunk| {
-            let transforms = chunk.component_slice::<Transform>().unwrap();
-            let model_handle = &chunk.component_slice::<Handle<Model>>().unwrap()[0];
-            let model = asset_storage.get(&model_handle).unwrap();
-            let buffer = bounding_box_map.vertex_info_map.get(&model_handle).unwrap();
-            render_pass.set_vertex_buffer(0, model.instance_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, buffer.slice(..));
-            render_pass.draw(0..24, 0..transforms.len() as u32);
+            let (transforms, models) = chunk.get_components();
+            if let Some(model_handle) = models.get(0) {
+                let model = asset_storage.get(&model_handle).unwrap();
+                let buffer = bounding_box_map.vertex_info_map.get(&model_handle).unwrap();
+                render_pass.set_vertex_buffer(0, model.instance_buffer.slice(..));
+                render_pass.set_vertex_buffer(1, buffer.slice(..));
+                render_pass.draw(0..24, 0..transforms.len() as u32);
+            }
         });
     }
     render_pass.pop_debug_group();

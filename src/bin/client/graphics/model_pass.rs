@@ -1,6 +1,6 @@
-use unnamed_rts::components::Transform;
 use crossbeam_channel::Sender;
 use legion::{world::SubWorld, *};
+use unnamed_rts::components::{Transform};
 use wgpu::include_spirv;
 
 use crate::assets::{Assets, Handle};
@@ -25,16 +25,16 @@ pub fn update(
     let mut query = <(Read<Transform>, Read<Handle<Model>>)>::query();
 
     query.par_for_each_chunk(world, |chunk| {
-        let transforms = chunk.component_slice::<Transform>().unwrap();
-        let model = &chunk.component_slice::<Handle<Model>>().unwrap()[0];
-        // DON'T USE A VEC HERE FOR GODS SAKE
-        let model_matrices = transforms
-            .iter()
-            .map(|trans| InstanceData::new(trans.get_model_matrix()))
-            .collect::<Vec<InstanceData>>();
-
-        let instance_buffer = &asset_storage.get(model).unwrap().instance_buffer;
-        instance_buffer.update(queue, &model_matrices);
+        let (transforms, models) = chunk.get_components();
+        if let Some(model) = models.get(0) {
+            // DON'T USE A VEC HERE FOR GODS SAKE
+            let model_matrices = transforms
+                .iter()
+                .map(|trans| InstanceData::new(trans.get_model_matrix()))
+                .collect::<Vec<InstanceData>>();
+            let instance_buffer = &asset_storage.get(model).unwrap().instance_buffer;
+            instance_buffer.update(queue, &model_matrices);
+        }
     });
 }
 
@@ -84,10 +84,11 @@ pub fn draw(
     render_pass.set_bind_group(0, &pass.camera_bind_group, &[]);
     let mut query = <(Read<Transform>, Read<Handle<Model>>)>::query();
     query.for_each_chunk(world, |chunk| {
-        let transforms = chunk.component_slice::<Transform>().unwrap();
-        let model = &chunk.component_slice::<Handle<Model>>().unwrap()[0];
-        let model = asset_storage.get(model).unwrap();
-        render_pass.draw_model_instanced(model, 0..transforms.len() as u32);
+        let (transforms, models) = chunk.get_components();
+        if let Some(model) = models.get(0) {
+            let model = asset_storage.get(model).unwrap();
+            render_pass.draw_model_instanced(model, 0..transforms.len() as u32);
+        }
     });
     render_pass.pop_debug_group();
     drop(render_pass);

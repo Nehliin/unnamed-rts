@@ -7,7 +7,11 @@ pub struct Selectable {
 }
 
 pub struct Velocity {
-    velocity: Vec2 
+    pub velocity: Vec3 
+}
+
+pub struct MoveTarget {
+    pub target: Vec3
 }
 
 pub struct Transform {

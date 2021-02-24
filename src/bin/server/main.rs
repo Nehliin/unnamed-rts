@@ -1,17 +1,77 @@
+use glam::{Quat, Vec3};
 use laminar::{Config, Packet, Socket, SocketEvent};
 use legion::*;
 use log::{error, info, warn};
-use serialize::Canon;
 use std::time::{Duration, Instant};
 use systems::CommandBuffer;
-use unnamed_rts::resources::{NetResource, Time};
+use unnamed_rts::resources::{
+    NetworkSerialization, NetworkSocket, ServerUpdateType, Time,
+};
 use unnamed_rts::server_systems::*;
-use unnamed_rts::{components::*, resources::ClientActions};
+use unnamed_rts::{components::*, resources::ClientUpdate};
 
 // maybe 0: handle connection init
 // 1. run system fetching client inputs and add componnents etc
 // 2. run game system
 // 3. serialize world and send it out at 30hz
+
+fn setup_world(world: &mut World, net_serilization: &NetworkSerialization) -> Vec<u8> {
+    world.push((
+        EntityType::BasicUnit,
+        Transform::new(
+            Vec3::new(2.0, 0.0, 0.0),
+            Vec3::new(0.2, 0.2, 0.2),
+            Quat::identity(),
+        ),
+    ));
+    net_serilization.serialize_server_update(ServerUpdateType::InitialState, world, any())
+}
+
+fn start_game(
+    socket: &mut Socket,
+    initial_state: Vec<u8>,
+    net_serilization: &NetworkSerialization,
+) {
+    info!("Waiting for client to connect");
+    'outer: loop {
+        for event in socket.get_event_receiver().try_iter() {
+            match event {
+                SocketEvent::Packet(packet) => {
+                    match net_serilization.deserialize_client_update(&packet.payload()) {
+                        ClientUpdate::StartGame => {
+                            info!("Starting game!");
+                            // keep track of clients here later on, count number of players etc etc
+                            let packet = Packet::reliable_ordered(
+                                ([127, 0, 0, 1], 1337).into(),
+                                initial_state,
+                                None,
+                            );
+                            socket
+                                .send(packet)
+                                .expect("failed to send start game packet");
+                            // ugly as hell
+                            socket.manual_poll(Instant::now());
+                            break 'outer;
+                        }
+                        _ => {
+                            warn!("Unexpected packet, match hasn't started");
+                        }
+                    }
+                }
+                SocketEvent::Connect(_) => {
+                    info!("Connection!");
+                }
+                SocketEvent::Timeout(_) => {
+                    warn!("timeout")
+                }
+                SocketEvent::Disconnect(_) => {
+                    error!("Disconnect!");
+                }
+            }
+        }
+        socket.manual_poll(Instant::now());
+    }
+}
 
 fn main() {
     env_logger::builder()
@@ -29,25 +89,23 @@ fn main() {
         },
     )
     .expect("failed to open socket");
-
+    let net_serilization = NetworkSerialization::default();
+    let initial_state = setup_world(&mut world, &net_serilization);
+    start_game(&mut socket, initial_state, &net_serilization);
     resources.insert(Time {
         current_time: Instant::now(),
         delta_time: 0.0,
     });
-
-    resources.insert(NetResource {
+    resources.insert(net_serilization);
+    resources.insert(NetworkSocket {
         sender: socket.get_packet_sender(),
         receiver: socket.get_event_receiver(),
     });
-    // todo switch to uuid? // also break out to the common lib
-    let mut registry = Registry::<String>::default();
-    let canon = Canon::default();
-    registry.register::<Transform>("transform".to_string());
     let mut schedule = Schedule::builder()
         .add_system(client_input_system())
         .add_system(movement_system())
         .build();
-    info!("Server started!");
+    info!("Game started!");
     let mut last_update = Instant::now();
     loop {
         let mut time = resources.get_mut::<Time>().unwrap();
@@ -57,9 +115,8 @@ fn main() {
         drop(time);
 
         schedule.execute(&mut world, &mut resources);
-
-        if (last_update - now).as_secs_f32() >= 0.033 {
-            send_state(&registry, &world, &resources, &canon);
+        if (now - last_update).as_secs_f32() >= 0.033 {
+            send_state(&world, &resources);
             //better to do in other thread probably?
             socket.manual_poll(now);
             last_update = now;
@@ -68,23 +125,27 @@ fn main() {
 }
 
 #[system]
-fn client_input(command_buffer: &mut CommandBuffer, #[resource] network: &NetResource) {
-    for event in network.receiver.iter() {
+fn client_input(
+    command_buffer: &mut CommandBuffer,
+    #[resource] network: &NetworkSocket,
+    #[resource] net_serilization: &NetworkSerialization,
+) {
+    for event in network.receiver.try_iter() {
         match event {
             SocketEvent::Packet(packet) => {
-                if let Ok(client_action) = bincode::deserialize::<ClientActions>(packet.payload()) {
-                    match client_action {
-                        ClientActions::Move { entity, target } => {
-                            command_buffer.add_component(
-                                entity,
-                                MoveTarget {
-                                    target: target.into(),
-                                },
-                            );
-                        }
+                match net_serilization.deserialize_client_update(&packet.payload()) {
+                    ClientUpdate::Move { entity, target } => {
+                        info!("Successfully deserialized packet!");
+                        command_buffer.add_component(
+                            entity,
+                            MoveTarget {
+                                target: target.into(),
+                            },
+                        );
                     }
-                } else {
-                    error!("Failed to deserialize packet!");
+                    ClientUpdate::StartGame => {
+                        warn!("unexpected packet");
+                    }
                 }
             }
             SocketEvent::Connect(addr) => {
@@ -100,14 +161,10 @@ fn client_input(command_buffer: &mut CommandBuffer, #[resource] network: &NetRes
     }
 }
 
-fn send_state(registry: &Registry<String>, world: &World, resources: &Resources, canon: &Canon) {
-    let network = resources.get::<NetResource>().unwrap();
-    let serilizable_world =
-        world.as_serializable(component::<Transform>(), registry, canon);
-    let packet = Packet::reliable_sequenced(
-        ([127, 0, 0, 1], 1337).into(),
-        bincode::serialize(&serilizable_world).expect("failed to serialize"),
-        None,
-    );
+fn send_state(world: &World, resources: &Resources) {
+    let network = resources.get::<NetworkSocket>().unwrap();
+    let net_serilization = resources.get::<NetworkSerialization>().unwrap();
+    let payload = net_serilization.serialize_server_update(ServerUpdateType::Update, world, any());
+    let packet = Packet::reliable_sequenced(([127, 0, 0, 1], 1337).into(), payload, None);
     network.sender.send(packet).unwrap();
 }

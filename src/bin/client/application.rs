@@ -1,5 +1,4 @@
-use std::time::Instant;
-
+use crate::client_network::{add_client_components, connect_to_server};
 use crate::client_network::{handle_server_update, init_client_network};
 use crate::client_systems;
 use crate::client_systems::DebugMenueSettings;
@@ -26,12 +25,9 @@ use debug_lines_pass::BoundingBoxMap;
 use glam::{Quat, Vec3};
 use input::CursorPosition;
 use legion::*;
-use log::warn;
-use serialize::Canon;
-use unnamed_rts::{
-    components::{Selectable, Transform, Velocity},
-    resources::{NetResource, Time},
-};
+use log::{info, warn};
+use std::time::Instant;
+use unnamed_rts::{components::{EntityType, Selectable, Transform, Velocity}, resources::{NetworkSerialization, NetworkSocket, Time}};
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
     PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
@@ -181,21 +177,19 @@ impl App {
         resources.insert(KeyboardState::default());
         resources.insert(MouseButtonState::default());
 
-        let mut registry = Registry::<String>::default();
-        resources.insert(Canon::default());
-        registry.register::<Transform>("transform".to_string());
-        resources.insert(registry);
+        resources.insert(NetworkSerialization::default());
 
         init_ui_resources(&mut resources, &size, window.scale_factor() as f32);
         // This should be in a game state
-        let suit = assets.load("nanosuit/nanosuit.obj").unwrap();
+        //let suit = assets.load("nanosuit/nanosuit.obj").unwrap();
         resources.insert(assets);
         resources.insert(DebugMenueSettings {
             show_grid: true,
             show_bounding_boxes: true,
         });
 
-        world.push((
+        connect_to_server(&resources);
+        /*world.push((
             suit.clone(),
             Selectable { is_selected: false },
             Velocity {
@@ -206,7 +200,7 @@ impl App {
                 Vec3::new(0.2, 0.2, 0.2),
                 Quat::identity(),
             ),
-        ));
+        ));*/
         /*world.push((
             suit,
             Selectable { is_selected: false },
@@ -391,10 +385,12 @@ impl App {
         self.resources
             .insert(self.swap_chain.get_current_frame()?.output);
         self.schedule.execute(&mut self.world, &mut self.resources);
-        let network = self.resources.get::<NetResource>().unwrap();
-        let registry = self.resources.get::<Registry<String>>().unwrap();
-        let canon = self.resources.get::<Canon>().unwrap();
-        handle_server_update(&mut self.world, &registry, &network, &canon);
+        let tmp = handle_server_update(&mut self.world, &mut self.resources);
+        if tmp {
+            info!("Adding component");
+            add_client_components(&mut self.world, &mut self.resources);
+        }
+
         // How to handle the different uniforms?
         let queue = self.resources.get_mut::<Queue>().unwrap();
         queue.submit(self.command_receivers.iter().map(|rc| rc.recv().unwrap()));

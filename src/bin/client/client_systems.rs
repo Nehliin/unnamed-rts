@@ -1,3 +1,6 @@
+use crate::client_network::{SERVER_ADDR, SERVER_PORT};
+use std::net::SocketAddr;
+
 use crate::{
     assets::{Assets, Handle},
     graphics::{
@@ -10,7 +13,6 @@ use crate::{
 use glam::*;
 use legion::{world::SubWorld, *};
 use rayon::iter::ParallelIterator;
-use serialize::Canon;
 use unnamed_rts::components::*;
 use unnamed_rts::resources::*;
 use unnamed_rts::{components::Selectable, resources::Time};
@@ -51,8 +53,8 @@ pub fn move_action(
     #[resource] camera: &Camera,
     #[resource] mouse_button_state: &MouseButtonState,
     #[resource] mouse_pos: &CursorPosition,
-    #[resource] network: &NetResource,
-    #[resource] canon: &Canon,
+    #[resource] network: &NetworkSocket,
+    #[resource] net_serilization: &NetworkSerialization,
     #[resource] window_size: &WindowSize,
 ) {
     let mut query = <(Entity, Read<Selectable>)>::query();
@@ -69,18 +71,16 @@ pub fn move_action(
                     let t = -(normal.dot(ray.origin)) / denominator;
                     if t >= 0.0 {
                         // there was an intersection
-                        let move_target = (t * ray.direction) + ray.origin;
-                        use legion::serialize::{set_entity_serializer};
-                        let test = set_entity_serializer(canon, || {
-                            bincode::serialize(&ClientActions::Move {
+                        let target = (t * ray.direction) + ray.origin;
+                        let payload =
+                            net_serilization.serialize_client_update(&ClientUpdate::Move {
                                 entity: *entity,
-                                target: move_target,
-                            }).unwrap()
-                        });
-                       
+                                target,
+                            });
+
                         let packet = laminar::Packet::reliable_unordered(
-                            ([127, 0, 0, 1], 1338).into(),
-                            test,
+                            SocketAddr::new(SERVER_ADDR.into(), SERVER_PORT),
+                            payload,
                         );
                         network.sender.send(packet).unwrap();
                     }

@@ -16,6 +16,12 @@ pub struct MoveTarget {
     pub target: Vec3,
 }
 
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum EntityType {
+    BasicUnit
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Transform {
     pub rotation: Quat,

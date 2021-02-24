@@ -7,15 +7,17 @@ use winit::{
     window::WindowBuilder,
 };
 
-mod client_systems;
 mod application;
 mod assets;
+mod client_network;
+mod client_systems;
 mod graphics;
 mod input;
-mod client_network;
 
 fn main() {
-    env_logger::init();
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Debug)
+        .init();
     let event_loop = EventLoop::new();
 
     let window = WindowBuilder::new()

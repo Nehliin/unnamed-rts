@@ -16,7 +16,7 @@ mod input;
 
 fn main() {
     env_logger::builder()
-        .filter_level(log::LevelFilter::Debug)
+        .filter_level(log::LevelFilter::Info)
         .init();
     let event_loop = EventLoop::new();
 

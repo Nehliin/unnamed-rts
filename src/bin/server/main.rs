@@ -4,9 +4,7 @@ use legion::*;
 use log::{error, info, warn};
 use std::time::{Duration, Instant};
 use systems::CommandBuffer;
-use unnamed_rts::resources::{
-    NetworkSerialization, NetworkSocket, ServerUpdateType, Time,
-};
+use unnamed_rts::resources::{NetworkSerialization, NetworkSocket, ServerUpdate, ServerUpdateType, Time};
 use unnamed_rts::server_systems::*;
 use unnamed_rts::{components::*, resources::ClientUpdate};
 
@@ -23,6 +21,9 @@ fn setup_world(world: &mut World, net_serilization: &NetworkSerialization) -> Ve
             Vec3::new(0.2, 0.2, 0.2),
             Quat::identity(),
         ),
+        Velocity {
+            velocity: Vec3::splat(0.0),
+        },
     ));
     net_serilization.serialize_server_update(ServerUpdateType::InitialState, world, any())
 }

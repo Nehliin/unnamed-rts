@@ -3,10 +3,11 @@ use bincode::{DefaultOptions, Options};
 use crossbeam_channel::{Receiver, Sender};
 use glam::Vec3A;
 use laminar::{Packet, SocketEvent};
-use legion::{any, query::LayoutFilter, serialize::Canon, Entity, Registry, World};
+use legion::{query::LayoutFilter, serialize::Canon, *};
+use legion_typeuuid::{collect_registry, register_serialize, SerializableTypeUuid};
 use serde::{de::DeserializeSeed, Deserialize, Serialize};
 
-use crate::components::{EntityType, Transform};
+use crate::components::{EntityType, MoveTarget, Transform, Velocity};
 
 #[derive(Debug)]
 pub struct Time {
@@ -39,15 +40,22 @@ pub struct ServerUpdate {
 }
 
 pub struct NetworkSerialization {
-    registry: Registry<String>,
+    registry: Registry<SerializableTypeUuid>,
     canon: Canon,
 }
 
 impl Default for NetworkSerialization {
     fn default() -> Self {
+        // This is very annoying, but needed because of custom legion version
         let mut registry = Registry::default();
-        registry.register::<Transform>("transform".to_string());
-        registry.register::<EntityType>("entity_type".to_string());
+        let uuid = SerializableTypeUuid::parse_str("1d97d71a-76bf-41d1-94c3-fcaac8231f12").unwrap();
+        registry.register::<Velocity>(uuid);
+        let uuid = SerializableTypeUuid::parse_str("51b229c8-4b3e-4462-b4bf-5ebeb80880e6").unwrap();
+        registry.register::<MoveTarget>(uuid);
+        let uuid = SerializableTypeUuid::parse_str("71d225bb-a312-45b8-85af-d98649804ac8").unwrap();
+        registry.register::<Transform>(uuid);
+        let uuid = SerializableTypeUuid::parse_str("a22e4176-748f-4882-8376-b1047b130caf").unwrap();
+        registry.register::<EntityType>(uuid);
         NetworkSerialization {
             registry,
             canon: Canon::default(),
@@ -76,12 +84,34 @@ impl NetworkSerialization {
         world: &World,
         filter: F,
     ) -> Vec<u8> {
-        let world_bytes = self.serialize_world(&world, filter);
-        bincode::serialize(&ServerUpdate {
-            update_type,
-            world_bytes,
-        })
-        .unwrap()
+        match update_type {
+            ServerUpdateType::InitialState => {
+                let world_bytes = self.serialize_world(&world, filter);
+                bincode::serialize(&ServerUpdate {
+                    update_type,
+                    world_bytes,
+                })
+                .unwrap()
+            }
+            ServerUpdateType::Update => {
+                let mut query = <(Entity, Read<Transform>)>::query();
+                let test: Vec<(Entity, Transform)> =
+                    query.iter(world).map(|(e, t)| (*e, *t)).collect();
+                use legion::serialize::set_entity_serializer;
+                set_entity_serializer(&self.canon, || {
+                    bincode::serialize(&ServerUpdate {
+                        update_type,
+                        world_bytes: bincode::serialize(&test).unwrap(),
+                    })
+                    .unwrap()
+                })
+            }
+        }
+    }
+
+    pub fn deserialize_update(&self, bytes: &[u8]) -> Vec<(Entity, Transform)> {
+        use legion::serialize::set_entity_serializer;
+        set_entity_serializer(&self.canon, || bincode::deserialize(bytes).unwrap())
     }
 
     pub fn deserialize_server_update(&self, bytes: &[u8]) -> ServerUpdate {

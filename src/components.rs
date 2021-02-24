@@ -1,28 +1,30 @@
 #![allow(unused)]
-
 use glam::*;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug)]
 pub struct Selectable {
     pub is_selected: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy )]
 pub struct Velocity {
     pub velocity: Vec3,
 }
 
-// currently only used server side
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct MoveTarget {
     pub target: Vec3,
 }
 
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum EntityType {
     BasicUnit
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct Transform {
     pub rotation: Quat,
     pub scale: Vec3,

@@ -4,13 +4,21 @@ This is a hobby project that is a continuation of my 3D graphical programming ex
 
 
 Current goals:
-- [x] Multi-threaded rendering
+- [x] Multi-threaded rendering using wgpu
 - [x] Ui support using egui
 - [ ] Animations
 - [ ] RTS game mechanics
 - [ ] Map editor
-- [ ] Basic Online multiplayer support
+-  Basic Online multiplayer support is in progress using laminar. Ambition and quality of this goal depends amount of time I spend on this project. 
+   - [x] Server owns the player state and updates client at ~30hz
+   - [x] Client send actions which are handled by the server (like move command) 
+   - [ ] Actual multiplayer (Currently only a single client can connect to the server)
+   - [ ] Win conditions
+   - [ ] Game time
+   - [ ] Scale to large number of units
+   - [ ] New unit creation  
+   - ...and a lot more obviously 
 
-### Screenshot
+### Screenshot (a bit outdated)
 Not much to look at currently but feels like all graphical repos should have at least a one screenshot
 ![Alt text](rts.png?raw=true "A screenshot")

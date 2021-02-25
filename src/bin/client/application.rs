@@ -22,12 +22,12 @@ use crate::{
 };
 use crossbeam_channel::{Receiver, Sender};
 use debug_lines_pass::BoundingBoxMap;
-use glam::{Quat, Vec3};
+use glam::Vec3;
 use input::CursorPosition;
 use legion::*;
 use log::{info, warn};
 use std::time::Instant;
-use unnamed_rts::{components::{EntityType, Selectable, Transform, Velocity}, resources::{NetworkSerialization, NetworkSocket, Time}};
+use unnamed_rts::resources::{NetworkSerialization, Time};
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
     PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
@@ -109,10 +109,8 @@ impl App {
             size.height,
         );
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
-        let mut assets: Assets<Model> = Assets::new();
         let mut world = World::default();
         let mut resources = Resources::default();
-        init_client_network(&mut resources);
         let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
         let (debug_sender, debug_rc) = crossbeam_channel::bounded(1);
         let (model_sender, model_rc) = crossbeam_channel::bounded(1);
@@ -178,38 +176,20 @@ impl App {
         resources.insert(MouseButtonState::default());
 
         resources.insert(NetworkSerialization::default());
-
+        // prelode assets: TODO: do this in app main and fetch handle based on path instead
+        let mut assets = Assets::<Model>::new();
+        let suit = assets.load("nanosuit/nanosuit.obj").unwrap();
         init_ui_resources(&mut resources, &size, window.scale_factor() as f32);
-        // This should be in a game state
-        //let suit = assets.load("nanosuit/nanosuit.obj").unwrap();
         resources.insert(assets);
         resources.insert(DebugMenueSettings {
             show_grid: true,
             show_bounding_boxes: true,
         });
 
-        connect_to_server(&resources);
-        /*world.push((
-            suit.clone(),
-            Selectable { is_selected: false },
-            Velocity {
-                velocity: Vec3::splat(0.0),
-            },
-            Transform::new(
-                Vec3::new(2.0, 0.0, 0.0),
-                Vec3::new(0.2, 0.2, 0.2),
-                Quat::identity(),
-            ),
-        ));*/
-        /*world.push((
-            suit,
-            Selectable { is_selected: false },
-            Transform::new(
-                Vec3::new(-2.0, 0.0, 0.0),
-                Vec3::new(0.2, 0.2, 0.2),
-                Quat::identity(),
-            ),
-        ));*/
+        // Set up network and connect to server
+        init_client_network(&mut resources);
+        connect_to_server(&mut world, &mut resources);
+        add_client_components(&mut world, &mut resources, &suit);
         App {
             world,
             schedule,
@@ -385,11 +365,7 @@ impl App {
         self.resources
             .insert(self.swap_chain.get_current_frame()?.output);
         self.schedule.execute(&mut self.world, &mut self.resources);
-        let tmp = handle_server_update(&mut self.world, &mut self.resources);
-        if tmp {
-            info!("Adding component");
-            add_client_components(&mut self.world, &mut self.resources);
-        }
+        handle_server_update(&mut self.world, &mut self.resources);
 
         // How to handle the different uniforms?
         let queue = self.resources.get_mut::<Queue>().unwrap();

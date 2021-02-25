@@ -1,13 +1,13 @@
-use bincode::{de::Deserializer, deserialize};
+use anyhow::Result;
+use bincode::de::Deserializer;
 use bincode::{DefaultOptions, Options};
 use crossbeam_channel::{Receiver, Sender};
 use glam::Vec3A;
 use laminar::{Packet, SocketEvent};
 use legion::{query::LayoutFilter, serialize::Canon, *};
-use legion_typeuuid::{collect_registry, register_serialize, SerializableTypeUuid};
 use serde::{de::DeserializeSeed, Deserialize, Serialize};
 
-use crate::components::{EntityType, MoveTarget, Transform, Velocity};
+use crate::components::{EntityType, Transform, Velocity};
 
 #[derive(Debug)]
 pub struct Time {
@@ -27,119 +27,70 @@ pub enum ClientUpdate {
     Move { entity: Entity, target: Vec3A },
     StartGame,
 }
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
-pub enum ServerUpdateType {
-    InitialState,
-    Update,
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum ServerUpdate {
+    State {
+        transforms: Vec<(Entity, Transform)>,
+    },
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct ServerUpdate {
-    pub update_type: ServerUpdateType,
-    pub world_bytes: Vec<u8>,
-}
+pub const SERVER_UPDATE_STREAM: u8 = 1;
+pub const CLIENT_UPDATE_STREAM: u8 = 2;
 
 pub struct NetworkSerialization {
-    registry: Registry<SerializableTypeUuid>,
+    registry: Registry<i32>,
     canon: Canon,
 }
 
 impl Default for NetworkSerialization {
     fn default() -> Self {
-        // This is very annoying, but needed because of custom legion version
         let mut registry = Registry::default();
-        let uuid = SerializableTypeUuid::parse_str("1d97d71a-76bf-41d1-94c3-fcaac8231f12").unwrap();
-        registry.register::<Velocity>(uuid);
-        let uuid = SerializableTypeUuid::parse_str("51b229c8-4b3e-4462-b4bf-5ebeb80880e6").unwrap();
-        registry.register::<MoveTarget>(uuid);
-        let uuid = SerializableTypeUuid::parse_str("71d225bb-a312-45b8-85af-d98649804ac8").unwrap();
-        registry.register::<Transform>(uuid);
-        let uuid = SerializableTypeUuid::parse_str("a22e4176-748f-4882-8376-b1047b130caf").unwrap();
-        registry.register::<EntityType>(uuid);
+        registry.register::<Velocity>(1);
+        registry.register::<Transform>(2);
+        registry.register::<EntityType>(3);
         NetworkSerialization {
             registry,
             canon: Canon::default(),
         }
     }
 }
-
+// TODO: refactor this 
 impl NetworkSerialization {
     pub fn serialize_client_update(&self, update: &ClientUpdate) -> Vec<u8> {
         use legion::serialize::set_entity_serializer;
         set_entity_serializer(&self.canon, || {
-            bincode::serialize(&update).expect("Client action to be seializable")
+            bincode::serialize(&update).expect("Client update to be seializable")
         })
     }
 
     pub fn deserialize_client_update(&self, bytes: &[u8]) -> ClientUpdate {
         use legion::serialize::set_entity_serializer;
         set_entity_serializer(&self.canon, || {
-            bincode::deserialize(bytes).expect("Client action to be deserializable")
+            bincode::deserialize(bytes).expect("Client update to be deserializable")
         })
     }
 
-    pub fn serialize_server_update<F: LayoutFilter>(
-        &self,
-        update_type: ServerUpdateType,
-        world: &World,
-        filter: F,
-    ) -> Vec<u8> {
-        match update_type {
-            ServerUpdateType::InitialState => {
-                let world_bytes = self.serialize_world(&world, filter);
-                bincode::serialize(&ServerUpdate {
-                    update_type,
-                    world_bytes,
-                })
-                .unwrap()
-            }
-            ServerUpdateType::Update => {
-                let mut query = <(Entity, Read<Transform>)>::query();
-                let test: Vec<(Entity, Transform)> =
-                    query.iter(world).map(|(e, t)| (*e, *t)).collect();
-                use legion::serialize::set_entity_serializer;
-                set_entity_serializer(&self.canon, || {
-                    bincode::serialize(&ServerUpdate {
-                        update_type,
-                        world_bytes: bincode::serialize(&test).unwrap(),
-                    })
-                    .unwrap()
-                })
-            }
-        }
-    }
-
-    pub fn deserialize_update(&self, bytes: &[u8]) -> Vec<(Entity, Transform)> {
+    pub fn serialize_server_update(&self, server_update: &ServerUpdate) -> Vec<u8> {
         use legion::serialize::set_entity_serializer;
-        set_entity_serializer(&self.canon, || bincode::deserialize(bytes).unwrap())
+        set_entity_serializer(&self.canon, || bincode::serialize(server_update).expect("Server update to be serializable"))
     }
 
     pub fn deserialize_server_update(&self, bytes: &[u8]) -> ServerUpdate {
-        //TODO: avoid double deserilization? also is this even necessary??
-        bincode::deserialize(bytes).expect("Can't deserialize server update!")
+        use legion::serialize::set_entity_serializer;
+        set_entity_serializer(&self.canon, || bincode::deserialize(bytes).expect("Server update to be serializable"))
     }
 
-    pub fn deserialize_new_world(&self, world_bytes: &[u8]) -> World {
-        self.registry
-            .as_deserialize(&self.canon)
-            .deserialize(&mut Deserializer::from_slice(
+    pub fn deserialize_new_world(&self, world_bytes: &[u8]) -> Result<World> {
+        let new_world = self.registry.as_deserialize(&self.canon).deserialize(
+            &mut Deserializer::from_slice(
                 &world_bytes,
                 DefaultOptions::new()
                     .with_fixint_encoding()
                     .allow_trailing_bytes(),
-            ))
-            .expect("World to be deserializable")
-    }
-    pub fn deserialize_into_world(&self, world: &mut World, world_bytes: &[u8]) {
-        self.registry
-            .as_deserialize_into_world(world, &self.canon)
-            .deserialize(&mut Deserializer::from_slice(
-                &world_bytes,
-                DefaultOptions::new()
-                    .with_fixint_encoding()
-                    .allow_trailing_bytes(),
-            ))
-            .expect("World to be deserializable");
+            ),
+        )?;
+        Ok(new_world)
     }
 
     pub fn serialize_world<F: LayoutFilter>(&self, world: &World, filter: F) -> Vec<u8> {

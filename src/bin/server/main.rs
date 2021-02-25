@@ -1,17 +1,14 @@
 use glam::{Quat, Vec3};
-use laminar::{Config, Packet, Socket, SocketEvent};
-use legion::*;
+use laminar::{Packet, Socket, SocketEvent};
+use legion::{world::SubWorld, *};
 use log::{error, info, warn};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use systems::CommandBuffer;
-use unnamed_rts::resources::{NetworkSerialization, NetworkSocket, ServerUpdate, ServerUpdateType, Time};
+use unnamed_rts::resources::{
+    NetworkSerialization, NetworkSocket, ServerUpdate, Time, SERVER_UPDATE_STREAM,
+};
 use unnamed_rts::server_systems::*;
 use unnamed_rts::{components::*, resources::ClientUpdate};
-
-// maybe 0: handle connection init
-// 1. run system fetching client inputs and add componnents etc
-// 2. run game system
-// 3. serialize world and send it out at 30hz
 
 fn setup_world(world: &mut World, net_serilization: &NetworkSerialization) -> Vec<u8> {
     world.push((
@@ -25,7 +22,7 @@ fn setup_world(world: &mut World, net_serilization: &NetworkSerialization) -> Ve
             velocity: Vec3::splat(0.0),
         },
     ));
-    net_serilization.serialize_server_update(ServerUpdateType::InitialState, world, any())
+    net_serilization.serialize_world(world, any())
 }
 
 fn start_game(
@@ -50,7 +47,7 @@ fn start_game(
                             socket
                                 .send(packet)
                                 .expect("failed to send start game packet");
-                            // ugly as hell
+                            // not super pretty 
                             socket.manual_poll(Instant::now());
                             break 'outer;
                         }
@@ -82,14 +79,7 @@ fn main() {
     let mut world = World::default();
     let mut resources = Resources::default();
     info!("Starting server..");
-    let mut socket = Socket::bind_with_config(
-        "127.0.0.1:1338",
-        Config {
-            heartbeat_interval: Some(Duration::from_millis(50)),
-            ..Default::default()
-        },
-    )
-    .expect("failed to open socket");
+    let mut socket = Socket::bind("127.0.0.1:1338").expect("failed to open socket");
     let net_serilization = NetworkSerialization::default();
     let initial_state = setup_world(&mut world, &net_serilization);
     start_game(&mut socket, initial_state, &net_serilization);
@@ -162,10 +152,43 @@ fn client_input(
     }
 }
 
+// Do we really want this in a system?
+// might fill upp the send buffer quite fast
+#[system]
+#[read_component(Transform)]
+fn server_output(
+    world: &SubWorld,
+    #[resource] net_serialization: &NetworkSerialization,
+    #[resource] network: &NetworkSocket,
+) {
+    // TODO: use bump allcation for this
+    let transforms: Vec<(Entity, Transform)> = <(Entity, Read<Transform>)>::query()
+        .iter(world)
+        .map(|(e, t)| (*e, *t))
+        .collect();
+    let server_update = ServerUpdate::State { transforms };
+    let payload = net_serialization.serialize_server_update(&server_update);
+    network
+        .sender
+        .send(Packet::unreliable_sequenced(
+            ([127, 0, 0, 1], 1337).into(),
+            payload,
+            Some(SERVER_UPDATE_STREAM),
+        ))
+        .unwrap();
+}
+
 fn send_state(world: &World, resources: &Resources) {
     let network = resources.get::<NetworkSocket>().unwrap();
     let net_serilization = resources.get::<NetworkSerialization>().unwrap();
-    let payload = net_serilization.serialize_server_update(ServerUpdateType::Update, world, any());
-    let packet = Packet::reliable_sequenced(([127, 0, 0, 1], 1337).into(), payload, None);
+    let mut query = <(Entity, Read<Transform>)>::query();
+    let transforms: Vec<(Entity, Transform)> = query.iter(world).map(|(e, t)| (*e, *t)).collect();
+    let server_update = ServerUpdate::State { transforms };
+    let payload = net_serilization.serialize_server_update(&server_update);
+    let packet = Packet::unreliable_sequenced(
+        ([127, 0, 0, 1], 1337).into(),
+        payload,
+        Some(SERVER_UPDATE_STREAM),
+    );
     network.sender.send(packet).unwrap();
 }

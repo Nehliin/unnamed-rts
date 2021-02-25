@@ -7,14 +7,17 @@ use winit::{
     window::WindowBuilder,
 };
 
-mod client_systems;
 mod application;
 mod assets;
+mod client_network;
+mod client_systems;
 mod graphics;
 mod input;
 
 fn main() {
-    env_logger::init();
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .init();
     let event_loop = EventLoop::new();
 
     let window = WindowBuilder::new()
@@ -30,16 +33,15 @@ fn main() {
                     window_id,
                 } if window_id == window.id() => match event {
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                    WindowEvent::KeyboardInput { input, .. } => {
-                        if let KeyboardInput {
-                            state: ElementState::Pressed,
-                            virtual_keycode: Some(VirtualKeyCode::Escape),
-                            ..
-                        } = input
-                        {
-                            *control_flow = ControlFlow::Exit
-                        }
-                    }
+                    WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::Escape),
+                                ..
+                            },
+                        ..
+                    } => *control_flow = ControlFlow::Exit,
                     _ => {}
                 },
                 Event::RedrawRequested(_) => {

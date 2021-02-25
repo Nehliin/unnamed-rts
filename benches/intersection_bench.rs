@@ -66,7 +66,7 @@ fn old_intersection(c: &mut Criterion) {
                 black_box(Vec3::new(0.0, 2.0, 3.5)),
                 black_box(Vec3::new(2.1791692, 138.40993, -1.125587)),
                 black_box(Vec3::new(-2.8, 0.0, -0.4)),
-                black_box(Vec3::new(-1.2, 3.2, 0.4))
+                black_box(Vec3::new(-1.2, 3.2, 0.4)),
             )
         })
     });
@@ -79,7 +79,7 @@ fn new_intersection(c: &mut Criterion) {
                 black_box(Vec3A::new(0.0, 2.0, 3.5)),
                 black_box(Vec3A::new(2.1791692, 138.40993, -1.125587)),
                 black_box(Vec3A::new(-2.8, 0.0, -0.4)),
-                black_box(Vec3A::new(-1.2, 3.2, 0.4))
+                black_box(Vec3A::new(-1.2, 3.2, 0.4)),
             )
         })
     });

@@ -3,14 +3,11 @@ use std::time::Instant;
 use egui::{pos2, vec2};
 use input::{CursorPosition, Text};
 use legion::*;
+use unnamed_rts::resources::Time;
 use wgpu::{CommandEncoderDescriptor, Device, Queue, SwapChainTexture};
 use winit::event::{ModifiersState, MouseButton, MouseScrollDelta};
-use unnamed_rts::resources::Time;
 
-
-use crate::{
-    input::{self, EventReader},
-};
+use crate::input::{self, EventReader};
 
 use super::{
     ui_context::{UiContext, WindowSize},

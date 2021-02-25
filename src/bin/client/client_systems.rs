@@ -1,3 +1,6 @@
+use crate::client_network::{SERVER_ADDR, SERVER_PORT};
+use std::net::SocketAddr;
+
 use crate::{
     assets::{Assets, Handle},
     graphics::{
@@ -11,6 +14,7 @@ use glam::*;
 use legion::{world::SubWorld, *};
 use rayon::iter::ParallelIterator;
 use unnamed_rts::components::*;
+use unnamed_rts::resources::*;
 use unnamed_rts::{components::Selectable, resources::Time};
 use winit::event::MouseButton;
 pub struct DebugMenueSettings {
@@ -40,6 +44,50 @@ pub fn draw_debug_ui(
             ui.label(format!("Selected: {}", selectable.is_selected));
         }
     });
+}
+
+#[system]
+#[read_component(Selectable)]
+pub fn move_action(
+    world: &mut SubWorld,
+    #[resource] camera: &Camera,
+    #[resource] mouse_button_state: &MouseButtonState,
+    #[resource] mouse_pos: &CursorPosition,
+    #[resource] network: &NetworkSocket,
+    #[resource] net_serilization: &NetworkSerialization,
+    #[resource] window_size: &WindowSize,
+) {
+    let mut query = <(Entity, Read<Selectable>)>::query();
+    if mouse_button_state.pressed_current_frame(&MouseButton::Right) {
+        query.par_for_each(world, |(entity, selectable)| {
+            if selectable.is_selected {
+                let ray = camera.raycast(mouse_pos, window_size);
+                // check intersection with the regular ground plan
+                let normal = Vec3A::new(0.0, 1.0, 0.0);
+                let denominator = normal.dot(ray.direction);
+                if denominator.abs() > 0.0001 {
+                    // it isn't parallel to the plane
+                    // (camera can still theoretically be within the plane but don't care about that)
+                    let t = -(normal.dot(ray.origin)) / denominator;
+                    if t >= 0.0 {
+                        // there was an intersection
+                        let target = (t * ray.direction) + ray.origin;
+                        let payload =
+                            net_serilization.serialize_client_update(&ClientUpdate::Move {
+                                entity: *entity,
+                                target,
+                            });
+
+                        let packet = laminar::Packet::reliable_unordered(
+                            SocketAddr::new(SERVER_ADDR.into(), SERVER_PORT),
+                            payload,
+                        );
+                        network.sender.send(packet).unwrap();
+                    }
+                }
+            }
+        });
+    }
 }
 
 #[system]

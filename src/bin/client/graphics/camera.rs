@@ -29,7 +29,7 @@ impl From<&Camera> for CameraUniform {
     fn from(camera: &Camera) -> Self {
         CameraUniform {
             view_matrix: camera.view_matrix.into(),
-            projection:  camera.proj_matrix.into(),
+            projection: camera.proj_matrix.into(),
             view_pos: camera.get_position().into(),
         }
     }
@@ -52,12 +52,18 @@ pub fn free_flying_camera(
     #[resource] queue: &wgpu::Queue,
 ) {
     if keyboard_state.is_pressed(VirtualKeyCode::A) {
-        camera.position += camera.direction.cross(Vec3A::new(0.0, 1.0, 0.0)).normalize()
+        camera.position += camera
+            .direction
+            .cross(Vec3A::new(0.0, 1.0, 0.0))
+            .normalize()
             * -CAMERA_SPEED
             * time.delta_time;
     }
     if keyboard_state.is_pressed(VirtualKeyCode::D) {
-        camera.position += camera.direction.cross(Vec3A::new(0.0, 1.0, 0.0)).normalize()
+        camera.position += camera
+            .direction
+            .cross(Vec3A::new(0.0, 1.0, 0.0))
+            .normalize()
             * CAMERA_SPEED
             * time.delta_time;
     }

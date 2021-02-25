@@ -5,10 +5,10 @@ use super::{
     vertex_buffers::{MutableVertexData, VertexBuffer},
 };
 use crate::assets::*;
-use unnamed_rts::components::{Selectable, Transform};
 use crossbeam_channel::Sender;
-use legion::{world::SubWorld, *};
 use glam::{Mat4, Vec3};
+use legion::{world::SubWorld, *};
+use unnamed_rts::components::{Selectable, Transform};
 use wgpu::include_spirv;
 
 use super::common::DepthTexture;
@@ -30,8 +30,7 @@ pub fn draw(
     let mut query = <(Read<Transform>, Read<Selectable>, Read<Handle<Model>>)>::query();
 
     query.par_for_each_chunk(world, |chunk| {
-        let transforms = chunk.component_slice::<Transform>().unwrap();
-        let selectable = chunk.component_slice::<Selectable>().unwrap();
+        let (transforms, selectable, _) = chunk.get_components();
         // DON'T USE A VEC HERE FOR GODS SAKE
         let model_matrices = transforms
             .iter()
@@ -75,14 +74,19 @@ pub fn draw(
     render_pass.set_bind_group(0, &pass.camera_bind_group, &[]);
     let mut query = <(Read<Transform>, Read<Selectable>, Read<Handle<Model>>)>::query();
     query.for_each_chunk(world, |chunk| {
-        let model = &chunk.component_slice::<Handle<Model>>().unwrap()[0];
-        let selectable = chunk.component_slice::<Selectable>().unwrap();
-        let model = asset_storage.get(model).unwrap();
-        let count = selectable
-            .iter()
-            .filter(|selectable| selectable.is_selected)
-            .count();
-        render_pass.draw_model_with_instance_buffer(model, &pass.instance_buffer, 0..count as u32);
+        let (_, selectable, models) = chunk.get_components();
+        if let Some(model) = models.get(0) {
+            let model = asset_storage.get(model).unwrap();
+            let count = selectable
+                .iter()
+                .filter(|selectable| selectable.is_selected)
+                .count();
+            render_pass.draw_model_with_instance_buffer(
+                model,
+                &pass.instance_buffer,
+                0..count as u32,
+            );
+        }
     });
     render_pass.pop_debug_group();
     drop(render_pass);

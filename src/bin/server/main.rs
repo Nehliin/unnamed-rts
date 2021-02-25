@@ -1,6 +1,6 @@
 use glam::{Quat, Vec3};
 use laminar::{Packet, Socket, SocketEvent};
-use legion::{world::SubWorld, *};
+use legion::*;
 use log::{error, info, warn};
 use std::time::Instant;
 use systems::CommandBuffer;
@@ -11,17 +11,30 @@ use unnamed_rts::server_systems::*;
 use unnamed_rts::{components::*, resources::ClientUpdate};
 
 fn setup_world(world: &mut World, net_serilization: &NetworkSerialization) -> Vec<u8> {
-    world.push((
-        EntityType::BasicUnit,
-        Transform::new(
-            Vec3::new(2.0, 0.0, 0.0),
-            Vec3::new(0.2, 0.2, 0.2),
-            Quat::identity(),
+    world.extend(vec![
+        (
+            EntityType::BasicUnit,
+            Transform::new(
+                Vec3::new(2.0, 0.0, 0.0),
+                Vec3::new(0.2, 0.2, 0.2),
+                Quat::identity(),
+            ),
+            Velocity {
+                velocity: Vec3::splat(0.0),
+            },
         ),
-        Velocity {
-            velocity: Vec3::splat(0.0),
-        },
-    ));
+        (
+            EntityType::BasicUnit,
+            Transform::new(
+                Vec3::new(-2.0, 0.0, 0.0),
+                Vec3::new(0.2, 0.2, 0.2),
+                Quat::identity(),
+            ),
+            Velocity {
+                velocity: Vec3::splat(0.0),
+            },
+        ),
+    ]);
     net_serilization.serialize_world(world, any())
 }
 
@@ -47,7 +60,7 @@ fn start_game(
                             socket
                                 .send(packet)
                                 .expect("failed to send start game packet");
-                            // not super pretty 
+                            // not super pretty
                             socket.manual_poll(Instant::now());
                             break 'outer;
                         }
@@ -150,32 +163,6 @@ fn client_input(
             }
         }
     }
-}
-
-// Do we really want this in a system?
-// might fill upp the send buffer quite fast
-#[system]
-#[read_component(Transform)]
-fn server_output(
-    world: &SubWorld,
-    #[resource] net_serialization: &NetworkSerialization,
-    #[resource] network: &NetworkSocket,
-) {
-    // TODO: use bump allcation for this
-    let transforms: Vec<(Entity, Transform)> = <(Entity, Read<Transform>)>::query()
-        .iter(world)
-        .map(|(e, t)| (*e, *t))
-        .collect();
-    let server_update = ServerUpdate::State { transforms };
-    let payload = net_serialization.serialize_server_update(&server_update);
-    network
-        .sender
-        .send(Packet::unreliable_sequenced(
-            ([127, 0, 0, 1], 1337).into(),
-            payload,
-            Some(SERVER_UPDATE_STREAM),
-        ))
-        .unwrap();
 }
 
 fn send_state(world: &World, resources: &Resources) {

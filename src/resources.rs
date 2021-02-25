@@ -55,7 +55,7 @@ impl Default for NetworkSerialization {
         }
     }
 }
-// TODO: refactor this 
+// TODO: refactor this
 impl NetworkSerialization {
     pub fn serialize_client_update(&self, update: &ClientUpdate) -> Vec<u8> {
         use legion::serialize::set_entity_serializer;
@@ -73,12 +73,16 @@ impl NetworkSerialization {
 
     pub fn serialize_server_update(&self, server_update: &ServerUpdate) -> Vec<u8> {
         use legion::serialize::set_entity_serializer;
-        set_entity_serializer(&self.canon, || bincode::serialize(server_update).expect("Server update to be serializable"))
+        set_entity_serializer(&self.canon, || {
+            bincode::serialize(server_update).expect("Server update to be serializable")
+        })
     }
 
     pub fn deserialize_server_update(&self, bytes: &[u8]) -> ServerUpdate {
         use legion::serialize::set_entity_serializer;
-        set_entity_serializer(&self.canon, || bincode::deserialize(bytes).expect("Server update to be serializable"))
+        set_entity_serializer(&self.canon, || {
+            bincode::deserialize(bytes).expect("Server update to be serializable")
+        })
     }
 
     pub fn deserialize_new_world(&self, world_bytes: &[u8]) -> Result<World> {

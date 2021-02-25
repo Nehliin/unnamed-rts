@@ -7,21 +7,19 @@ pub struct Selectable {
     pub is_selected: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy )]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct Velocity {
     pub velocity: Vec3,
 }
-
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct MoveTarget {
     pub target: Vec3,
 }
 
-
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum EntityType {
-    BasicUnit
+    BasicUnit,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]

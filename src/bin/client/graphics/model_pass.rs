@@ -1,6 +1,6 @@
 use crossbeam_channel::Sender;
 use legion::{world::SubWorld, *};
-use unnamed_rts::components::{Transform};
+use unnamed_rts::components::Transform;
 use wgpu::include_spirv;
 
 use crate::assets::{Assets, Handle};

@@ -180,6 +180,7 @@ impl App {
         let mut assets = Assets::<Model>::new();
         let suit = assets.load("nanosuit/nanosuit.obj").unwrap();
         init_ui_resources(&mut resources, &size, window.scale_factor() as f32);
+
         resources.insert(assets);
         resources.insert(DebugMenueSettings {
             show_grid: true,

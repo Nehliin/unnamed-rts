@@ -12,7 +12,10 @@ use unnamed_rts::{
     resources::{ClientUpdate, NetworkSerialization, NetworkSocket, ServerUpdate},
 };
 
-use crate::{assets::{Assets, Handle}, graphics::model::Model};
+use crate::{
+    assets::{Assets, Handle},
+    graphics::model::Model,
+};
 
 pub const SERVER_ADDR: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
 pub const SERVER_PORT: u16 = 1338;
@@ -37,7 +40,6 @@ pub fn init_client_network(resources: &mut Resources) -> JoinHandle<()> {
 }
 
 pub fn connect_to_server(world: &mut World, resources: &mut Resources) {
-    
     // Tell server to start the game
     let serialized = bincode::serialize(&ClientUpdate::StartGame).expect("Serilization to work");
     let packet =
@@ -66,7 +68,7 @@ pub fn connect_to_server(world: &mut World, resources: &mut Resources) {
     }
 }
 
-pub fn add_client_components(world: &mut World, resources: &mut Resources,  suit: &Handle<Model>) {
+pub fn add_client_components(world: &mut World, resources: &mut Resources, suit: &Handle<Model>) {
     let mut query = <(Entity, Read<EntityType>)>::query();
     let mut command_buffer = CommandBuffer::new(&world);
     for (entity, _entity_type) in query.iter(world) {

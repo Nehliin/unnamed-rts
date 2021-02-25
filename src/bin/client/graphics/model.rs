@@ -62,9 +62,7 @@ pub struct InstanceData {
 
 impl InstanceData {
     pub fn new(model_matrix: Mat4) -> Self {
-        InstanceData {
-            model_matrix,
-        }
+        InstanceData { model_matrix }
     }
 }
 
@@ -199,7 +197,10 @@ impl Model {
                                 m.mesh.positions[i * 3 + 1],
                                 m.mesh.positions[i * 3 + 2],
                             ),
-                            tex_coords: Vec2::new(m.mesh.texcoords[i * 2], m.mesh.texcoords[i * 2 + 1]),
+                            tex_coords: Vec2::new(
+                                m.mesh.texcoords[i * 2],
+                                m.mesh.texcoords[i * 2 + 1],
+                            ),
                             normal: Vec3::new(
                                 m.mesh.normals[i * 3],
                                 m.mesh.normals[i * 3 + 1],

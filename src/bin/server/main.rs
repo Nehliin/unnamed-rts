@@ -39,48 +39,45 @@ fn setup_world(world: &mut World, net_serilization: &NetworkSerialization) -> Ve
 }
 
 fn start_game(
-    socket: &mut Socket,
+    socket: &NetworkSocket,
     initial_state: Vec<u8>,
     net_serilization: &NetworkSerialization,
+    num_players: u8,
 ) {
-    info!("Waiting for client to connect");
-    'outer: loop {
-        for event in socket.get_event_receiver().try_iter() {
-            match event {
-                SocketEvent::Packet(packet) => {
-                    match net_serilization.deserialize_client_update(&packet.payload()) {
-                        ClientUpdate::StartGame => {
-                            info!("Starting game!");
-                            // keep track of clients here later on, count number of players etc etc
-                            let packet = Packet::reliable_ordered(
-                                ([127, 0, 0, 1], 1337).into(),
-                                initial_state,
-                                None,
-                            );
-                            socket
-                                .send(packet)
-                                .expect("failed to send start game packet");
-                            // not super pretty
-                            socket.manual_poll(Instant::now());
-                            break 'outer;
-                        }
-                        _ => {
-                            warn!("Unexpected packet, match hasn't started");
-                        }
+    info!("Waiting for {} clients to connect", num_players);
+    for event in socket.receiver.iter() {
+        match event {
+            SocketEvent::Packet(packet) => {
+                match net_serilization.deserialize_client_update(&packet.payload()) {
+                    ClientUpdate::StartGame => {
+                        info!("Starting game!");
+                        // keep track of clients here later on, count number of players etc etc
+                        let packet = Packet::reliable_ordered(
+                            ([127, 0, 0, 1], 1337).into(),
+                            initial_state,
+                            None,
+                        );
+                        socket
+                            .sender
+                            .send(packet)
+                            .expect("failed to send start game packet");
+                        break;
+                    }
+                    _ => {
+                        warn!("Unexpected packet, match hasn't started");
                     }
                 }
-                SocketEvent::Connect(_) => {
-                    info!("Connection!");
-                }
-                SocketEvent::Timeout(_) => {
-                    warn!("timeout")
-                }
-                SocketEvent::Disconnect(_) => {
-                    error!("Disconnect!");
-                }
+            }
+            SocketEvent::Connect(_) => {
+                info!("Connection!");
+            }
+            SocketEvent::Timeout(_) => {
+                warn!("timeout")
+            }
+            SocketEvent::Disconnect(_) => {
+                error!("Disconnect!");
             }
         }
-        socket.manual_poll(Instant::now());
     }
 }
 
@@ -89,26 +86,33 @@ fn main() {
         .filter_level(log::LevelFilter::Debug)
         .init();
 
-    let mut world = World::default();
-    let mut resources = Resources::default();
     info!("Starting server..");
     let mut socket = Socket::bind("127.0.0.1:1338").expect("failed to open socket");
     let net_serilization = NetworkSerialization::default();
+    let network_socket = NetworkSocket {
+        sender: socket.get_packet_sender(),
+        receiver: socket.get_event_receiver(),
+    };
+    std::thread::spawn(move || {
+        socket.start_polling();
+    });
+
+    let mut world = World::default();
+    let mut resources = Resources::default();
     let initial_state = setup_world(&mut world, &net_serilization);
-    start_game(&mut socket, initial_state, &net_serilization);
+    start_game(&network_socket, initial_state, &net_serilization, 1);
     resources.insert(Time {
         current_time: Instant::now(),
         delta_time: 0.0,
     });
     resources.insert(net_serilization);
-    resources.insert(NetworkSocket {
-        sender: socket.get_packet_sender(),
-        receiver: socket.get_event_receiver(),
-    });
+    resources.insert(network_socket);
+
     let mut schedule = Schedule::builder()
         .add_system(client_input_system())
         .add_system(movement_system())
         .build();
+
     info!("Game started!");
     let mut last_update = Instant::now();
     loop {
@@ -121,8 +125,6 @@ fn main() {
         schedule.execute(&mut world, &mut resources);
         if (now - last_update).as_secs_f32() >= 0.033 {
             send_state(&world, &resources);
-            //better to do in other thread probably?
-            socket.manual_poll(now);
             last_update = now;
         }
     }

@@ -11,8 +11,7 @@ Current goals:
 - [ ] Map editor
 -  Basic Online multiplayer support is in progress using laminar. Ambition and quality of this goal depends amount of time I spend on this project. 
    - [x] Server owns the player state and updates client at ~30hz
-   - [x] Client send actions which are handled by the server (like move command) 
-   - [ ] Actual multiplayer (Currently only a single client can connect to the server)
+   - [x] Client(s) send actions which are handled by the server (like move command) 
    - [ ] Win conditions
    - [ ] Game time
    - [ ] Scale to large number of units

@@ -2,13 +2,24 @@ use glam::{Quat, Vec3};
 use laminar::{Packet, Socket, SocketEvent};
 use legion::*;
 use log::{error, info, warn};
-use std::time::Instant;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use std::{
+    net::{SocketAddr, SocketAddrV4},
+    time::Instant,
+};
 use systems::CommandBuffer;
 use unnamed_rts::resources::{
-    NetworkSerialization, NetworkSocket, ServerUpdate, Time, SERVER_UPDATE_STREAM,
+    NetworkSerialization, NetworkSocket, ServerUpdate, Time, SERVER_ADDR, SERVER_PORT,
+    SERVER_UPDATE_STREAM,
 };
 use unnamed_rts::server_systems::*;
 use unnamed_rts::{components::*, resources::ClientUpdate};
+
+#[derive(Debug, Default)]
+struct ConnectedClients {
+    // hash set?
+    addrs: Vec<SocketAddrV4>,
+}
 
 fn setup_world(world: &mut World, net_serilization: &NetworkSerialization) -> Vec<u8> {
     world.extend(vec![
@@ -42,6 +53,7 @@ fn start_game(
     socket: &NetworkSocket,
     initial_state: Vec<u8>,
     net_serilization: &NetworkSerialization,
+    connected_clients: &mut ConnectedClients,
     num_players: u8,
 ) {
     info!("Waiting for {} clients to connect", num_players);
@@ -49,25 +61,22 @@ fn start_game(
         match event {
             SocketEvent::Packet(packet) => {
                 match net_serilization.deserialize_client_update(&packet.payload()) {
-                    ClientUpdate::StartGame => {
-                        info!("Starting game!");
-                        // keep track of clients here later on, count number of players etc etc
-                        let packet = Packet::reliable_ordered(
-                            ([127, 0, 0, 1], 1337).into(),
-                            initial_state,
-                            None,
-                        );
-                        socket
-                            .sender
-                            .send(packet)
-                            .expect("failed to send start game packet");
-                        break;
+                    ClientUpdate::StartGame { ip, port } => {
+                        let addr = SocketAddrV4::new(ip.into(), port);
+                        if !connected_clients.addrs.contains(&addr) {
+                            connected_clients.addrs.push(addr);
+                            info!("Connected client: {}", addr);
+                            if num_players as usize <= connected_clients.addrs.len() {
+                                break;
+                            }
+                        }
                     }
                     _ => {
                         warn!("Unexpected packet, match hasn't started");
                     }
                 }
             }
+            // maybe use this instead to record connected clients?
             SocketEvent::Connect(_) => {
                 info!("Connection!");
             }
@@ -79,19 +88,32 @@ fn start_game(
             }
         }
     }
+    info!("All players connected, starting game!");
+    connected_clients
+        .addrs
+        .par_iter()
+        .for_each(move |client_addr| {
+            let packet =
+                Packet::reliable_ordered(SocketAddr::V4(*client_addr), initial_state.clone(), None);
+            socket
+                .sender
+                .send(packet)
+                .expect("failed to send start game packet");
+        });
 }
 
 fn main() {
     env_logger::builder()
         .filter_level(log::LevelFilter::Debug)
         .init();
-
     info!("Starting server..");
     let mut socket = Socket::bind("127.0.0.1:1338").expect("failed to open socket");
     let net_serilization = NetworkSerialization::default();
     let network_socket = NetworkSocket {
         sender: socket.get_packet_sender(),
         receiver: socket.get_event_receiver(),
+        ip: SERVER_ADDR.octets(),
+        port: SERVER_PORT,
     };
     std::thread::spawn(move || {
         socket.start_polling();
@@ -100,13 +122,21 @@ fn main() {
     let mut world = World::default();
     let mut resources = Resources::default();
     let initial_state = setup_world(&mut world, &net_serilization);
-    start_game(&network_socket, initial_state, &net_serilization, 1);
+    let mut connected_clients = ConnectedClients::default();
+    start_game(
+        &network_socket,
+        initial_state,
+        &net_serilization,
+        &mut connected_clients,
+        1,
+    );
     resources.insert(Time {
         current_time: Instant::now(),
         delta_time: 0.0,
     });
     resources.insert(net_serilization);
     resources.insert(network_socket);
+    resources.insert(connected_clients);
 
     let mut schedule = Schedule::builder()
         .add_system(client_input_system())
@@ -149,7 +179,7 @@ fn client_input(
                             },
                         );
                     }
-                    ClientUpdate::StartGame => {
+                    ClientUpdate::StartGame { .. } => {
                         warn!("unexpected packet");
                     }
                 }
@@ -170,14 +200,17 @@ fn client_input(
 fn send_state(world: &World, resources: &Resources) {
     let network = resources.get::<NetworkSocket>().unwrap();
     let net_serilization = resources.get::<NetworkSerialization>().unwrap();
+    let connected_clients = resources.get::<ConnectedClients>().unwrap();
     let mut query = <(Entity, Read<Transform>)>::query();
     let transforms: Vec<(Entity, Transform)> = query.iter(world).map(|(e, t)| (*e, *t)).collect();
     let server_update = ServerUpdate::State { transforms };
     let payload = net_serilization.serialize_server_update(&server_update);
-    let packet = Packet::unreliable_sequenced(
-        ([127, 0, 0, 1], 1337).into(),
-        payload,
-        Some(SERVER_UPDATE_STREAM),
-    );
-    network.sender.send(packet).unwrap();
+    connected_clients.addrs.par_iter().for_each(|client_addr| {
+        let packet = Packet::unreliable_sequenced(
+            SocketAddr::V4(*client_addr),
+            payload.clone(),
+            Some(SERVER_UPDATE_STREAM),
+        );
+        network.sender.send(packet).unwrap();
+    });
 }

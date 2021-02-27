@@ -1,4 +1,3 @@
-use crate::client_network::{SERVER_ADDR, SERVER_PORT};
 use std::net::SocketAddr;
 
 use crate::{

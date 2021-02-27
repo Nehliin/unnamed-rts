@@ -1,11 +1,11 @@
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr, ToSocketAddrs};
 
 use anyhow::Result;
 use bincode::de::Deserializer;
 use bincode::{DefaultOptions, Options};
 use crossbeam_channel::{Receiver, Sender};
 use glam::Vec3A;
-use laminar::{Packet, SocketEvent};
+use laminar::{Config, Packet, Socket, SocketEvent};
 use legion::{query::LayoutFilter, serialize::Canon, *};
 use serde::{de::DeserializeSeed, Deserialize, Serialize};
 
@@ -23,6 +23,40 @@ pub struct NetworkSocket {
     pub receiver: Receiver<SocketEvent>,
     pub ip: [u8; 4],
     pub port: u16,
+    // Make construction private
+    _private: (),
+}
+
+impl NetworkSocket {
+    fn from_socket(mut socket: Socket) -> NetworkSocket {
+        let local_addr = socket
+            .local_addr()
+            .expect("There must exist a local addr the socket is bound to");
+        let ip = if let IpAddr::V4(ipv4) = local_addr.ip() {
+            ipv4.octets()
+        } else {
+            panic!("Expect to be bound to ipV4 addr");
+        };
+        let network_socket = NetworkSocket {
+            sender: socket.get_packet_sender(),
+            receiver: socket.get_event_receiver(),
+            ip,
+            port: local_addr.port(),
+            _private: (),
+        };
+        std::thread::spawn(move || socket.start_polling());
+        network_socket
+    }
+
+    pub fn bind_any_with_config(config: Config) -> NetworkSocket {
+        let socket = Socket::bind_any_with_config(config).expect("Failed to open socket");
+        NetworkSocket::from_socket(socket)
+    }
+
+    pub fn bind_with_config<A: ToSocketAddrs>(addresses: A, config: Config) -> NetworkSocket {
+        let socket = Socket::bind_with_config(addresses, config).expect("Failed to open socket");
+        NetworkSocket::from_socket(socket)
+    }
 }
 
 //Move this

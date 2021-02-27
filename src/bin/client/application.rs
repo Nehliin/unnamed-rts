@@ -1,5 +1,5 @@
+use crate::client_network::handle_server_update;
 use crate::client_network::{add_client_components, connect_to_server};
-use crate::client_network::{handle_server_update, init_client_network};
 use crate::client_systems;
 use crate::client_systems::DebugMenueSettings;
 use crate::{
@@ -25,7 +25,7 @@ use debug_lines_pass::BoundingBoxMap;
 use glam::Vec3;
 use input::CursorPosition;
 use legion::*;
-use log::{info, warn};
+use log::warn;
 use std::time::Instant;
 use unnamed_rts::resources::{NetworkSerialization, Time};
 use wgpu::{
@@ -188,7 +188,6 @@ impl App {
         });
 
         // Set up network and connect to server
-        init_client_network(&mut resources);
         connect_to_server(&mut world, &mut resources);
         add_client_components(&mut world, &mut resources, &suit);
         App {

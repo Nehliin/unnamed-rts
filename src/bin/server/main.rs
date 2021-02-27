@@ -1,5 +1,5 @@
 use glam::{Quat, Vec3};
-use laminar::{Packet, Socket, SocketEvent};
+use laminar::{Config, Packet, Socket, SocketEvent};
 use legion::*;
 use log::{error, info, warn};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -107,17 +107,11 @@ fn main() {
         .filter_level(log::LevelFilter::Debug)
         .init();
     info!("Starting server..");
-    let mut socket = Socket::bind("127.0.0.1:1338").expect("failed to open socket");
     let net_serilization = NetworkSerialization::default();
-    let network_socket = NetworkSocket {
-        sender: socket.get_packet_sender(),
-        receiver: socket.get_event_receiver(),
-        ip: SERVER_ADDR.octets(),
-        port: SERVER_PORT,
-    };
-    std::thread::spawn(move || {
-        socket.start_polling();
-    });
+    let network_socket = NetworkSocket::bind_with_config(
+        SocketAddrV4::new(SERVER_ADDR, SERVER_PORT),
+        Config::default(),
+    );
 
     let mut world = World::default();
     let mut resources = Resources::default();
@@ -128,7 +122,7 @@ fn main() {
         initial_state,
         &net_serilization,
         &mut connected_clients,
-        1,
+        2,
     );
     resources.insert(Time {
         current_time: Instant::now(),

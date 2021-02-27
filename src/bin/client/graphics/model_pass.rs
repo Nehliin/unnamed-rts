@@ -15,15 +15,12 @@ use super::{
 };
 
 #[system]
-#[read_component(Transform)]
-#[read_component(Handle<Model>)]
 pub fn update(
     world: &SubWorld,
     #[resource] queue: &wgpu::Queue,
     #[resource] asset_storage: &Assets<Model>,
+    query: &mut Query<(&Transform, &Handle<Model>)>,
 ) {
-    let mut query = <(Read<Transform>, Read<Handle<Model>>)>::query();
-
     query.par_for_each_chunk(world, |chunk| {
         let (transforms, models) = chunk.get_components();
         if let Some(model) = models.get(0) {
@@ -39,8 +36,6 @@ pub fn update(
 }
 
 #[system]
-#[read_component(Transform)]
-#[read_component(Handle<Model>)]
 pub fn draw(
     world: &SubWorld,
     #[state] pass: &ModelPass,
@@ -48,6 +43,7 @@ pub fn draw(
     #[resource] depth_texture: &DepthTexture,
     #[resource] device: &wgpu::Device,
     #[resource] current_frame: &wgpu::SwapChainTexture,
+    query: &mut Query<(&Transform, &Handle<Model>)>,
 ) {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Model pass encoder"),
@@ -82,7 +78,6 @@ pub fn draw(
     render_pass.push_debug_group("Model pass");
     render_pass.set_pipeline(&pass.render_pipeline);
     render_pass.set_bind_group(0, &pass.camera_bind_group, &[]);
-    let mut query = <(Read<Transform>, Read<Handle<Model>>)>::query();
     query.for_each_chunk(world, |chunk| {
         let (transforms, models) = chunk.get_components();
         if let Some(model) = models.get(0) {

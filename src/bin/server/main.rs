@@ -1,5 +1,5 @@
 use glam::{Quat, Vec3};
-use laminar::{Config, Packet, Socket, SocketEvent};
+use laminar::{Config, Packet, SocketEvent};
 use legion::*;
 use log::{error, info, warn};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -12,9 +12,10 @@ use unnamed_rts::resources::{
     NetworkSerialization, NetworkSocket, ServerUpdate, Time, SERVER_ADDR, SERVER_PORT,
     SERVER_UPDATE_STREAM,
 };
-use unnamed_rts::server_systems::*;
 use unnamed_rts::{components::*, resources::ClientUpdate};
+use server_systems::*;
 
+mod server_systems;
 #[derive(Debug, Default)]
 struct ConnectedClients {
     // hash set?
@@ -122,7 +123,7 @@ fn main() {
         initial_state,
         &net_serilization,
         &mut connected_clients,
-        2,
+        1,
     );
     resources.insert(Time {
         current_time: Instant::now(),

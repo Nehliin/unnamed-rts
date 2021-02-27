@@ -1,15 +1,16 @@
-use crate::components::*;
-use crate::resources::*;
 use glam::Vec3;
 use legion::{world::SubWorld, *};
 use systems::CommandBuffer;
+use unnamed_rts::components::*;
+use unnamed_rts::resources::*;
 
 #[system]
-#[read_component(MoveTarget)]
-#[write_component(Velocity)]
-#[write_component(Transform)]
-pub fn movement(world: &mut SubWorld, command_buffer: &mut CommandBuffer, #[resource] time: &Time) {
-    let mut query = <(Entity, Read<MoveTarget>, Write<Velocity>, Write<Transform>)>::query();
+pub fn movement(
+    world: &mut SubWorld,
+    command_buffer: &mut CommandBuffer,
+    #[resource] time: &Time,
+    query: &mut Query<(Entity, &MoveTarget, &mut Velocity, &mut Transform)>,
+) {
     query
         .iter_mut(world)
         .for_each(|(entity, move_target, velocity, transform)| {

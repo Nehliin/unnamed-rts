@@ -22,12 +22,12 @@ pub struct DebugMenueSettings {
 }
 
 #[system]
-#[read_component(Selectable)]
 pub fn draw_debug_ui(
     world: &SubWorld,
     #[resource] ui_context: &UiContext,
     #[resource] debug_settings: &mut DebugMenueSettings,
     #[resource] time: &Time,
+    query: &mut Query<&Selectable>,
 ) {
     egui::SidePanel::left("Debug menue", 80.0).show(&ui_context.context, |ui| {
         let label = egui::Label::new(format!("FPS: {:.0}", 1.0 / time.delta_time))
@@ -38,7 +38,6 @@ pub fn draw_debug_ui(
             "Show bounding boxes",
         );
         ui.checkbox(&mut debug_settings.show_grid, "Show debug grid");
-        let mut query = <Read<Selectable>>::query();
         for selectable in query.iter(world) {
             ui.label(format!("Selected: {}", selectable.is_selected));
         }
@@ -46,7 +45,7 @@ pub fn draw_debug_ui(
 }
 
 #[system]
-#[read_component(Selectable)]
+#[allow(clippy::too_many_arguments)]
 pub fn move_action(
     world: &mut SubWorld,
     #[resource] camera: &Camera,
@@ -55,8 +54,8 @@ pub fn move_action(
     #[resource] network: &NetworkSocket,
     #[resource] net_serilization: &NetworkSerialization,
     #[resource] window_size: &WindowSize,
+    query: &mut Query<(Entity, &Selectable)>,
 ) {
-    let mut query = <(Entity, Read<Selectable>)>::query();
     if mouse_button_state.pressed_current_frame(&MouseButton::Right) {
         query.par_for_each(world, |(entity, selectable)| {
             if selectable.is_selected {
@@ -90,9 +89,6 @@ pub fn move_action(
 }
 
 #[system]
-#[write_component(Selectable)]
-#[read_component(Transform)]
-#[read_component(Handle<Model>)]
 pub fn selection(
     world: &mut SubWorld,
     #[resource] camera: &Camera,
@@ -100,11 +96,11 @@ pub fn selection(
     #[resource] mouse_pos: &CursorPosition,
     #[resource] asset_storage: &Assets<Model>,
     #[resource] window_size: &WindowSize,
+    query: &mut Query<(&Transform, &Handle<Model>, &mut Selectable)>
 ) {
     if mouse_button_state.pressed_current_frame(&MouseButton::Left) {
         let ray = camera.raycast(mouse_pos, window_size);
         let dirfrac = ray.direction.recip();
-        let mut query = <(Read<Transform>, Read<Handle<Model>>, Write<Selectable>)>::query();
         query
             .par_iter_mut(world)
             .for_each(|(transform, handle, mut selectable)| {

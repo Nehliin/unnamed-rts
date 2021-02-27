@@ -24,7 +24,7 @@ mint = "0.5"
 glam = {version = "0.12", features = ["mint", "serde", "debug-glam-assert", "bytemuck"]}
 wgpu = "0.7"
 log = "0.4"
-legion = {git = "https://github.com/amethyst/legion.git", rev = "475ce80"}
+legion = "0.4" 
 crevice = "0.5"
 tobj = "2"
 bytemuck = {version = "1.5", features = ["derive"]}

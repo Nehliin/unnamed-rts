@@ -14,9 +14,7 @@ use wgpu::include_spirv;
 use super::common::DepthTexture;
 
 #[system]
-#[read_component(Transform)]
-#[read_component(Selectable)]
-#[read_component(Handle<Model>)]
+#[allow(clippy::clippy::too_many_arguments)]
 pub fn draw(
     world: &SubWorld,
     #[state] pass: &SelectionPass,
@@ -25,10 +23,9 @@ pub fn draw(
     #[resource] depth_texture: &DepthTexture,
     #[resource] device: &wgpu::Device,
     #[resource] current_frame: &wgpu::SwapChainTexture,
+    query: &mut Query<(&Transform, &Selectable, &Handle<Model>)>,
 ) {
     // update selected units instance buffer
-    let mut query = <(Read<Transform>, Read<Selectable>, Read<Handle<Model>>)>::query();
-
     query.par_for_each_chunk(world, |chunk| {
         let (transforms, selectable, _) = chunk.get_components();
         // DON'T USE A VEC HERE FOR GODS SAKE

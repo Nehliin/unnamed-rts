@@ -23,16 +23,14 @@ pub struct BoundingBoxMap {
 }
 
 #[system]
-#[read_component(Transform)]
-#[read_component(Handle<Model>)]
 // maybe handle rotation here at some point, currently just using AABB
 pub fn update_bounding_boxes(
     world: &SubWorld,
     #[resource] bounding_box_map: &mut BoundingBoxMap,
     #[resource] device: &wgpu::Device,
     #[resource] asset_storage: &Assets<Model>,
+    query: &mut Query<(&Transform, &Handle<Model>)>
 ) {
-    let mut query = <(Read<Transform>, Read<Handle<Model>>)>::query();
     query.for_each_chunk(world, |chunk| {
         let (_, models) = chunk.get_components();
         if let Some(model_handle) = models.get(0) {
@@ -50,8 +48,6 @@ pub fn update_bounding_boxes(
 
 #[allow(clippy::clippy::too_many_arguments)]
 #[system]
-#[read_component(Transform)]
-#[read_component(Handle<Model>)]
 pub fn draw(
     world: &SubWorld,
     #[state] pass: &DebugLinesPass,
@@ -61,6 +57,7 @@ pub fn draw(
     #[resource] asset_storage: &Assets<Model>,
     #[resource] current_frame: &SwapChainTexture,
     #[resource] debug_settings: &DebugMenueSettings,
+    query: &mut Query<(&Transform, &Handle<Model>)>
 ) {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Debug lines encoder"),
@@ -91,8 +88,6 @@ pub fn draw(
     render_pass.set_pipeline(pipeline);
     render_pass.set_bind_group(0, &pass.camera_bind_group, &[]);
     if debug_settings.show_bounding_boxes {
-        let mut query = <(Read<Transform>, Read<Handle<Model>>)>::query();
-
         query.for_each_chunk(world, |chunk| {
             let (transforms, models) = chunk.get_components();
             if let Some(model_handle) = models.get(0) {

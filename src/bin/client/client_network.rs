@@ -3,35 +3,38 @@ use legion::{systems::CommandBuffer, EntityStore, *};
 use log::{error, info, warn};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::{
-    net::{Ipv4Addr, SocketAddr},
+    net::{IpAddr, SocketAddr},
     thread::JoinHandle,
     time::Duration,
 };
 use unnamed_rts::{
     components::{EntityType, Selectable, Transform},
-    resources::{ClientUpdate, NetworkSerialization, NetworkSocket, ServerUpdate},
+    resources::{
+        ClientUpdate, NetworkSerialization, NetworkSocket, ServerUpdate, SERVER_ADDR, SERVER_PORT,
+    },
 };
 
-use crate::{
-    assets::{Assets, Handle},
-    graphics::model::Model,
-};
-
-pub const SERVER_ADDR: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
-pub const SERVER_PORT: u16 = 1338;
+use crate::{assets::Handle, graphics::model::Model};
 
 pub fn init_client_network(resources: &mut Resources) -> JoinHandle<()> {
-    let mut socket = Socket::bind_with_config(
-        "127.0.0.1:1337",
-        Config {
-            heartbeat_interval: Some(Duration::from_millis(1000)),
-            ..Default::default()
-        },
-    )
+    let mut socket = Socket::bind_any_with_config(Config {
+        heartbeat_interval: Some(Duration::from_millis(1000)),
+        ..Default::default()
+    })
     .expect("Can't open socket");
+    let local_addr = socket
+        .local_addr()
+        .expect("There must exist a local addr the socket is bound to");
+    let ip = if let IpAddr::V4(ipv4) = local_addr.ip() {
+        ipv4.octets()
+    } else {
+        panic!("Expect to be bound to ipV4 addr");
+    };
     resources.insert(NetworkSocket {
         sender: socket.get_packet_sender(),
         receiver: socket.get_event_receiver(),
+        ip,
+        port: local_addr.port(),
     });
     std::thread::spawn(move || {
         // change this later on
@@ -40,8 +43,14 @@ pub fn init_client_network(resources: &mut Resources) -> JoinHandle<()> {
 }
 
 pub fn connect_to_server(world: &mut World, resources: &mut Resources) {
+    let socket = resources.get::<NetworkSocket>().unwrap();
     // Tell server to start the game
-    let serialized = bincode::serialize(&ClientUpdate::StartGame).expect("Serilization to work");
+    let serialized = bincode::serialize(&ClientUpdate::StartGame {
+        ip: socket.ip,
+        port: socket.port,
+    })
+    .expect("Serilization to work");
+
     let packet =
         Packet::reliable_unordered(SocketAddr::new(SERVER_ADDR.into(), SERVER_PORT), serialized);
     let network = resources.get::<NetworkSocket>().unwrap();

@@ -1,3 +1,5 @@
+use std::net::Ipv4Addr;
+
 use anyhow::Result;
 use bincode::de::Deserializer;
 use bincode::{DefaultOptions, Options};
@@ -19,13 +21,15 @@ pub struct Time {
 pub struct NetworkSocket {
     pub sender: Sender<Packet>,
     pub receiver: Receiver<SocketEvent>,
+    pub ip: [u8; 4],
+    pub port: u16,
 }
 
 //Move this
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum ClientUpdate {
     Move { entity: Entity, target: Vec3A },
-    StartGame,
+    StartGame { ip: [u8; 4], port: u16 },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -38,6 +42,8 @@ pub enum ServerUpdate {
 pub const SERVER_UPDATE_STREAM: u8 = 1;
 pub const CLIENT_UPDATE_STREAM: u8 = 2;
 
+pub const SERVER_ADDR: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
+pub const SERVER_PORT: u16 = 1338;
 pub struct NetworkSerialization {
     registry: Registry<i32>,
     canon: Canon,

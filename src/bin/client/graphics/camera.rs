@@ -1,6 +1,6 @@
 use crate::input::{CursorPosition, EventReader, KeyboardState, MouseButtonState, MouseMotion};
-use crevice::std140::AsStd140;
-use crevice::std140::Std140;
+use crevice::std430::AsStd430;
+use crevice::std430::Std430;
 use glam::*;
 use legion::*;
 use unnamed_rts::resources::Time;
@@ -18,7 +18,7 @@ pub struct Camera {
     gpu_buffer: wgpu::Buffer,
 }
 
-#[derive(Debug, Copy, Clone, AsStd140)]
+#[derive(Debug, Copy, Clone, AsStd430)]
 struct CameraUniform {
     pub view_matrix: mint::ColumnMatrix4<f32>,
     pub projection: mint::ColumnMatrix4<f32>,
@@ -93,7 +93,7 @@ pub fn free_flying_camera(
     camera.update_view_matrix();
     // update uniform buffer
     let uniform_data: CameraUniform = (&*camera).into();
-    queue.write_buffer(&camera.gpu_buffer, 0, uniform_data.as_std140().as_bytes());
+    queue.write_buffer(&camera.gpu_buffer, 0, uniform_data.as_std430().as_bytes());
 }
 
 #[allow(dead_code)]
@@ -109,7 +109,7 @@ impl Camera {
         let view_target = position + direction;
         let gpu_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Camera buffer"),
-            size: std::mem::size_of::<<CameraUniform as AsStd140>::Std140Type>() as u64,
+            size: CameraUniform::std430_size_static() as u64,
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
             mapped_at_creation: false,
         });

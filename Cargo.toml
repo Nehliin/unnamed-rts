@@ -37,6 +37,7 @@ rayon = "1"
 laminar = "0.4"
 bincode = "1.3"
 serde = {version = "1", features = ["derive"]}
+gltf = "0.15"
 
 [dev-dependencies]
 criterion = "0.3"

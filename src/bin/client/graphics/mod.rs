@@ -1,9 +1,10 @@
 pub mod camera;
 pub mod common;
 pub mod debug_lines_pass;
+pub mod gltf;
 pub mod grid_pass;
-pub mod model;
 pub mod model_pass;
+pub mod obj_model;
 pub mod selection_pass;
 pub mod simple_texture;
 pub mod texture;

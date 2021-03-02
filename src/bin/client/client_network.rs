@@ -10,7 +10,10 @@ use unnamed_rts::{
     },
 };
 
-use crate::{assets::Handle, graphics::model::Model};
+use crate::{
+    assets::Handle,
+    graphics::{gltf::GltfModel, obj_model::ObjModel},
+};
 
 pub fn connect_to_server(world: &mut World, resources: &mut Resources) {
     let socket = NetworkSocket::bind_any_with_config(Config {
@@ -50,11 +53,15 @@ pub fn connect_to_server(world: &mut World, resources: &mut Resources) {
     resources.insert(socket);
 }
 
-pub fn add_client_components(world: &mut World, resources: &mut Resources, suit: &Handle<Model>) {
+pub fn add_client_components(
+    world: &mut World,
+    resources: &mut Resources,
+    model: &Handle<GltfModel>,
+) {
     let mut query = <(Entity, Read<EntityType>)>::query();
     let mut command_buffer = CommandBuffer::new(&world);
     for (entity, _entity_type) in query.iter(world) {
-        command_buffer.add_component(*entity, suit.clone());
+        command_buffer.add_component(*entity, model.clone());
         command_buffer.add_component(*entity, Selectable { is_selected: false });
     }
     command_buffer.flush(world, resources);

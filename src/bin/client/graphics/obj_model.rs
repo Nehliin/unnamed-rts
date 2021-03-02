@@ -25,9 +25,9 @@ pub const INSTANCE_BUFFER_SIZE: u64 = 16_000;
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Pod, Zeroable)]
 pub struct MeshVertex {
-    position: Vec3,
-    normal: Vec3,
-    tex_coords: Vec2,
+    pub position: Vec3,
+    pub normal: Vec3,
+    pub tex_coords: Vec2,
 }
 
 impl VertexBuffer for MeshVertex {
@@ -98,27 +98,27 @@ impl VertexBuffer for InstanceData {
 }
 // TODO: This should be its own texture type
 #[derive(Debug)]
-pub struct Material {
+pub struct ObjMaterial {
     pub diffuse_texture: TextureData<SimpleTexture>,
     pub specular_texture: TextureData<SimpleTexture>,
 }
 #[derive(Debug)]
-pub struct Mesh {
+pub struct ObjMesh {
     pub vertex_buffer: ImmutableVertexData<MeshVertex>,
     pub index_buffer: Buffer,
     pub material: usize,
     pub num_indexes: u32,
 }
 #[derive(Debug)]
-pub struct Model {
+pub struct ObjModel {
     pub instance_buffer: MutableVertexData<InstanceData>,
-    pub meshes: Vec<Mesh>,
-    pub materials: Vec<Material>,
+    pub meshes: Vec<ObjMesh>,
+    pub materials: Vec<ObjMaterial>,
     pub min_position: Vec3,
     pub max_position: Vec3,
 }
 
-impl Model {
+impl ObjModel {
     pub fn load(device: &Device, queue: &Queue, path: impl AsRef<Path>) -> Result<Self> {
         let (obj_models, obj_materials) = tobj::load_obj(path.as_ref(), true)?;
         let current_folder = path.as_ref().parent().unwrap_or_else(|| {
@@ -153,7 +153,7 @@ impl Model {
                                 diffuse_path
                             )
                         });
-                Material {
+                ObjMaterial {
                     diffuse_texture,
                     specular_texture,
                 }
@@ -216,7 +216,7 @@ impl Model {
                     usage: wgpu::BufferUsage::INDEX,
                     contents: bytemuck::cast_slice(&m.mesh.indices),
                 });
-                Mesh {
+                ObjMesh {
                     vertex_buffer,
                     index_buffer,
                     material: m.mesh.material_id.unwrap_or(0),
@@ -229,7 +229,7 @@ impl Model {
             INSTANCE_BUFFER_SIZE as usize / std::mem::size_of::<InstanceData>();
         let buffer_data = vec![InstanceData::default(); instance_buffer_len];
         let instance_buffer = VertexBuffer::allocate_mutable_buffer(device, &buffer_data);
-        Ok(Model {
+        Ok(ObjModel {
             meshes,
             materials,
             instance_buffer,
@@ -249,22 +249,22 @@ impl Model {
 pub trait DrawModel<'b> {
     fn draw_mesh_instanced(
         &mut self,
-        mesh: &'b Mesh,
-        material: &'b Material,
+        mesh: &'b ObjMesh,
+        material: &'b ObjMaterial,
         instance_buffer: &'b MutableVertexData<InstanceData>,
         instances: Range<u32>,
     );
 
     fn draw_model_with_instance_buffer(
         &mut self,
-        model: &'b Model,
+        model: &'b ObjModel,
         instance_buffer: &'b MutableVertexData<InstanceData>,
         instances: Range<u32>,
     );
 
-    fn draw_untextured(&mut self, model: &'b Model, instances: Range<u32>);
+    fn draw_untextured(&mut self, model: &'b ObjModel, instances: Range<u32>);
 
-    fn draw_model_instanced(&mut self, model: &'b Model, instances: Range<u32>);
+    fn draw_model_instanced(&mut self, model: &'b ObjModel, instances: Range<u32>);
 }
 
 impl<'a, 'b> DrawModel<'b> for RenderPass<'a>
@@ -273,8 +273,8 @@ where
 {
     fn draw_mesh_instanced(
         &mut self,
-        mesh: &'b Mesh,
-        material: &'b Material,
+        mesh: &'b ObjMesh,
+        material: &'b ObjMaterial,
         instance_buffer: &'b MutableVertexData<InstanceData>,
         instances: Range<u32>,
     ) {
@@ -286,7 +286,7 @@ where
         self.draw_indexed(0..mesh.num_indexes, 0, instances);
     }
 
-    fn draw_untextured(&mut self, model: &'b Model, instances: Range<u32>) {
+    fn draw_untextured(&mut self, model: &'b ObjModel, instances: Range<u32>) {
         let instance_buffer = &model.instance_buffer;
         for mesh in &model.meshes {
             self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
@@ -296,7 +296,7 @@ where
         }
     }
 
-    fn draw_model_instanced(&mut self, model: &'b Model, instances: Range<u32>) {
+    fn draw_model_instanced(&mut self, model: &'b ObjModel, instances: Range<u32>) {
         let instance_buffer = &model.instance_buffer;
         for mesh in &model.meshes {
             let material = &model.materials[mesh.material];
@@ -306,7 +306,7 @@ where
 
     fn draw_model_with_instance_buffer(
         &mut self,
-        model: &'b Model,
+        model: &'b ObjModel,
         instance_buffer: &'b MutableVertexData<InstanceData>,
         instances: Range<u32>,
     ) {
@@ -317,12 +317,12 @@ where
     }
 }
 
-impl AssetLoader for Model {
-    fn load(path: &PathBuf, device: &Device, queue: &Queue) -> Result<Model> {
-        Model::load(device, queue, path)
+impl AssetLoader for ObjModel {
+    fn load(path: &PathBuf, device: &Device, queue: &Queue) -> Result<ObjModel> {
+        ObjModel::load(device, queue, path)
     }
 
-    fn extension() -> &'static str {
-        "obj"
+    fn extensions() -> &'static [&'static str] {
+        &["obj"]
     }
 }

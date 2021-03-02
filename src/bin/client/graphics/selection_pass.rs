@@ -1,7 +1,7 @@
 use super::{
     camera::Camera,
     common::DEPTH_FORMAT,
-    model::*,
+    obj_model::*,
     vertex_buffers::{MutableVertexData, VertexBuffer},
 };
 use crate::assets::*;
@@ -19,11 +19,11 @@ pub fn draw(
     world: &SubWorld,
     #[state] pass: &SelectionPass,
     #[resource] queue: &wgpu::Queue,
-    #[resource] asset_storage: &Assets<Model>,
+    #[resource] asset_storage: &Assets<ObjModel>,
     #[resource] depth_texture: &DepthTexture,
     #[resource] device: &wgpu::Device,
     #[resource] current_frame: &wgpu::SwapChainTexture,
-    query: &mut Query<(&Transform, &Selectable, &Handle<Model>)>,
+    query: &mut Query<(&Transform, &Selectable, &Handle<ObjModel>)>,
 ) {
     // update selected units instance buffer
     query.par_for_each_chunk(world, |chunk| {
@@ -69,7 +69,7 @@ pub fn draw(
     render_pass.push_debug_group("Selection pass");
     render_pass.set_pipeline(&pass.render_pipeline);
     render_pass.set_bind_group(0, &pass.camera_bind_group, &[]);
-    let mut query = <(Read<Transform>, Read<Selectable>, Read<Handle<Model>>)>::query();
+    let mut query = <(Read<Transform>, Read<Selectable>, Read<Handle<ObjModel>>)>::query();
     query.for_each_chunk(world, |chunk| {
         let (_, selectable, models) = chunk.get_components();
         if let Some(model) = models.get(0) {

@@ -1,4 +1,5 @@
 #version 450
+#extension GL_EXT_scalar_block_layout: require
 
 layout(location = 0) in vec3 position;
 layout(location = 3) in vec4 m0;
@@ -8,7 +9,7 @@ layout(location = 6) in vec4 m3;
 
 layout(location = 0) out vec3 fragment_position;
 
-layout(set=0, binding=0, std140)
+layout(set=0, binding=0, std430)
 uniform CameraUniforms {
     mat4 view;
     mat4 projection;

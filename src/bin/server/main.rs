@@ -3,6 +3,7 @@ use laminar::{Config, Packet, SocketEvent};
 use legion::*;
 use log::{error, info, warn};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use server_systems::*;
 use std::{
     net::{SocketAddr, SocketAddrV4},
     time::Instant,
@@ -13,7 +14,6 @@ use unnamed_rts::resources::{
     SERVER_UPDATE_STREAM,
 };
 use unnamed_rts::{components::*, resources::ClientUpdate};
-use server_systems::*;
 
 mod server_systems;
 #[derive(Debug, Default)]

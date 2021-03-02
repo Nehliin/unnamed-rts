@@ -4,7 +4,7 @@ use crate::{
     assets::{Assets, Handle},
     graphics::{
         camera::Camera,
-        model::Model,
+        obj_model::ObjModel,
         ui::ui_context::{UiContext, WindowSize},
     },
     input::{CursorPosition, MouseButtonState},
@@ -94,9 +94,9 @@ pub fn selection(
     #[resource] camera: &Camera,
     #[resource] mouse_button_state: &MouseButtonState,
     #[resource] mouse_pos: &CursorPosition,
-    #[resource] asset_storage: &Assets<Model>,
+    #[resource] asset_storage: &Assets<ObjModel>,
     #[resource] window_size: &WindowSize,
-    query: &mut Query<(&Transform, &Handle<Model>, &mut Selectable)>
+    query: &mut Query<(&Transform, &Handle<ObjModel>, &mut Selectable)>,
 ) {
     if mouse_button_state.pressed_current_frame(&MouseButton::Left) {
         let ray = camera.raycast(mouse_pos, window_size);

@@ -1,7 +1,7 @@
 use super::{
     camera::Camera,
     common::{DepthTexture, DEPTH_FORMAT},
-    model::{InstanceData, Model},
+    obj_model::{InstanceData, ObjModel},
     vertex_buffers::{ImmutableVertexData, VertexBuffer, VertexBufferData},
 };
 use crate::{
@@ -19,7 +19,7 @@ use world::SubWorld;
 #[derive(Debug, Default)]
 // This should be refactored to be component based instead of using this resource
 pub struct BoundingBoxMap {
-    vertex_info_map: HashMap<Handle<Model>, ImmutableVertexData<BoxVert>>,
+    vertex_info_map: HashMap<Handle<ObjModel>, ImmutableVertexData<BoxVert>>,
 }
 
 #[system]
@@ -28,8 +28,8 @@ pub fn update_bounding_boxes(
     world: &SubWorld,
     #[resource] bounding_box_map: &mut BoundingBoxMap,
     #[resource] device: &wgpu::Device,
-    #[resource] asset_storage: &Assets<Model>,
-    query: &mut Query<(&Transform, &Handle<Model>)>
+    #[resource] asset_storage: &Assets<ObjModel>,
+    query: &mut Query<(&Transform, &Handle<ObjModel>)>,
 ) {
     query.for_each_chunk(world, |chunk| {
         let (_, models) = chunk.get_components();
@@ -54,10 +54,10 @@ pub fn draw(
     #[resource] bounding_box_map: &BoundingBoxMap,
     #[resource] device: &wgpu::Device,
     #[resource] depth_texture: &DepthTexture,
-    #[resource] asset_storage: &Assets<Model>,
+    #[resource] asset_storage: &Assets<ObjModel>,
     #[resource] current_frame: &SwapChainTexture,
     #[resource] debug_settings: &DebugMenueSettings,
-    query: &mut Query<(&Transform, &Handle<Model>)>
+    query: &mut Query<(&Transform, &Handle<ObjModel>)>,
 ) {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Debug lines encoder"),

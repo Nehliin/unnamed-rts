@@ -8,7 +8,8 @@ use crate::assets::{Assets, Handle};
 use super::{
     camera::Camera,
     common::{DepthTexture, DEPTH_FORMAT},
-    model::{DrawModel, InstanceData, MeshVertex, Model},
+    gltf::GltfModel,
+    obj_model::{InstanceData, MeshVertex},
     simple_texture::SimpleTexture,
     texture::TextureShaderLayout,
     vertex_buffers::VertexBuffer,
@@ -18,11 +19,14 @@ use super::{
 pub fn update(
     world: &SubWorld,
     #[resource] queue: &wgpu::Queue,
-    #[resource] asset_storage: &Assets<Model>,
-    query: &mut Query<(&Transform, &Handle<Model>)>,
+    #[resource] asset_storage: &Assets<GltfModel>,
+    query: &mut Query<(&Transform, &Handle<GltfModel>)>,
 ) {
+    // TODO: Change this to something that actually works for different models
+    // bumpallocation while retaining multithreading would be nice
     query.par_for_each_chunk(world, |chunk| {
         let (transforms, models) = chunk.get_components();
+        // HACK
         if let Some(model) = models.get(0) {
             // DON'T USE A VEC HERE FOR GODS SAKE
             let model_matrices = transforms
@@ -39,11 +43,11 @@ pub fn update(
 pub fn draw(
     world: &SubWorld,
     #[state] pass: &ModelPass,
-    #[resource] asset_storage: &Assets<Model>,
+    #[resource] asset_storage: &Assets<GltfModel>,
     #[resource] depth_texture: &DepthTexture,
     #[resource] device: &wgpu::Device,
     #[resource] current_frame: &wgpu::SwapChainTexture,
-    query: &mut Query<(&Transform, &Handle<Model>)>,
+    query: &mut Query<(&Transform, &Handle<GltfModel>)>,
 ) {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Model pass encoder"),
@@ -82,7 +86,7 @@ pub fn draw(
         let (transforms, models) = chunk.get_components();
         if let Some(model) = models.get(0) {
             let model = asset_storage.get(model).unwrap();
-            render_pass.draw_model_instanced(model, 0..transforms.len() as u32);
+            model.draw(&mut render_pass, 0..transforms.len() as u32);
         }
     });
     render_pass.pop_debug_group();
@@ -129,8 +133,8 @@ impl ModelPass {
                 label: Some("Model pipeline layout"),
                 bind_group_layouts: &[
                     &camera_bind_group_layout,
-                    SimpleTexture::get_layout(&device),
-                    SimpleTexture::get_layout(&device),
+                    // SimpleTexture::get_layout(&device),
+                    // SimpleTexture::get_layout(&device),
                 ],
                 push_constant_ranges: &[],
             });

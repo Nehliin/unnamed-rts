@@ -82,7 +82,7 @@ impl LoadableTexture for SimpleTexture {
             rows_per_image: 0,
         };
 
-        queue.write_texture(texutre_copy_view, &rgba.to_vec(), texture_data_layout, size);
+        queue.write_texture(texutre_copy_view, &rgba.into_raw(), texture_data_layout, size);
 
         let view = texture.create_view(&TextureViewDescriptor::default());
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {

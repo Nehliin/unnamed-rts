@@ -8,9 +8,15 @@ edition = "2018"
 
 [profile.dev]
 debug = true
-opt-level = 0
+opt-level = 2
 debug-assertions = true
 incremental = true
+
+[profile.dev.package.gltf]
+opt-level = 2
+debug = false
+debug-assertions = true
+
 
 [profile.dev.build-override]
 opt-level = 3

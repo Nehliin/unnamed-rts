@@ -12,7 +12,7 @@ use unnamed_rts::{
 
 use crate::{
     assets::Handle,
-    graphics::{gltf::GltfModel, obj_model::ObjModel},
+    graphics::{gltf::GltfModel},
 };
 
 pub fn connect_to_server(world: &mut World, resources: &mut Resources) {

@@ -181,7 +181,7 @@ impl App {
         // prelode assets: TODO: do this in app main and fetch handle based on path instead
         let assets_obj = Assets::<ObjModel>::new();
         let mut assets = Assets::<GltfModel>::new();
-        let suit = assets.load("Box.gltf").unwrap();
+        let suit = assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
         init_ui_resources(&mut resources, &size, window.scale_factor() as f32);
 
         resources.insert(assets);

@@ -9,9 +9,8 @@ use super::{
     camera::Camera,
     common::{DepthTexture, DEPTH_FORMAT},
     gltf::GltfModel,
+    gltf::GltfMaterial,
     obj_model::{InstanceData, MeshVertex},
-    simple_texture::SimpleTexture,
-    texture::TextureShaderLayout,
     vertex_buffers::VertexBuffer,
 };
 
@@ -133,8 +132,7 @@ impl ModelPass {
                 label: Some("Model pipeline layout"),
                 bind_group_layouts: &[
                     &camera_bind_group_layout,
-                    // SimpleTexture::get_layout(&device),
-                    // SimpleTexture::get_layout(&device),
+                    GltfMaterial::get_layout(&device) 
                 ],
                 push_constant_ranges: &[],
             });

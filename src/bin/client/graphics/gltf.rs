@@ -9,6 +9,7 @@ use glam::*;
 use gltf::{accessor::util::ItemIter, mesh::util::ReadTexCoords};
 use log::info;
 use once_cell::sync::OnceCell;
+use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use std::{
     borrow::Cow,
     ops::Range,
@@ -380,7 +381,7 @@ impl GltfModel {
         let gltf_load_time = gltf_start.elapsed().as_secs_f32();
         let start = Instant::now();
         let textures = images
-            .iter()
+            .par_iter()
             .map(|image| allocate_simple_texture(device, queue, TextureContent::from(image)))
             .collect::<Vec<_>>();
         let min_vertex = [
@@ -393,10 +394,10 @@ impl GltfModel {
             AtomicI32::new(i32::MIN),
             AtomicI32::new(i32::MIN),
         ];
-        let mut meshes = Vec::new();
-        gltf.nodes()
+        let meshes = gltf.nodes()
+            .par_bridge()
             .filter(|node| node.mesh().is_some())
-            .for_each(|node| {
+            .map(|node| {
                 let (position, rotation, scaled) = node.transform().decomposed();
                 let local_transform = Mat4::from_scale_rotation_translation(
                     scaled.into(),
@@ -404,7 +405,7 @@ impl GltfModel {
                     position.into(),
                 );
                 let mesh = node.mesh().unwrap();
-                for primitive in mesh.primitives() {
+                mesh.primitives().par_bridge().map( |primitive| {
                     let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
                     let tex_coords_iter = reader
                         .read_tex_coords(0)
@@ -448,15 +449,19 @@ impl GltfModel {
                         usage: wgpu::BufferUsage::INDEX,
                         contents: bytemuck::cast_slice(&indicies),
                     });
-                    meshes.push(GltfMesh {
+                    GltfMesh {
                         vertex_buffer,
                         local_transform,
                         index_buffer,
                         material: PbrMaterial::new(device, queue, &primitive.material(), &textures),
                         num_indicies: indicies.len() as u32,
-                    });
-                }
-            });
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .flatten()
+        .collect::<Vec<_>>();
+
         info!(
             "Glft Load: {}, Loadtime: {}",
             gltf_load_time,

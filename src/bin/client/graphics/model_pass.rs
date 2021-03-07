@@ -130,10 +130,7 @@ impl ModelPass {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Model pipeline layout"),
-                bind_group_layouts: &[
-                    &camera_bind_group_layout,
-                    PbrMaterial::get_layout(&device) 
-                ],
+                bind_group_layouts: &[&camera_bind_group_layout, PbrMaterial::get_layout(&device)],
                 push_constant_ranges: &[],
             });
 

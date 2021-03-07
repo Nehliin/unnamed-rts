@@ -10,10 +10,7 @@ use unnamed_rts::{
     },
 };
 
-use crate::{
-    assets::Handle,
-    graphics::{gltf::GltfModel},
-};
+use crate::{assets::Handle, graphics::gltf::GltfModel};
 
 pub fn connect_to_server(world: &mut World, resources: &mut Resources) {
     let socket = NetworkSocket::bind_any_with_config(Config {

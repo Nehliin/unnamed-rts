@@ -1,7 +1,7 @@
 use super::{
     camera::Camera,
     common::DEPTH_FORMAT,
-    gltf::{GltfModel, INSTANCE_BUFFER_LEN, InstanceData, MeshVertex},
+    gltf::{GltfModel, InstanceData, MeshVertex, INSTANCE_BUFFER_LEN},
     vertex_buffers::{MutableVertexData, VertexBuffer},
 };
 use crate::assets::*;

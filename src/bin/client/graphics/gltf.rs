@@ -106,9 +106,9 @@ impl VertexBuffer for InstanceData {
     }
 }
 #[derive(Debug)]
-pub struct PbrMaterialTextureView {
-    pub sampler: wgpu::Sampler,
-    pub view: wgpu::TextureView,
+struct PbrMaterialTextureView {
+    sampler: wgpu::Sampler,
+    view: wgpu::TextureView,
 }
 
 impl PbrMaterialTextureView {
@@ -157,18 +157,19 @@ impl PbrMaterialTextureView {
 
 #[derive(Debug)]
 pub struct PbrMaterial {
-    pub base_color_texture: Option<PbrMaterialTextureView>,
-    pub metallic_roughness_texture: Option<PbrMaterialTextureView>,
-    pub factors: PbrMaterialFactors,
+    base_color_texture: Option<PbrMaterialTextureView>,
+    metallic_roughness_texture: Option<PbrMaterialTextureView>,
+    factors: PbrMaterialFactors,
     factor_buffer: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
 }
 
 #[derive(Debug, AsStd430)]
-pub struct PbrMaterialFactors {
-    pub base_color_factor: mint::Vector4<f32>,
-    pub metallic_factor: f32,
-    pub rougness_factor: f32,
+struct PbrMaterialFactors {
+    base_color_factor: mint::Vector4<f32>,
+    metallic_factor: f32,
+    rougness_factor: f32,
+    occulusion_strenght: f32,
 }
 
 impl PbrMaterial {
@@ -200,10 +201,22 @@ impl PbrMaterial {
                         &gltf_texture.sampler(),
                     )
                 });
+        let occulusion_texture = gltf_material.occlusion_texture().map(|texture_info| {
+            let gltf_texture = texture_info.texture();
+            PbrMaterialTextureView::new(
+                device,
+                &textures[gltf_texture.index()],
+                &gltf_texture.sampler(),
+            )
+        });
         let factors = PbrMaterialFactors {
             rougness_factor: pbr_metallic_roughness.roughness_factor(),
             metallic_factor: pbr_metallic_roughness.metallic_factor(),
             base_color_factor: pbr_metallic_roughness.base_color_factor().into(),
+            occulusion_strenght: gltf_material
+                .occlusion_texture()
+                .map(|occlusion_tex| occlusion_tex.strength())
+                .unwrap_or(1.0),
         };
         let factor_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("PbrMaterial factor buffer"),
@@ -246,6 +259,18 @@ impl PbrMaterial {
                 },
                 wgpu::BindGroupEntry {
                     binding: 4,
+                    resource: wgpu::BindingResource::TextureView(
+                        &occulusion_texture.as_ref().unwrap_or(placeholder).view,
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::Sampler(
+                        &occulusion_texture.as_ref().unwrap_or(placeholder).sampler,
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
                     resource: wgpu::BindingResource::Buffer {
                         buffer: &factor_buffer,
                         offset: 0,
@@ -310,9 +335,29 @@ impl PbrMaterial {
                         },
                         count: None,
                     },
-                    // material factors
+                    // occulusion texture
                     wgpu::BindGroupLayoutEntry {
                         binding: 4,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 5,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler {
+                            comparison: false,
+                            filtering: true,
+                        },
+                        count: None,
+                    },
+                    // material factors
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 6,
                         visibility: wgpu::ShaderStage::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
@@ -328,7 +373,7 @@ impl PbrMaterial {
     }
 }
 
-pub fn get_white_placeholder_texture(
+fn get_white_placeholder_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
 ) -> &'static PbrMaterialTextureView {
@@ -344,7 +389,7 @@ pub fn get_white_placeholder_texture(
             bytes: Cow::Owned(vec![255, 255, 255, 255]),
             size,
             stride: 4,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb, // Wasteful format?
+            format: wgpu::TextureFormat::Rgba8Unorm,
         };
         let texture = allocate_simple_texture(device, queue, content);
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());

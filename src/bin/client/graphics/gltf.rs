@@ -427,6 +427,7 @@ impl GltfModel {
         let start = Instant::now();
         let textures = images
             .par_iter()
+            // TODO: This doesn't take in Srgb textures into account
             .map(|image| allocate_simple_texture(device, queue, TextureContent::from(image)))
             .collect::<Vec<_>>();
         let min_vertex = [

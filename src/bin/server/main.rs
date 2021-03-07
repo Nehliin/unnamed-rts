@@ -3,6 +3,7 @@ use laminar::{Config, Packet, SocketEvent};
 use legion::*;
 use log::{error, info, warn};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use server_systems::*;
 use std::{
     net::{SocketAddr, SocketAddrV4},
     time::Instant,
@@ -13,7 +14,6 @@ use unnamed_rts::resources::{
     SERVER_UPDATE_STREAM,
 };
 use unnamed_rts::{components::*, resources::ClientUpdate};
-use server_systems::*;
 
 mod server_systems;
 #[derive(Debug, Default)]
@@ -28,7 +28,7 @@ fn setup_world(world: &mut World, net_serilization: &NetworkSerialization) -> Ve
             EntityType::BasicUnit,
             Transform::new(
                 Vec3::new(2.0, 0.0, 0.0),
-                Vec3::new(0.2, 0.2, 0.2),
+                Vec3::new(1.0, 1.0, 1.0),
                 Quat::identity(),
             ),
             Velocity {
@@ -39,7 +39,7 @@ fn setup_world(world: &mut World, net_serilization: &NetworkSerialization) -> Ve
             EntityType::BasicUnit,
             Transform::new(
                 Vec3::new(-2.0, 0.0, 0.0),
-                Vec3::new(0.2, 0.2, 0.2),
+                Vec3::new(1.0, 1.0, 1.0),
                 Quat::identity(),
             ),
             Velocity {
@@ -148,6 +148,8 @@ fn main() {
         drop(time);
 
         schedule.execute(&mut world, &mut resources);
+        // TODO: this isn't fixed timestep
+        // see: https://gafferongames.com/post/fix_your_timestep/
         if (now - last_update).as_secs_f32() >= 0.033 {
             send_state(&world, &resources);
             last_update = now;

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use legion::*;
-use log::error;
+use log::{error, info};
 use std::{
     collections::{HashMap, VecDeque},
     marker::PhantomData,
@@ -51,7 +51,7 @@ static mut CURRENT_ID: AtomicU32 = AtomicU32::new(0);
 // vagely inspired by bevy
 pub trait AssetLoader: Sized {
     fn load(path: &PathBuf, device: &Device, queue: &Queue) -> Result<Self>;
-    fn extension() -> &'static str;
+    fn extensions() -> &'static [&'static str];
 }
 
 pub struct Assets<T: AssetLoader> {
@@ -72,10 +72,13 @@ impl<T: AssetLoader> Assets<T> {
     }
 
     pub fn load(&mut self, path: impl AsRef<Path>) -> Result<Handle<T>> {
-        let pathbuf = PathBuf::from(path.as_ref());
+        let mut pathbuf = PathBuf::from("assets");
+        pathbuf.push(path.as_ref());
 
         assert!(
-            pathbuf.extension().unwrap() == T::extension(),
+            T::extensions()
+                .iter()
+                .any(|ext| *ext == pathbuf.extension().unwrap()),
             "Unexpected file extension"
         );
         let handle = Handle {
@@ -95,6 +98,7 @@ impl<T: AssetLoader> Assets<T> {
         queue: &Queue,
     ) -> Result<()> {
         for (handle, path_buf) in load_queue.iter() {
+            info!("Loading: {:?}", path_buf.as_os_str());
             let asset = T::load(path_buf, device, queue)?;
             storage.insert(handle.clone(), asset);
         }
@@ -114,10 +118,11 @@ pub fn asset_load<T: AssetLoader + 'static>(
     #[resource] queue: &Queue,
     #[resource] asset_storage: &mut Assets<T>,
 ) {
-    if asset_storage.clear_load_queue(device, queue).is_err() {
+    if let Err(err) = asset_storage.clear_load_queue(device, queue) {
         error!(
-            "Failed to clear load queue for asset type: {}",
-            std::any::type_name::<T>()
+            "Failed to clear load queue for asset type: {}, with error: {}",
+            std::any::type_name::<T>(),
+            err
         );
     }
 }

@@ -18,13 +18,13 @@ pub struct Time {
 }
 
 #[derive(Debug)]
+// Make construction private
+#[non_exhaustive]
 pub struct NetworkSocket {
     pub sender: Sender<Packet>,
     pub receiver: Receiver<SocketEvent>,
     pub ip: [u8; 4],
     pub port: u16,
-    // Make construction private
-    _private: (),
 }
 
 impl NetworkSocket {
@@ -42,7 +42,6 @@ impl NetworkSocket {
             receiver: socket.get_event_receiver(),
             ip,
             port: local_addr.port(),
-            _private: (),
         };
         std::thread::spawn(move || socket.start_polling());
         network_socket

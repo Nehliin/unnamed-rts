@@ -1,7 +1,8 @@
 use super::{
     camera::Camera,
     common::{DepthTexture, DEPTH_FORMAT},
-    obj_model::{InstanceData, ObjModel},
+    gltf::GltfModel,
+    gltf::InstanceData,
     vertex_buffers::{ImmutableVertexData, VertexBuffer, VertexBufferData},
 };
 use crate::{
@@ -19,7 +20,7 @@ use world::SubWorld;
 #[derive(Debug, Default)]
 // This should be refactored to be component based instead of using this resource
 pub struct BoundingBoxMap {
-    vertex_info_map: HashMap<Handle<ObjModel>, ImmutableVertexData<BoxVert>>,
+    vertex_info_map: HashMap<Handle<GltfModel>, ImmutableVertexData<BoxVert>>,
 }
 
 #[system]
@@ -28,15 +29,15 @@ pub fn update_bounding_boxes(
     world: &SubWorld,
     #[resource] bounding_box_map: &mut BoundingBoxMap,
     #[resource] device: &wgpu::Device,
-    #[resource] asset_storage: &Assets<ObjModel>,
-    query: &mut Query<(&Transform, &Handle<ObjModel>)>,
+    #[resource] asset_storage: &Assets<GltfModel>,
+    query: &mut Query<(&Transform, &Handle<GltfModel>)>,
 ) {
     query.for_each_chunk(world, |chunk| {
         let (_, models) = chunk.get_components();
         if let Some(model_handle) = models.get(0) {
             let model = asset_storage.get(&model_handle).unwrap();
             if !bounding_box_map.vertex_info_map.contains_key(&model_handle) {
-                let buffer = calc_buffer(&model.min_position, &model.max_position);
+                let buffer = calc_buffer(&model.min_vertex, &model.max_vertex);
                 bounding_box_map.vertex_info_map.insert(
                     model_handle.clone(),
                     VertexBuffer::allocate_immutable_buffer(&device, &buffer),
@@ -54,10 +55,10 @@ pub fn draw(
     #[resource] bounding_box_map: &BoundingBoxMap,
     #[resource] device: &wgpu::Device,
     #[resource] depth_texture: &DepthTexture,
-    #[resource] asset_storage: &Assets<ObjModel>,
+    #[resource] asset_storage: &Assets<GltfModel>,
     #[resource] current_frame: &SwapChainTexture,
     #[resource] debug_settings: &DebugMenueSettings,
-    query: &mut Query<(&Transform, &Handle<ObjModel>)>,
+    query: &mut Query<(&Transform, &Handle<GltfModel>)>,
 ) {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Debug lines encoder"),

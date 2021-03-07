@@ -1,59 +1,158 @@
-#![allow(unused)]
-use anyhow::Result;
-use std::{marker::PhantomData, path::Path};
+use std::borrow::Cow;
 
-pub trait TextureShaderLayout: 'static {
-    const VISIBILITY: wgpu::ShaderStage;
-    fn get_layout(device: &wgpu::Device) -> &'static wgpu::BindGroupLayout;
+use wgpu::{Device, Queue};
+
+pub struct TextureContent<'a> {
+    pub label: Option<&'static str>,
+    pub format: wgpu::TextureFormat,
+    pub bytes: Cow<'a, [u8]>,
+    pub stride: u32,
+    pub size: wgpu::Extent3d,
 }
 
-#[derive(Debug)]
-pub struct TextureData<T: TextureShaderLayout> {
-    pub _marker: PhantomData<T>,
-    pub bind_group: wgpu::BindGroup,
-    // unclear if default view for multilayered textures
-    // should be separated from invidual layer views
-    // could maybe be separate texture data type?
-    pub views: Vec<wgpu::TextureView>,
-    pub sampler: wgpu::Sampler,
-    pub texture: wgpu::Texture,
-}
-
-impl<T: TextureShaderLayout> TextureData<T> {
-    pub fn new(
-        bind_group: wgpu::BindGroup,
-        texture: wgpu::Texture,
-        views: Vec<wgpu::TextureView>,
-        sampler: wgpu::Sampler,
-    ) -> Self {
-        TextureData {
-            bind_group,
-            texture,
-            views,
-            sampler,
-            _marker: PhantomData::default(),
+impl<'a> From<&'a gltf::image::Data> for TextureContent<'a> {
+    fn from(image_data: &'a gltf::image::Data) -> Self {
+        let size = wgpu::Extent3d {
+            width: image_data.width,
+            height: image_data.height,
+            depth: 1,
+        };
+        let label = Some("GltfTexture");
+        // TODO: handle Srgb
+        match image_data.format {
+            gltf::image::Format::R8 => TextureContent {
+                label,
+                size,
+                format: wgpu::TextureFormat::R8Unorm,
+                bytes: Cow::Borrowed(&image_data.pixels),
+                stride: 1,
+            },
+            gltf::image::Format::R8G8 => TextureContent {
+                label,
+                size,
+                format: wgpu::TextureFormat::Rg8Unorm,
+                bytes: Cow::Borrowed(&image_data.pixels),
+                stride: 2,
+            },
+            gltf::image::Format::R8G8B8 => TextureContent {
+                label,
+                size,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                bytes: Cow::Owned({
+                    // TODO: This might be very ineffective
+                    let mut converted =
+                        Vec::with_capacity(image_data.pixels.len() / 3 + image_data.pixels.len());
+                    image_data.pixels.chunks_exact(3).for_each(|chunk| {
+                        converted.extend(chunk);
+                        converted.push(255);
+                    });
+                    converted
+                }),
+                stride: 4,
+            },
+            gltf::image::Format::R8G8B8A8 => TextureContent {
+                label,
+                size,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                bytes: Cow::Borrowed(&image_data.pixels),
+                stride: 4,
+            },
+            gltf::image::Format::B8G8R8 => TextureContent {
+                label,
+                size,
+                format: wgpu::TextureFormat::Bgra8Unorm,
+                bytes: Cow::Owned({
+                    // TODO: This might be very ineffective might be better to pre alloc
+                    let mut converted =
+                        Vec::with_capacity(image_data.pixels.len() / 3 + image_data.pixels.len());
+                    image_data.pixels.chunks_exact(3).for_each(|chunk| {
+                        converted.extend(chunk);
+                        converted.push(255);
+                    });
+                    converted
+                }),
+                stride: 4,
+            },
+            gltf::image::Format::B8G8R8A8 => TextureContent {
+                label,
+                size,
+                format: wgpu::TextureFormat::Bgra8Unorm,
+                bytes: Cow::Borrowed(&image_data.pixels),
+                stride: 4,
+            },
+            gltf::image::Format::R16 => TextureContent {
+                label,
+                size,
+                format: wgpu::TextureFormat::R16Float,
+                bytes: Cow::Borrowed(&image_data.pixels),
+                stride: 2,
+            },
+            gltf::image::Format::R16G16 => TextureContent {
+                label,
+                size,
+                format: wgpu::TextureFormat::Rg16Float,
+                bytes: Cow::Borrowed(&image_data.pixels),
+                stride: 4,
+            },
+            gltf::image::Format::R16G16B16 => TextureContent {
+                label,
+                size,
+                format: wgpu::TextureFormat::Rgba16Float,
+                bytes: Cow::Owned({
+                    // TODO: This might be very ineffective might be better to pre alloc
+                    let mut converted =
+                        Vec::with_capacity(image_data.pixels.len() / 6 + image_data.pixels.len());
+                    image_data.pixels.chunks_exact(6).for_each(|chunk| {
+                        converted.extend(chunk);
+                        converted.push(255);
+                        converted.push(255);
+                    });
+                    converted
+                }),
+                stride: 8,
+            },
+            gltf::image::Format::R16G16B16A16 => TextureContent {
+                label,
+                size,
+                format: wgpu::TextureFormat::Rgba16Float,
+                bytes: Cow::Borrowed(&image_data.pixels),
+                stride: 8,
+            },
         }
     }
-    // if the TextureData type would contain information about
-    // if the texture is multilayered or not this could be done in
-    // a nicer way. Might lead to less control though so I'll begin with this.
-    // Another option is to deref down to the texture itself
-    #[inline]
-    pub fn create_new_view(&self, desc: &wgpu::TextureViewDescriptor) -> wgpu::TextureView {
-        self.texture.create_view(desc)
-    }
 }
 
-pub trait LoadableTexture: Sized + TextureShaderLayout {
-    fn load_texture(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        path: impl AsRef<Path>,
-    ) -> Result<TextureData<Self>>;
-}
-
-pub trait Texture: Sized {
-    fn allocate_texture(device: &wgpu::Device) -> TextureData<Self>
-    where
-        Self: TextureShaderLayout;
+pub fn allocate_simple_texture(
+    device: &Device,
+    queue: &Queue,
+    content: TextureContent<'_>,
+) -> wgpu::Texture {
+    let TextureContent {
+        label,
+        format,
+        stride,
+        size,
+        bytes,
+    } = content;
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label,
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+    });
+    let texutre_copy_view = wgpu::TextureCopyView {
+        texture: &texture,
+        mip_level: 0,
+        origin: wgpu::Origin3d::ZERO,
+    };
+    let texture_data_layout = wgpu::TextureDataLayout {
+        offset: 0,
+        bytes_per_row: stride * size.width,
+        rows_per_image: 0,
+    };
+    queue.write_texture(texutre_copy_view, &bytes, texture_data_layout, size);
+    texture
 }

@@ -1,7 +1,7 @@
 use super::{
     camera::Camera,
     common::DEPTH_FORMAT,
-    obj_model::*,
+    gltf::{GltfModel, INSTANCE_BUFFER_LEN, InstanceData, MeshVertex},
     vertex_buffers::{MutableVertexData, VertexBuffer},
 };
 use crate::assets::*;
@@ -19,11 +19,11 @@ pub fn draw(
     world: &SubWorld,
     #[state] pass: &SelectionPass,
     #[resource] queue: &wgpu::Queue,
-    #[resource] asset_storage: &Assets<ObjModel>,
+    #[resource] asset_storage: &Assets<GltfModel>,
     #[resource] depth_texture: &DepthTexture,
     #[resource] device: &wgpu::Device,
     #[resource] current_frame: &wgpu::SwapChainTexture,
-    query: &mut Query<(&Transform, &Selectable, &Handle<ObjModel>)>,
+    query: &mut Query<(&Transform, &Selectable, &Handle<GltfModel>)>,
 ) {
     // update selected units instance buffer
     query.par_for_each_chunk(world, |chunk| {
@@ -69,7 +69,7 @@ pub fn draw(
     render_pass.push_debug_group("Selection pass");
     render_pass.set_pipeline(&pass.render_pipeline);
     render_pass.set_bind_group(0, &pass.camera_bind_group, &[]);
-    let mut query = <(Read<Transform>, Read<Selectable>, Read<Handle<ObjModel>>)>::query();
+    let mut query = <(Read<Transform>, Read<Selectable>, Read<Handle<GltfModel>>)>::query();
     query.for_each_chunk(world, |chunk| {
         let (_, selectable, models) = chunk.get_components();
         if let Some(model) = models.get(0) {
@@ -78,8 +78,8 @@ pub fn draw(
                 .iter()
                 .filter(|selectable| selectable.is_selected)
                 .count();
-            render_pass.draw_model_with_instance_buffer(
-                model,
+            model.draw_with_instance_buffer(
+                &mut render_pass,
                 &pass.instance_buffer,
                 0..count as u32,
             );
@@ -175,8 +175,7 @@ impl SelectionPass {
             }),
             multisample: wgpu::MultisampleState::default(),
         });
-        let instance_buffer_len =
-            INSTANCE_BUFFER_SIZE as usize / std::mem::size_of::<InstanceData>();
+        let instance_buffer_len = INSTANCE_BUFFER_LEN / std::mem::size_of::<InstanceData>();
         let buffer_data = vec![InstanceData::default(); instance_buffer_len];
         let instance_buffer = VertexBuffer::allocate_mutable_buffer(device, &buffer_data);
         SelectionPass {

@@ -9,8 +9,8 @@ use super::{
     camera::Camera,
     common::{DepthTexture, DEPTH_FORMAT},
     gltf::GltfModel,
-    gltf::GltfMaterial,
-    obj_model::{InstanceData, MeshVertex},
+    gltf::PbrMaterial,
+    gltf::{InstanceData, MeshVertex},
     vertex_buffers::VertexBuffer,
 };
 
@@ -85,7 +85,7 @@ pub fn draw(
         let (transforms, models) = chunk.get_components();
         if let Some(model) = models.get(0) {
             let model = asset_storage.get(model).unwrap();
-            model.draw(&mut render_pass, 0..transforms.len() as u32);
+            model.draw_instanced(&mut render_pass, 0..transforms.len() as u32);
         }
     });
     render_pass.pop_debug_group();
@@ -132,7 +132,7 @@ impl ModelPass {
                 label: Some("Model pipeline layout"),
                 bind_group_layouts: &[
                     &camera_bind_group_layout,
-                    GltfMaterial::get_layout(&device) 
+                    PbrMaterial::get_layout(&device) 
                 ],
                 push_constant_ranges: &[],
             });

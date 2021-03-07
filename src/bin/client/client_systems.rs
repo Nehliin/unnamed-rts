@@ -4,14 +4,13 @@ use crate::{
     assets::{Assets, Handle},
     graphics::{
         camera::Camera,
-        obj_model::ObjModel,
+        gltf::GltfModel,
         ui::ui_context::{UiContext, WindowSize},
     },
     input::{CursorPosition, MouseButtonState},
 };
 use glam::*;
 use legion::{world::SubWorld, *};
-use rayon::iter::ParallelIterator;
 use unnamed_rts::components::*;
 use unnamed_rts::resources::*;
 use unnamed_rts::{components::Selectable, resources::Time};
@@ -94,27 +93,25 @@ pub fn selection(
     #[resource] camera: &Camera,
     #[resource] mouse_button_state: &MouseButtonState,
     #[resource] mouse_pos: &CursorPosition,
-    #[resource] asset_storage: &Assets<ObjModel>,
+    #[resource] asset_storage: &Assets<GltfModel>,
     #[resource] window_size: &WindowSize,
-    query: &mut Query<(&Transform, &Handle<ObjModel>, &mut Selectable)>,
+    query: &mut Query<(&Transform, &Handle<GltfModel>, &mut Selectable)>,
 ) {
     if mouse_button_state.pressed_current_frame(&MouseButton::Left) {
         let ray = camera.raycast(mouse_pos, window_size);
         let dirfrac = ray.direction.recip();
-        query
-            .par_iter_mut(world)
-            .for_each(|(transform, handle, mut selectable)| {
-                let model = asset_storage.get(&handle).unwrap();
-                let (min, max) = (model.min_position, model.max_position);
-                let world_min = transform.get_model_matrix() * Vec4::new(min.x, min.y, min.z, 1.0);
-                let world_max = transform.get_model_matrix() * Vec4::new(max.x, max.y, max.z, 1.0);
-                selectable.is_selected = intesercts(
-                    camera.get_position(),
-                    dirfrac,
-                    world_min.xyz().into(),
-                    world_max.xyz().into(),
-                );
-            })
+        query.par_for_each_mut(world, |(transform, handle, mut selectable)| {
+            let model = asset_storage.get(&handle).unwrap();
+            let (min, max) = (model.min_vertex, model.max_vertex);
+            let world_min = transform.get_model_matrix() * Vec4::new(min.x, min.y, min.z, 1.0);
+            let world_max = transform.get_model_matrix() * Vec4::new(max.x, max.y, max.z, 1.0);
+            selectable.is_selected = intesercts(
+                camera.get_position(),
+                dirfrac,
+                world_min.xyz().into(),
+                world_max.xyz().into(),
+            );
+        })
     }
 }
 

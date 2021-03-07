@@ -11,7 +11,6 @@ use crate::{
         gltf::GltfModel,
         grid_pass::{self, GridPass},
         model_pass::{self, ModelPass},
-        obj_model::ObjModel,
         selection_pass::{self, SelectionPass},
         ui::{
             ui_context::{UiContext, WindowSize},
@@ -118,7 +117,6 @@ impl App {
         let (lines_sender, lines_rc) = crossbeam_channel::bounded(1);
         let (selectable_sender, selectable_rc) = crossbeam_channel::bounded(1);
         let schedule = Schedule::builder()
-            .add_system(assets::asset_load_system::<ObjModel>())
             .add_system(assets::asset_load_system::<GltfModel>())
             .add_system(camera::free_flying_camera_system())
             .add_system(model_pass::update_system())
@@ -179,13 +177,11 @@ impl App {
 
         resources.insert(NetworkSerialization::default());
         // prelode assets: TODO: do this in app main and fetch handle based on path instead
-        let assets_obj = Assets::<ObjModel>::new();
         let mut assets = Assets::<GltfModel>::new();
         let suit = assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
         init_ui_resources(&mut resources, &size, window.scale_factor() as f32);
 
         resources.insert(assets);
-        resources.insert(assets_obj);
         resources.insert(DebugMenueSettings {
             show_grid: true,
             show_bounding_boxes: true,

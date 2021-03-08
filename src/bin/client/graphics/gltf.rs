@@ -36,6 +36,7 @@ pub struct GltfMesh {
 pub struct MeshVertex {
     pub position: Vec3,
     pub normal: Vec3,
+    pub tanget: Vec3,
     pub tex_coords: Vec2,
 }
 
@@ -56,8 +57,14 @@ impl VertexBuffer for MeshVertex {
             },
             VertexAttribute {
                 offset: (std::mem::size_of::<[f32; 3]>() * 2) as BufferAddress,
-                format: VertexFormat::Float2,
+                format: VertexFormat::Float3,
                 shader_location: 2,
+            },
+            VertexAttribute {
+                offset: (std::mem::size_of::<[f32; 3]>() * 2 + std::mem::size_of::<[f32; 3]>())
+                    as BufferAddress,
+                format: VertexFormat::Float2,
+                shader_location: 3,
             },
         ]
     }
@@ -85,22 +92,22 @@ impl VertexBuffer for InstanceData {
             VertexAttribute {
                 offset: 0,
                 format: VertexFormat::Float4,
-                shader_location: 3,
+                shader_location: 4,
             },
             VertexAttribute {
                 offset: ROW_SIZE,
                 format: VertexFormat::Float4,
-                shader_location: 4,
+                shader_location: 5,
             },
             VertexAttribute {
                 offset: ROW_SIZE * 2,
                 format: VertexFormat::Float4,
-                shader_location: 5,
+                shader_location: 6,
             },
             VertexAttribute {
                 offset: ROW_SIZE * 3,
                 format: VertexFormat::Float4,
-                shader_location: 6,
+                shader_location: 7,
             },
         ]
     }
@@ -170,6 +177,7 @@ struct PbrMaterialFactors {
     metallic_factor: f32,
     rougness_factor: f32,
     occulusion_strenght: f32,
+    normal_scale: f32,
 }
 
 impl PbrMaterial {
@@ -209,6 +217,14 @@ impl PbrMaterial {
                 &gltf_texture.sampler(),
             )
         });
+        let normal_texture = gltf_material.normal_texture().map(|texture_info| {
+            let gltf_texture = texture_info.texture();
+            PbrMaterialTextureView::new(
+                device,
+                &textures[gltf_texture.index()],
+                &gltf_texture.sampler(),
+            )
+        });
         let factors = PbrMaterialFactors {
             rougness_factor: pbr_metallic_roughness.roughness_factor(),
             metallic_factor: pbr_metallic_roughness.metallic_factor(),
@@ -216,6 +232,10 @@ impl PbrMaterial {
             occulusion_strenght: gltf_material
                 .occlusion_texture()
                 .map(|occlusion_tex| occlusion_tex.strength())
+                .unwrap_or(1.0),
+            normal_scale: gltf_material
+                .normal_texture()
+                .map(|normal_tex| normal_tex.scale())
                 .unwrap_or(1.0),
         };
         let factor_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -271,6 +291,18 @@ impl PbrMaterial {
                 },
                 wgpu::BindGroupEntry {
                     binding: 6,
+                    resource: wgpu::BindingResource::TextureView(
+                        &normal_texture.as_ref().unwrap_or(placeholder).view,
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 7,
+                    resource: wgpu::BindingResource::Sampler(
+                        &normal_texture.as_ref().unwrap_or(placeholder).sampler,
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 8,
                     resource: wgpu::BindingResource::Buffer {
                         buffer: &factor_buffer,
                         offset: 0,
@@ -355,9 +387,29 @@ impl PbrMaterial {
                         },
                         count: None,
                     },
-                    // material factors
+                    // normal texture
                     wgpu::BindGroupLayoutEntry {
                         binding: 6,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 7,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler {
+                            comparison: false,
+                            filtering: true,
+                        },
+                        count: None,
+                    },
+                    // material factors
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 8,
                         visibility: wgpu::ShaderStage::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
@@ -467,8 +519,9 @@ impl GltfModel {
                         .read_positions()
                         .expect("Mesh must have vertecies")
                         .zip(reader.read_normals().expect("Mesh must have normals"))
+                        .zip(reader.read_tangents().expect("TODO: compute tangents"))
                         .zip(tex_coords_iter)
-                        .map(|((pos, norm), tex)| {
+                        .map(|(((pos, norm), tan), tex)| {
                             max_vertex[0].fetch_max(pos[0].ceil() as i32, Ordering::AcqRel);
                             max_vertex[1].fetch_max(pos[1].ceil() as i32, Ordering::AcqRel);
                             max_vertex[2].fetch_max(pos[2].ceil() as i32, Ordering::AcqRel);
@@ -480,6 +533,7 @@ impl GltfModel {
                             MeshVertex {
                                 position: position.into(),
                                 normal: Vec3::new(norm[0], norm[1], norm[2]),
+                                tanget: Vec3::new(tan[0], tan[1], tan[2]),
                                 tex_coords: Vec2::new(tex[0], tex[1]),
                             }
                         })

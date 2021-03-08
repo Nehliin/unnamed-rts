@@ -2,9 +2,10 @@
 #extension GL_EXT_scalar_block_layout: require
 
 layout(location=0) in vec2 v_tex_coords;
-layout(location=1) in vec3 normal;
+layout(location=1) in vec3 in_normal;
 layout(location=2) in vec3 fragment_position;
 layout(location=3) in vec3 view_pos;
+layout(location=4) in mat3 tbn;
 
 layout(location=0) out vec4 f_color;
 
@@ -14,12 +15,15 @@ layout(set=1, binding=2) uniform texture2D metallic_texture;
 layout(set=1, binding=3) uniform sampler metallic_sampler;
 layout(set=1, binding=4) uniform texture2D occulusion_texture;
 layout(set=1, binding=5) uniform sampler occulusion_sampler;
+layout(set=1, binding=6) uniform texture2D normal_texture;
+layout(set=1, binding=7) uniform sampler normal_sampler;
 
-layout(set=1, binding=6, std430) uniform MaterialFactors {
+layout(set=1, binding=8, std430) uniform MaterialFactors {
     vec4 base_color_factor;
     float metallic_factor;
     float roughness_factor;
     float occulusion_strenght;
+    float normal_scale;
 };
 
 const float PI = 3.14159265359;
@@ -80,7 +84,10 @@ void main() {
     float roughness = metal_tex_color.y * roughness_factor;
     float ao = texture(sampler2D(occulusion_texture, occulusion_sampler), v_tex_coords).r * occulusion_strenght;
 
-    vec3 N = normalize(normal);
+    vec3 normal = texture(sampler2D(normal_texture, normal_sampler), v_tex_coords).rgb * normal_scale;
+    // convert between 0-1 to -1-1
+    normal = normalize(normal * 2 - 1);
+    vec3 N = normalize(tbn * normal);
     vec3 V = normalize(view_pos - fragment_position);
 
     // Irradiance

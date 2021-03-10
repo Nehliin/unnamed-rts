@@ -291,12 +291,14 @@ impl PbrMaterial {
                 },
                 wgpu::BindGroupEntry {
                     binding: 6,
+                    // TODO: THIS PLACEHOLDER IS WRONG
                     resource: wgpu::BindingResource::TextureView(
                         &normal_texture.as_ref().unwrap_or(placeholder).view,
                     ),
                 },
                 wgpu::BindGroupEntry {
                     binding: 7,
+                    // TODO: THIS PLACEHOLDER IS WRONG
                     resource: wgpu::BindingResource::Sampler(
                         &normal_texture.as_ref().unwrap_or(placeholder).sampler,
                     ),

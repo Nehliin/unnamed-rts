@@ -41,7 +41,7 @@ const Light lights[light_count] = Light[](
 );
 
 vec3 fresnelSchlick(float cosTheta, vec3 F0) {
-    return F0 + (1.0 + F0) * pow(max(1.0 - cosTheta, 0.0), 5.0);
+    return F0 + (1.0 - F0) * pow(max(1.0 - cosTheta, 0.0), 5.0);
 }
 
 float distributionGGX(vec3 N, vec3 H, float roughness) {
@@ -116,7 +116,7 @@ void main() {
         float NdotL = max(dot(N,L), 0.0);
         Lo += (kD * albedo / PI + specular) * radiance * NdotL;
     }
-    vec3 ambient = vec3(0.03) * albedo * ao;
+    vec3 ambient = vec3(0.01) * albedo * ao;
     vec3 color = ambient + Lo;
     // HDR
     color = color / (color + vec3(1.0));

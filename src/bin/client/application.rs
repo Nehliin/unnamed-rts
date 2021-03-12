@@ -71,7 +71,12 @@ fn init_ui_resources(resources: &mut Resources, size: &PhysicalSize<u32>, scale_
 impl App {
     pub async fn new(window: &Window) -> App {
         let size = window.inner_size();
-        let instance = Instance::new(BackendBit::PRIMARY);
+        let instance = if cfg!(mac) {
+            Instance::new(BackendBit::METAL)
+        } else {
+            // DX12 have poor performance and crashes for whatever reason
+            Instance::new(BackendBit::VULKAN)
+        };
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {

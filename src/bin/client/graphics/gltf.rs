@@ -244,6 +244,7 @@ impl PbrMaterial {
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
         });
         let placeholder = get_white_placeholder_texture(device, queue);
+        let normal_map_placeholder = get_normal_placeholder_texture(device, queue);
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &Self::get_layout(device),
             entries: &[
@@ -291,16 +292,14 @@ impl PbrMaterial {
                 },
                 wgpu::BindGroupEntry {
                     binding: 6,
-                    // TODO: THIS PLACEHOLDER IS WRONG
                     resource: wgpu::BindingResource::TextureView(
-                        &normal_texture.as_ref().unwrap_or(placeholder).view,
+                        &normal_texture.as_ref().unwrap_or(normal_map_placeholder).view,
                     ),
                 },
                 wgpu::BindGroupEntry {
                     binding: 7,
-                    // TODO: THIS PLACEHOLDER IS WRONG
                     resource: wgpu::BindingResource::Sampler(
-                        &normal_texture.as_ref().unwrap_or(placeholder).sampler,
+                        &normal_texture.as_ref().unwrap_or(normal_map_placeholder).sampler,
                     ),
                 },
                 wgpu::BindGroupEntry {
@@ -449,6 +448,43 @@ fn get_white_placeholder_texture(
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("White sampler"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            lod_min_clamp: -100.0, // related to mipmaps
+            lod_max_clamp: 100.0,  // related to mipmaps
+            compare: None,
+            ..Default::default()
+        });
+        PbrMaterialTextureView { view, sampler }
+    })
+}
+
+fn get_normal_placeholder_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+) -> &'static PbrMaterialTextureView {
+    static PLACEHOLDER_TEXTURE: OnceCell<PbrMaterialTextureView> = OnceCell::new();
+    PLACEHOLDER_TEXTURE.get_or_init(|| {
+        let size = wgpu::Extent3d {
+            width: 1,
+            height: 1,
+            depth: 1,
+        };
+        let content = TextureContent {
+            label: Some("Normal map placeholder texture"),
+            bytes: Cow::Owned(vec![128, 128, 255, 255]),
+            size,
+            stride: 4,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+        };
+        let texture = allocate_simple_texture(device, queue, content);
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Normal map placeholder sampler"),
             address_mode_u: wgpu::AddressMode::Repeat,
             address_mode_v: wgpu::AddressMode::Repeat,
             address_mode_w: wgpu::AddressMode::Repeat,

@@ -119,17 +119,21 @@ impl VertexBuffer for InstanceData {
     }
 }
 #[derive(Debug)]
-struct PbrMaterialTextureView {
+struct PbrMaterialTexture {
     sampler: wgpu::Sampler,
     view: wgpu::TextureView,
+    texture: wgpu::Texture,
 }
 
-impl PbrMaterialTextureView {
+impl PbrMaterialTexture {
     pub fn new(
         device: &Device,
-        texture: &wgpu::Texture,
+        queue: &Queue,
+        texture_content: &TextureContent<'_>,
         sampler_info: &gltf::texture::Sampler,
+        srgb: bool,
     ) -> Self {
+        let texture = allocate_simple_texture(device, queue, &texture_content, srgb);
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("PbrMaterial texture sampler"),
             address_mode_u: match sampler_info.wrap_s() {
@@ -164,14 +168,18 @@ impl PbrMaterialTextureView {
             ..Default::default()
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        PbrMaterialTextureView { sampler, view }
+        PbrMaterialTexture {
+            sampler,
+            view,
+            texture,
+        }
     }
 }
 
 #[derive(Debug)]
 pub struct PbrMaterial {
-    base_color_texture: Option<PbrMaterialTextureView>,
-    metallic_roughness_texture: Option<PbrMaterialTextureView>,
+    base_color_texture: Option<PbrMaterialTexture>,
+    metallic_roughness_texture: Option<PbrMaterialTexture>,
     factors: PbrMaterialFactors,
     factor_buffer: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
@@ -191,17 +199,19 @@ impl PbrMaterial {
         device: &Device,
         queue: &Queue,
         gltf_material: &gltf::Material,
-        textures: &[wgpu::Texture],
+        textures: &[TextureContent<'_>],
     ) -> Self {
         let pbr_metallic_roughness = gltf_material.pbr_metallic_roughness();
         let base_color_texture = pbr_metallic_roughness
             .base_color_texture()
             .map(|texture_info| {
                 let gltf_texture = texture_info.texture();
-                PbrMaterialTextureView::new(
+                PbrMaterialTexture::new(
                     device,
+                    queue,
                     &textures[gltf_texture.index()],
                     &gltf_texture.sampler(),
+                    true,
                 )
             });
         let metallic_roughness_texture =
@@ -209,26 +219,32 @@ impl PbrMaterial {
                 .metallic_roughness_texture()
                 .map(|texture_info| {
                     let gltf_texture = texture_info.texture();
-                    PbrMaterialTextureView::new(
+                    PbrMaterialTexture::new(
                         device,
+                        queue,
                         &textures[gltf_texture.index()],
                         &gltf_texture.sampler(),
+                        false,
                     )
                 });
         let occulusion_texture = gltf_material.occlusion_texture().map(|texture_info| {
             let gltf_texture = texture_info.texture();
-            PbrMaterialTextureView::new(
+            PbrMaterialTexture::new(
                 device,
+                queue,
                 &textures[gltf_texture.index()],
                 &gltf_texture.sampler(),
+                false,
             )
         });
         let normal_texture = gltf_material.normal_texture().map(|texture_info| {
             let gltf_texture = texture_info.texture();
-            PbrMaterialTextureView::new(
+            PbrMaterialTexture::new(
                 device,
+                queue,
                 &textures[gltf_texture.index()],
                 &gltf_texture.sampler(),
+                false,
             )
         });
         let factors = PbrMaterialFactors {
@@ -441,8 +457,8 @@ impl PbrMaterial {
 fn get_white_placeholder_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-) -> &'static PbrMaterialTextureView {
-    static PLACEHOLDER_TEXTURE: OnceCell<PbrMaterialTextureView> = OnceCell::new();
+) -> &'static PbrMaterialTexture {
+    static PLACEHOLDER_TEXTURE: OnceCell<PbrMaterialTexture> = OnceCell::new();
     PLACEHOLDER_TEXTURE.get_or_init(|| {
         let size = wgpu::Extent3d {
             width: 1,
@@ -454,9 +470,9 @@ fn get_white_placeholder_texture(
             bytes: Cow::Owned(vec![255, 255, 255, 255]),
             size,
             stride: 4,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format: gltf::image::Format::R8G8B8A8,
         };
-        let texture = allocate_simple_texture(device, queue, content);
+        let texture = allocate_simple_texture(device, queue, &content, false);
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("White sampler"),
@@ -471,15 +487,19 @@ fn get_white_placeholder_texture(
             compare: None,
             ..Default::default()
         });
-        PbrMaterialTextureView { view, sampler }
+        PbrMaterialTexture {
+            view,
+            sampler,
+            texture,
+        }
     })
 }
 
 fn get_normal_placeholder_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-) -> &'static PbrMaterialTextureView {
-    static PLACEHOLDER_TEXTURE: OnceCell<PbrMaterialTextureView> = OnceCell::new();
+) -> &'static PbrMaterialTexture {
+    static PLACEHOLDER_TEXTURE: OnceCell<PbrMaterialTexture> = OnceCell::new();
     PLACEHOLDER_TEXTURE.get_or_init(|| {
         let size = wgpu::Extent3d {
             width: 1,
@@ -491,9 +511,9 @@ fn get_normal_placeholder_texture(
             bytes: Cow::Owned(vec![128, 128, 255, 255]),
             size,
             stride: 4,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format: gltf::image::Format::R8G8B8A8,
         };
-        let texture = allocate_simple_texture(device, queue, content);
+        let texture = allocate_simple_texture(device, queue, &content, false);
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("Normal map placeholder sampler"),
@@ -508,14 +528,17 @@ fn get_normal_placeholder_texture(
             compare: None,
             ..Default::default()
         });
-        PbrMaterialTextureView { view, sampler }
+        PbrMaterialTexture {
+            view,
+            sampler,
+            texture,
+        }
     })
 }
 
 #[derive(Debug)]
 pub struct GltfModel {
     pub meshes: Vec<GltfMesh>,
-    pub textures: Vec<wgpu::Texture>,
     pub instance_buffer: MutableVertexData<InstanceData>,
     pub min_vertex: Vec3,
     pub max_vertex: Vec3,
@@ -527,10 +550,9 @@ impl GltfModel {
         let (gltf, buffers, images) = gltf::import(path)?;
         let gltf_load_time = gltf_start.elapsed().as_secs_f32();
         let start = Instant::now();
-        let textures = images
+        let texture_content = images
             .par_iter()
-            // TODO: This doesn't take in Srgb textures into account
-            .map(|image| allocate_simple_texture(device, queue, TextureContent::from(image)))
+            .map(TextureContent::from)
             .collect::<Vec<_>>();
         let min_vertex = [
             AtomicI32::new(i32::MAX),
@@ -604,7 +626,7 @@ impl GltfModel {
                         vertex_buffer,
                         local_transform,
                         index_buffer,
-                        material: PbrMaterial::new(device, queue, &primitive.material(), &textures),
+                        material: PbrMaterial::new(device, queue, &primitive.material(), &texture_content),
                         num_indicies: indicies.len() as u32,
                     }
                 })
@@ -624,7 +646,6 @@ impl GltfModel {
         Ok(GltfModel {
             meshes,
             instance_buffer,
-            textures,
             min_vertex: Vec3::new(
                 min_vertex[0].load(Ordering::Acquire) as f32,
                 min_vertex[1].load(Ordering::Acquire) as f32,

@@ -37,6 +37,7 @@ pub struct MeshVertex {
     pub position: Vec3,
     pub normal: Vec3,
     pub tanget: Vec3,
+    pub tang_handeness: f32,
     pub tex_coords: Vec2,
 }
 
@@ -61,10 +62,15 @@ impl VertexBuffer for MeshVertex {
                 shader_location: 2,
             },
             VertexAttribute {
-                offset: (std::mem::size_of::<[f32; 3]>() * 2 + std::mem::size_of::<[f32; 3]>())
+                offset: (std::mem::size_of::<[f32; 3]>() * 3) as BufferAddress,
+                format: VertexFormat::Float,
+                shader_location: 3,
+            },
+            VertexAttribute {
+                offset: (std::mem::size_of::<[f32; 3]>() * 3 + std::mem::size_of::<f32>())
                     as BufferAddress,
                 format: VertexFormat::Float2,
-                shader_location: 3,
+                shader_location: 4,
             },
         ]
     }
@@ -92,22 +98,22 @@ impl VertexBuffer for InstanceData {
             VertexAttribute {
                 offset: 0,
                 format: VertexFormat::Float4,
-                shader_location: 4,
+                shader_location: 5,
             },
             VertexAttribute {
                 offset: ROW_SIZE,
                 format: VertexFormat::Float4,
-                shader_location: 5,
+                shader_location: 6,
             },
             VertexAttribute {
                 offset: ROW_SIZE * 2,
                 format: VertexFormat::Float4,
-                shader_location: 6,
+                shader_location: 7,
             },
             VertexAttribute {
                 offset: ROW_SIZE * 3,
                 format: VertexFormat::Float4,
-                shader_location: 7,
+                shader_location: 8,
             },
         ]
     }
@@ -293,13 +299,19 @@ impl PbrMaterial {
                 wgpu::BindGroupEntry {
                     binding: 6,
                     resource: wgpu::BindingResource::TextureView(
-                        &normal_texture.as_ref().unwrap_or(normal_map_placeholder).view,
+                        &normal_texture
+                            .as_ref()
+                            .unwrap_or(normal_map_placeholder)
+                            .view,
                     ),
                 },
                 wgpu::BindGroupEntry {
                     binding: 7,
                     resource: wgpu::BindingResource::Sampler(
-                        &normal_texture.as_ref().unwrap_or(normal_map_placeholder).sampler,
+                        &normal_texture
+                            .as_ref()
+                            .unwrap_or(normal_map_placeholder)
+                            .sampler,
                     ),
                 },
                 wgpu::BindGroupEntry {
@@ -572,6 +584,7 @@ impl GltfModel {
                                 position: position.into(),
                                 normal: Vec3::new(norm[0], norm[1], norm[2]),
                                 tanget: Vec3::new(tan[0], tan[1], tan[2]),
+                                tang_handeness: tan[3],
                                 tex_coords: Vec2::new(tex[0], tex[1]),
                             }
                         })

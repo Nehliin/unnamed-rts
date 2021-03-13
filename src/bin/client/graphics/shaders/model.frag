@@ -2,7 +2,6 @@
 #extension GL_EXT_scalar_block_layout: require
 
 layout(location=0) in vec2 v_tex_coords;
-layout(location=1) in vec3 in_normal;
 layout(location=2) in vec3 fragment_position;
 layout(location=3) in vec3 view_pos;
 layout(location=4) in mat3 tbn;
@@ -79,17 +78,19 @@ float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
 void main() {
     vec4 base_tex_color = texture(sampler2D(base_texture, base_sampler), v_tex_coords);
     vec2 metal_tex_color = texture(sampler2D(metallic_texture, metallic_sampler), v_tex_coords).bg;
-    vec3 albedo = pow(base_tex_color.rgb, vec3(2.2)) * base_color_factor.rgb;
+    vec3 albedo = pow(base_tex_color.rgb * base_color_factor.rgb, vec3(2.2));
     float metallic = metal_tex_color.x * metallic_factor;
     float roughness = metal_tex_color.y * roughness_factor;
     float ao = texture(sampler2D(occulusion_texture, occulusion_sampler), v_tex_coords).r * occulusion_strenght;
 
     vec3 normal = texture(sampler2D(normal_texture, normal_sampler), v_tex_coords).rgb * normal_scale;
     // convert between 0-1 to -1-1
-    normal = normalize(normal * 2 - 1);
+    normal = normal * 2 - 1;
     vec3 N = normalize(tbn * normal);
     vec3 V = normalize(view_pos - fragment_position);
 
+    vec3 F0 = vec3(0.04);
+    F0 = mix(F0, albedo, metallic);
     // Irradiance
     vec3 Lo = vec3(0.0);
     for(int i = 0; i < light_count; ++i) {
@@ -98,9 +99,7 @@ void main() {
         float distance = length(lights[i].position - fragment_position);
         float attenuation = 1.0 / (distance * distance);
         vec3 radiance = lights[i].color * attenuation;
-
-        vec3 F0 = vec3(0.04);
-        F0 = mix(F0, albedo, metallic);
+        
         vec3 F = fresnelSchlick(max(dot(H,V), 0.0), F0);
         float ndf = distributionGGX(N, H, roughness);
         float G = geometrySmith(N, V, L, roughness);

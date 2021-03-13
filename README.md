@@ -5,8 +5,10 @@ This is a hobby project that is a continuation of my 3D graphical programming ex
 
 Current goals:
 - [x] Multi-threaded rendering using wgpu
-  - [ ] Pbr rendering (without IBL)
-  - [x] Gltf model support (WIP working)
+  - [x] Pbr rendering (without IBL)
+  - [x] Normal mapping 
+  - [x] Basic HDR 
+  - [x] Gltf model support (Emissive texture not implemented)
 - [x] Ui support using egui
 - [ ] Animations
 - [ ] RTS game mechanics

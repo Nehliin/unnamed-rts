@@ -5,6 +5,9 @@ use once_cell::sync::OnceCell;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 const MAX_LIGHTS: i32 = 5;
+// alignment differs in array vs outside array
+const POINTLIGHT_STD430_ELEMENT_SIZE: usize =
+    std::mem::size_of::<<PointLight as AsStd430>::Std430Type>() + 4;
 #[derive(Debug, Copy, Clone, AsStd430)]
 pub struct PointLight {
     pub color: mint::Vector3<f32>,
@@ -58,10 +61,11 @@ impl LightUniformBuffer {
     pub fn new(device: &wgpu::Device) -> LightUniformBuffer {
         let light_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Point light buffer"),
-            size: (PointLight::std430_size_static() * MAX_LIGHTS as usize) as u64,
+            size: (POINTLIGHT_STD430_ELEMENT_SIZE * MAX_LIGHTS as usize) as u64,
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
             mapped_at_creation: false,
         });
+
         let light_count_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Light count buffer"),
             size: LightCount::std430_size_static() as u64,
@@ -93,7 +97,7 @@ impl LightUniformBuffer {
         LightUniformBuffer {
             light_buffer,
             light_count_buffer,
-            bind_group
+            bind_group,
         }
     }
 }
@@ -109,14 +113,13 @@ pub fn update(
     query.par_for_each(world, |light| {
         queue.write_buffer(
             &light_uniform.light_buffer,
-            offset.fetch_add(1, Ordering::AcqRel) * PointLight::std430_size_static() as u64,
+            offset.fetch_add(1, Ordering::AcqRel) * POINTLIGHT_STD430_ELEMENT_SIZE as u64,
             light.as_std430().as_bytes(),
         )
     });
-    // - 1 to remove last addition from fetch_add
-    let offset = offset.load(Ordering::Acquire) - 1;
+    let offset = offset.load(Ordering::Acquire);
     let light_count = LightCount {
-        point_light_count: offset as i32
+        point_light_count: offset as i32,
     };
     queue.write_buffer(
         &light_uniform.light_count_buffer,

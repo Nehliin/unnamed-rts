@@ -38,6 +38,7 @@ pub fn update(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 #[system]
 pub fn draw(
     world: &SubWorld,

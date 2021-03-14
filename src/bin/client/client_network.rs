@@ -68,14 +68,14 @@ pub fn add_client_components(
     command_buffer.extend(vec![
         (
             PointLight {
-                color: Vec3::new(1.0, 1.0, 1.0).into(),
+                color: Vec3::new(1.0, 0.0, 0.0).into(),
                 position: Vec3::new(1.0, 1.0, 0.0).into(),
             },
             (),
         ),
         (
             PointLight {
-                color: Vec3::new(1.0, 1.0, 1.0).into(),
+                color: Vec3::new(0.0, 0.0, 1.0).into(),
                 position: Vec3::new(-1.0, 1.0, 0.0).into(),
             },
             (),

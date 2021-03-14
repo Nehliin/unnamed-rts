@@ -32,7 +32,7 @@ struct PointLight {
 
 const int MAX_LIGHTS = 5;
 
-layout(set=2, binding=0, std430) uniform PointLights {
+layout(set=2, binding=0, std430) uniform Lights {
     PointLight point_lights[MAX_LIGHTS];
 };
 layout(set=2, binding=1, std430) uniform LightCount {

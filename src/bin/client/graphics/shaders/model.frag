@@ -25,19 +25,22 @@ layout(set=1, binding=8, std430) uniform MaterialFactors {
     float normal_scale;
 };
 
+struct PointLight {
+    vec3 color;
+    vec3 position;
+};
+
+const int MAX_LIGHTS = 5;
+
+layout(set=2, binding=0, std430) uniform Lights {
+    PointLight point_lights[MAX_LIGHTS];
+};
+layout(set=2, binding=1, std430) uniform LightCount {
+    int point_light_count; 
+};
+
 const float PI = 3.14159265359;
 
-struct Light {
-   vec3 position;
-   vec3 color;   
-};
-const int light_count = 2;
-const Light lights[light_count] = Light[](
-    Light(vec3(-1.0, 1.0,0.0), vec3(1.0,1.0,1.0)),
-    Light(vec3(1.0, 1.0,0.0), vec3(1.0,1.0,1.0))
-   // Light(vec3(7.0, 10.0, 6.0), vec3(1.0,1.0,1.0)),
-   // Light(vec3(7.0, 10.0,-6.0), vec3(1.0,1.0,1.0))
-);
 
 vec3 fresnelSchlick(float cosTheta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(max(1.0 - cosTheta, 0.0), 5.0);
@@ -93,12 +96,12 @@ void main() {
     F0 = mix(F0, albedo, metallic);
     // Irradiance
     vec3 Lo = vec3(0.0);
-    for(int i = 0; i < light_count; ++i) {
-        vec3 L = normalize(lights[i].position - fragment_position);
+    for(int i = 0; i < point_light_count; ++i) {
+        vec3 L = normalize(point_lights[i].position - fragment_position);
         vec3 H = normalize(V + L);
-        float distance = length(lights[i].position - fragment_position);
+        float distance = length(point_lights[i].position - fragment_position);
         float attenuation = 1.0 / (distance * distance);
-        vec3 radiance = lights[i].color * attenuation;
+        vec3 radiance = point_lights[i].color * attenuation;
         
         vec3 F = fresnelSchlick(max(dot(H,V), 0.0), F0);
         float ndf = distributionGGX(N, H, roughness);

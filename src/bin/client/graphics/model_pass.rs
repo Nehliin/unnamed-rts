@@ -2,7 +2,6 @@ use crossbeam_channel::Sender;
 use legion::{world::SubWorld, *};
 use unnamed_rts::components::Transform;
 use wgpu::include_spirv;
-
 use crate::assets::{Assets, Handle};
 
 use super::{
@@ -10,6 +9,7 @@ use super::{
     common::{DepthTexture, DEPTH_FORMAT},
     gltf::GltfModel,
     gltf::PbrMaterial,
+    lights::LightUniformBuffer,
     gltf::{InstanceData, MeshVertex},
     vertex_buffers::VertexBuffer,
 };
@@ -38,6 +38,7 @@ pub fn update(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 #[system]
 pub fn draw(
     world: &SubWorld,
@@ -45,6 +46,7 @@ pub fn draw(
     #[resource] asset_storage: &Assets<GltfModel>,
     #[resource] depth_texture: &DepthTexture,
     #[resource] device: &wgpu::Device,
+    #[resource] light_uniform: &LightUniformBuffer,
     #[resource] current_frame: &wgpu::SwapChainTexture,
     query: &mut Query<(&Transform, &Handle<GltfModel>)>,
 ) {
@@ -81,6 +83,7 @@ pub fn draw(
     render_pass.push_debug_group("Model pass");
     render_pass.set_pipeline(&pass.render_pipeline);
     render_pass.set_bind_group(0, &pass.camera_bind_group, &[]);
+    render_pass.set_bind_group(2, &light_uniform.bind_group, &[]);
     query.for_each_chunk(world, |chunk| {
         let (transforms, models) = chunk.get_components();
         if let Some(model) = models.get(0) {
@@ -130,7 +133,11 @@ impl ModelPass {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Model pipeline layout"),
-                bind_group_layouts: &[&camera_bind_group_layout, PbrMaterial::get_layout(&device)],
+                bind_group_layouts: &[
+                    &camera_bind_group_layout,
+                    PbrMaterial::get_or_create_layout(&device),
+                    LightUniformBuffer::get_or_create_layout(&device),
+                ],
                 push_constant_ranges: &[],
             });
 

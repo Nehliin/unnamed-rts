@@ -1,3 +1,4 @@
+use glam::Vec3;
 use laminar::{Config, Packet, SocketEvent};
 use legion::{systems::CommandBuffer, EntityStore, *};
 use log::{error, info, warn};
@@ -10,7 +11,10 @@ use unnamed_rts::{
     },
 };
 
-use crate::{assets::Handle, graphics::gltf::GltfModel};
+use crate::{
+    assets::Handle,
+    graphics::{gltf::GltfModel, lights::PointLight},
+};
 
 pub fn connect_to_server(world: &mut World, resources: &mut Resources) {
     let socket = NetworkSocket::bind_any_with_config(Config {
@@ -61,6 +65,22 @@ pub fn add_client_components(
         command_buffer.add_component(*entity, model.clone());
         command_buffer.add_component(*entity, Selectable { is_selected: false });
     }
+    command_buffer.extend(vec![
+        (
+            PointLight {
+                color: Vec3::new(1.0, 0.0, 0.0).into(),
+                position: Vec3::new(1.0, 1.0, 0.0).into(),
+            },
+            (),
+        ),
+        (
+            PointLight {
+                color: Vec3::new(0.0, 0.0, 1.0).into(),
+                position: Vec3::new(-1.0, 1.0, 0.0).into(),
+            },
+            (),
+        ),
+    ]);
     command_buffer.flush(world, resources);
 }
 

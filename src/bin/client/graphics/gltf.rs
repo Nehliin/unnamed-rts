@@ -268,7 +268,7 @@ impl PbrMaterial {
         let placeholder = get_white_placeholder_texture(device, queue);
         let normal_map_placeholder = get_normal_placeholder_texture(device, queue);
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &Self::get_layout(device),
+            layout: &Self::get_or_create_layout(device),
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -351,7 +351,7 @@ impl PbrMaterial {
         }
     }
 
-    pub fn get_layout(device: &Device) -> &'static wgpu::BindGroupLayout {
+    pub fn get_or_create_layout(device: &Device) -> &'static wgpu::BindGroupLayout {
         static LAYOUT: OnceCell<wgpu::BindGroupLayout> = OnceCell::new();
         LAYOUT.get_or_init(move || {
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

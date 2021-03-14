@@ -11,6 +11,7 @@ use crate::{
         gltf::GltfModel,
         grid_pass::{self, GridPass},
         model_pass::{self, ModelPass},
+        lights::{self, LightUniformBuffer},
         selection_pass::{self, SelectionPass},
         ui::{
             ui_context::{UiContext, WindowSize},
@@ -121,10 +122,12 @@ impl App {
         let (model_sender, model_rc) = crossbeam_channel::bounded(1);
         let (lines_sender, lines_rc) = crossbeam_channel::bounded(1);
         let (selectable_sender, selectable_rc) = crossbeam_channel::bounded(1);
+        let light_uniform = LightUniformBuffer::new(&device);
         let schedule = Schedule::builder()
             .add_system(assets::asset_load_system::<GltfModel>())
             .add_system(camera::free_flying_camera_system())
             .add_system(model_pass::update_system())
+            .add_system(lights::update_system())
             .add_system(model_pass::draw_system(ModelPass::new(
                 &device,
                 &camera,
@@ -159,6 +162,7 @@ impl App {
 
         resources.insert(DepthTexture::new(&device, &sc_desc));
         resources.insert(device);
+        resources.insert(light_uniform);
         resources.insert(queue);
         resources.insert(Time {
             current_time: std::time::Instant::now(),

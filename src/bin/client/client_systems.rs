@@ -5,6 +5,7 @@ use crate::{
     graphics::{
         camera::Camera,
         gltf::GltfModel,
+        heightmap_pass::HeightMap,
         ui::ui_context::{UiContext, WindowSize},
     },
     input::{CursorPosition, MouseButtonState},
@@ -84,6 +85,54 @@ pub fn move_action(
                 }
             }
         });
+    }
+}
+
+#[system]
+pub fn height_map_modification(
+    #[resource] camera: &Camera,
+    #[resource] mouse_button_state: &MouseButtonState,
+    #[resource] mouse_pos: &CursorPosition,
+    #[resource] window_size: &WindowSize,
+    #[resource] height_map: &mut HeightMap,
+) {
+    if mouse_button_state.pressed_current_frame(&MouseButton::Left) {
+        let ray = camera.raycast(mouse_pos, window_size);
+        // check intersection with the heightmap
+        let normal = Vec3A::new(0.0, 1.0, 0.0);
+        let denominator = normal.dot(ray.direction);
+        if denominator.abs() > 0.0001 {
+            // it isn't parallel to the plane
+            // (camera can still theoretically be within the height_map but don't care about that)
+            let height_map_pos: Vec3A = height_map.get_transform().translation.into();
+            let t = (height_map_pos - ray.origin).dot(normal) / denominator;
+            if t >= 0.0 {
+                // there was an intersection
+                let target = (t * ray.direction) + ray.origin;
+                let local_coords = height_map.get_transform().get_model_matrix().inverse()
+                    * Vec4::new(target.x, target.y, target.z, 1.0);
+                // assuming row order 
+                // TODO: Smooth this out 
+                if let Some(value) = height_map
+                    .get_buffer_mut()
+                    .get_mut(local_coords.y as usize * 256 + local_coords.x as usize)
+                {
+                    *value = 255;
+                }
+                if let Some(value) = height_map
+                    .get_buffer_mut()
+                    .get_mut((local_coords.y + 1.0) as usize * 256 + local_coords.x as usize)
+                {
+                    *value = 255;
+                }
+                if let Some(value) = height_map
+                    .get_buffer_mut()
+                    .get_mut((local_coords.y - 1.0) as usize * 256 + local_coords.x as usize)
+                {
+                    *value = 255;
+                }
+            }
+        }
     }
 }
 

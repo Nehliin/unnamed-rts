@@ -144,6 +144,7 @@ impl App {
                 &device,
                 selectable_sender,
             )))
+            .add_system(client_systems::height_map_modification_system())
             .add_system(heightmap_pass::update_system())
             .add_system(heightmap_pass::draw_system(HeightMapPass::new(
                 &device,

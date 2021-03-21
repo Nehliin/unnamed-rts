@@ -49,9 +49,8 @@ pub struct HeightMap {
     displacement_map: wgpu::Texture,
     displacement_buffer: Vec<u8>,
     needs_update: bool,
-    view: wgpu::TextureView,
-    sampler: wgpu::Sampler,
     bind_group: wgpu::BindGroup,
+    transform: Transform,
     // TODO remove
     instance_buffer: MutableVertexData<InstanceData>,
     size: u32,
@@ -175,11 +174,14 @@ impl HeightMap {
             displacement_map,
             displacement_buffer: texture.bytes.to_vec(),
             needs_update: false,
-            sampler,
-            view,
+            transform,
             bind_group,
             size,
         }
+    }
+
+    pub fn get_transform(&self) -> &Transform {
+        &self.transform
     }
 
     pub fn get_buffer_mut(&mut self) -> &mut [u8] {
@@ -190,8 +192,7 @@ impl HeightMap {
     fn update(&self, queue: &wgpu::Queue) {
         let texture_data_layout = wgpu::TextureDataLayout {
             offset: 0,
-            // Incorrect?
-            bytes_per_row: self.size * self.size,
+            bytes_per_row: self.size,
             rows_per_image: 0,
         };
         let texture_size = wgpu::Extent3d {

@@ -13,6 +13,7 @@ use crate::{
         model_pass::{self, ModelPass},
         lights::{self, LightUniformBuffer},
         selection_pass::{self, SelectionPass},
+        heightmap_pass::{self, HeightMapPass},
         ui::{
             ui_context::{UiContext, WindowSize},
             ui_pass::UiPass,
@@ -120,6 +121,7 @@ impl App {
         let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
         let (debug_sender, debug_rc) = crossbeam_channel::bounded(1);
         let (model_sender, model_rc) = crossbeam_channel::bounded(1);
+        let (heightmap_sender, heightmap_rc) = crossbeam_channel::bounded(1);
         let (lines_sender, lines_rc) = crossbeam_channel::bounded(1);
         let (selectable_sender, selectable_rc) = crossbeam_channel::bounded(1);
         let light_uniform = LightUniformBuffer::new(&device);
@@ -130,25 +132,22 @@ impl App {
             .add_system(lights::update_system())
             .add_system(model_pass::draw_system(ModelPass::new(
                 &device,
-                &camera,
                 model_sender,
             )))
             .add_system(selection_pass::draw_system(SelectionPass::new(
                 &device,
-                &camera,
                 selectable_sender,
             )))
+            .add_system(heightmap_pass::draw_system(HeightMapPass::new(&device, &queue, heightmap_sender)))
             .add_system(ui_systems::update_ui_system())
             .add_system(client_systems::selection_system())
             .add_system(grid_pass::draw_system(GridPass::new(
                 &device,
-                &camera,
                 debug_sender,
             )))
             .add_system(debug_lines_pass::update_bounding_boxes_system())
             .add_system(debug_lines_pass::draw_system(DebugLinesPass::new(
                 &device,
-                &camera,
                 lines_sender,
             )))
             .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
@@ -206,7 +205,7 @@ impl App {
             swap_chain,
             surface,
             sc_desc,
-            command_receivers: vec![model_rc, selectable_rc, debug_rc, lines_rc, ui_rc],
+            command_receivers: vec![model_rc, heightmap_rc, selectable_rc, debug_rc, lines_rc, ui_rc],
             text_input_sender,
             mouse_scroll_sender,
             mouse_motion_sender,

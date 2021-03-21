@@ -3,6 +3,7 @@ use crevice::std430::AsStd430;
 use crevice::std430::Std430;
 use glam::*;
 use legion::*;
+use once_cell::sync::OnceCell;
 use unnamed_rts::resources::Time;
 use winit::event::{MouseButton, VirtualKeyCode};
 
@@ -16,6 +17,7 @@ pub struct Camera {
     pitch: f32,
     yaw: f32,
     gpu_buffer: wgpu::Buffer,
+    bind_group: wgpu::BindGroup,
 }
 
 #[derive(Debug, Copy, Clone, AsStd430)]
@@ -113,6 +115,19 @@ impl Camera {
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
             mapped_at_creation: false,
         });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Camera bindgroup"),
+            layout: &Self::get_or_create_layout(device),
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer {
+                    buffer: &gpu_buffer,
+                    offset: 0,
+                    size: None,
+                },
+            }],
+        });
         Camera {
             direction: direction.into(),
             position: position.into(),
@@ -126,6 +141,7 @@ impl Camera {
             yaw: -90.0,
             pitch: 0.0,
             gpu_buffer,
+            bind_group
         }
     }
 
@@ -152,20 +168,23 @@ impl Camera {
         }
     }
 
-    pub fn get_binding_type() -> wgpu::BindingType {
-        wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Uniform,
-            has_dynamic_offset: false,
-            min_binding_size: None,
-        }
-    }
-
-    pub fn get_binding_resource(&self) -> wgpu::BindingResource {
-        wgpu::BindingResource::Buffer {
-            buffer: &self.gpu_buffer,
-            offset: 0,
-            size: None,
-        }
+    pub fn get_or_create_layout(device: &wgpu::Device) -> &'static wgpu::BindGroupLayout {
+        static LAYOUT: OnceCell<wgpu::BindGroupLayout> = OnceCell::new();
+        LAYOUT.get_or_init(|| {
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Camera layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            })
+        })
     }
 
     pub fn update_aspect_ratio(&mut self, width: u32, height: u32) {
@@ -247,5 +266,10 @@ impl Camera {
             (self.position + self.direction).into(),
             Vec3::new(0.0, 1.0, 0.0),
         );
+    }
+
+    /// Get a reference to the camera's bind group.
+    pub fn bind_group(&self) -> &wgpu::BindGroup {
+        &self.bind_group
     }
 }

@@ -1,12 +1,11 @@
-use super::gltf::InstanceData;
 use super::{camera::Camera, common::DepthTexture, common::DEPTH_FORMAT};
+use super::{gltf::InstanceData, vertex_buffers::ImmutableVertexData};
 use bytemuck::{Pod, Zeroable};
 use crossbeam_channel::Sender;
-use glam::{Quat, Vec2, Vec3};
-use image::GenericImageView;
+use glam::Vec2;
 use legion::{self, *};
 use once_cell::sync::OnceCell;
-use std::{borrow::Cow, f32::consts::PI};
+use std::borrow::Cow;
 use unnamed_rts::components::Transform;
 use wgpu::{
     include_spirv,
@@ -44,10 +43,12 @@ impl VertexBuffer for MapVertex {
 }
 
 pub struct HeightMap {
-    vertex_buffer: MutableVertexData<MapVertex>,
+    vertex_buffer: ImmutableVertexData<MapVertex>,
     index_buffer: wgpu::Buffer,
     num_indexes: u32,
-    texture: wgpu::Texture,
+    displacement_map: wgpu::Texture,
+    displacement_buffer: Vec<u8>,
+    needs_update: bool,
     view: wgpu::TextureView,
     sampler: wgpu::Sampler,
     bind_group: wgpu::BindGroup,
@@ -56,53 +57,79 @@ pub struct HeightMap {
     size: u32,
 }
 
+fn create_vertecies(size: u32) -> (Vec<MapVertex>, Vec<u32>) {
+    let mut vertecies = Vec::with_capacity((size * size) as usize);
+    let mut indicies: Vec<u32> = Vec::with_capacity((size * size) as usize);
+    for i in 0..size {
+        for j in 0..size {
+            let index = vertecies.len() as u32;
+            let a = MapVertex {
+                position: Vec2::new(i as f32, j as f32),
+                tex_coords: Vec2::new(i as f32 / size as f32, j as f32 / size as f32),
+            };
+            let b = MapVertex {
+                position: Vec2::new(1.0 + i as f32, j as f32),
+                tex_coords: Vec2::new((1.0 + i as f32) / size as f32, j as f32 / size as f32),
+            };
+            let c = MapVertex {
+                position: Vec2::new(1.0 + i as f32, 1.0 + j as f32),
+                tex_coords: Vec2::new(
+                    (1.0 + i as f32) / size as f32,
+                    (1.0 + j as f32) / size as f32,
+                ),
+            };
+            let d = MapVertex {
+                position: Vec2::new(i as f32, 1.0 + j as f32),
+                tex_coords: Vec2::new(i as f32 / size as f32, (1.0 + j as f32) / size as f32),
+            };
+            vertecies.push(a);
+            vertecies.push(b);
+            vertecies.push(c);
+            vertecies.push(d);
+            indicies.push(index);
+            indicies.push(index + 1);
+            indicies.push(index + 2);
+            indicies.push(index);
+            indicies.push(index + 2);
+            indicies.push(index + 3);
+        }
+    }
+    (vertecies, indicies)
+}
 
 impl HeightMap {
-    fn from_displacement_map(
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        size: u32,
+        transform: Transform,
+    ) -> HeightMap {
+        let texture_size = wgpu::Extent3d {
+            width: size,
+            height: size,
+            depth: 1,
+        };
+        let texels = vec![0; (size * size) as usize];
+        let texture = TextureContent {
+            label: Some("Displacement map"),
+            format: gltf::image::Format::R8,
+            bytes: Cow::Owned(texels),
+            stride: 1,
+            size: texture_size,
+        };
+        HeightMap::from_displacement_map(device, queue, size, texture, transform)
+    }
+
+    pub fn from_displacement_map(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         size: u32,
         texture: TextureContent<'_>,
         transform: Transform,
     ) -> HeightMap {
-        let mut vertecies = Vec::with_capacity((size * size) as usize);
-        let mut indicies: Vec<u32> = Vec::with_capacity((size * size) as usize);
-        for i in 0..size {
-            for j in 0..size {
-                let index = vertecies.len() as u32;
-                let a = MapVertex {
-                    position: Vec2::new(i as f32, j as f32),
-                    tex_coords: Vec2::new(i as f32 / size as f32, j as f32 / size as f32),
-                };
-                let b = MapVertex {
-                    position: Vec2::new(1.0 + i as f32, j as f32),
-                    tex_coords: Vec2::new((1.0 + i as f32) / size as f32, j as f32 / size as f32),
-                };
-                let c = MapVertex {
-                    position: Vec2::new(1.0 + i as f32, 1.0 + j as f32),
-                    tex_coords: Vec2::new(
-                        (1.0 + i as f32) / size as f32,
-                        (1.0 + j as f32) / size as f32,
-                    ),
-                };
-                let d = MapVertex {
-                    position: Vec2::new(i as f32, 1.0 + j as f32),
-                    tex_coords: Vec2::new(i as f32 / size as f32, (1.0 + j as f32) / size as f32),
-                };
-                vertecies.push(a);
-                vertecies.push(b);
-                vertecies.push(c);
-                vertecies.push(d);
-                indicies.push(index);
-                indicies.push(index + 1);
-                indicies.push(index + 2);
-                indicies.push(index);
-                indicies.push(index + 2);
-                indicies.push(index + 3);
-            }
-        }
+        let (vertecies, indicies) = create_vertecies(size);
         let num_indexes = indicies.len() as u32;
-        let vertex_buffer = MapVertex::allocate_mutable_buffer(device, &vertecies);
+        let vertex_buffer = MapVertex::allocate_immutable_buffer(device, &vertecies);
         let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Heightmap Index buffer"),
             usage: wgpu::BufferUsage::INDEX,
@@ -112,8 +139,8 @@ impl HeightMap {
             device,
             &[InstanceData::new(transform.get_model_matrix())],
         );
-        let texture = allocate_simple_texture(device, queue, &texture, false);
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let displacement_map = allocate_simple_texture(device, queue, &texture, false);
+        let view = displacement_map.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("DisplacementMap texture sampler"),
             address_mode_u: wgpu::AddressMode::Repeat,
@@ -145,12 +172,44 @@ impl HeightMap {
             index_buffer,
             instance_buffer,
             num_indexes,
-            texture,
+            displacement_map,
+            displacement_buffer: texture.bytes.to_vec(),
+            needs_update: false,
             sampler,
             view,
             bind_group,
             size,
         }
+    }
+
+    pub fn get_buffer_mut(&mut self) -> &mut [u8] {
+        self.needs_update = true;
+        &mut self.displacement_buffer
+    }
+
+    fn update(&self, queue: &wgpu::Queue) {
+        let texture_data_layout = wgpu::TextureDataLayout {
+            offset: 0,
+            // Incorrect?
+            bytes_per_row: self.size * self.size,
+            rows_per_image: 0,
+        };
+        let texture_size = wgpu::Extent3d {
+            width: self.size,
+            height: self.size,
+            depth: 1,
+        };
+        let texture_view = wgpu::TextureCopyView {
+            texture: &self.displacement_map,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+        };
+        queue.write_texture(
+            texture_view,
+            &self.displacement_buffer,
+            texture_data_layout,
+            texture_size,
+        )
     }
 
     pub fn get_or_create_layout(device: &wgpu::Device) -> &'static wgpu::BindGroupLayout {
@@ -187,13 +246,11 @@ impl HeightMap {
 pub struct HeightMapPass {
     render_pipeline: wgpu::RenderPipeline,
     command_sender: Sender<wgpu::CommandBuffer>,
-    temp_map: HeightMap,
 }
 
 impl HeightMapPass {
     pub fn new(
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
         command_sender: Sender<wgpu::CommandBuffer>,
     ) -> HeightMapPass {
         let vs_module =
@@ -239,31 +296,18 @@ impl HeightMapPass {
             multisample: wgpu::MultisampleState::default(),
         });
 
-        let img = image::io::Reader::open("assets/HeightMapExample.jpg")
-            .unwrap()
-            .decode()
-            .unwrap();
-        let texture = TextureContent {
-            label: Some("Displacement map"),
-            format: gltf::image::Format::R8,
-            bytes: Cow::Owned(img.as_luma8().expect("Grayscale displacement map").to_vec()),
-            stride: 1,
-            size: wgpu::Extent3d {
-                width: img.width(),
-                height: img.height(),
-                depth: 1,
-            },
-        };
-        let mut transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
-        transform.scale = Vec3::splat(0.1);
-        transform.rotation = Quat::from_rotation_x(PI / 2.0);
-        let temp_map = HeightMap::from_displacement_map(device, queue, 256, texture, transform);
-
         HeightMapPass {
             render_pipeline,
             command_sender,
-            temp_map,
         }
+    }
+}
+
+#[system]
+pub fn update(#[resource] queue: &wgpu::Queue, #[resource] height_map: &mut HeightMap) {
+    if height_map.needs_update {
+        height_map.update(queue);
+        height_map.needs_update = false;
     }
 }
 
@@ -274,6 +318,7 @@ pub fn draw(
     #[resource] device: &wgpu::Device,
     #[resource] depth_texture: &DepthTexture,
     #[resource] camera: &Camera,
+    #[resource] height_map: &HeightMap,
 ) {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("HeightMap pass encoder"),
@@ -299,15 +344,12 @@ pub fn draw(
     });
     render_pass.push_debug_group("HeightMap pass");
     render_pass.set_pipeline(&pass.render_pipeline);
-    render_pass.set_vertex_buffer(0, pass.temp_map.vertex_buffer.slice(..));
-    render_pass.set_index_buffer(
-        pass.temp_map.index_buffer.slice(..),
-        wgpu::IndexFormat::Uint32,
-    );
-    render_pass.set_vertex_buffer(1, pass.temp_map.instance_buffer.slice(..));
-    render_pass.set_bind_group(0, &pass.temp_map.bind_group, &[]);
+    render_pass.set_vertex_buffer(0, height_map.vertex_buffer.slice(..));
+    render_pass.set_index_buffer(height_map.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+    render_pass.set_vertex_buffer(1, height_map.instance_buffer.slice(..));
+    render_pass.set_bind_group(0, &height_map.bind_group, &[]);
     render_pass.set_bind_group(1, &camera.bind_group(), &[]);
-    render_pass.draw_indexed(0..pass.temp_map.num_indexes, 0, 0..1);
+    render_pass.draw_indexed(0..height_map.num_indexes, 0, 0..1);
     render_pass.pop_debug_group();
     drop(render_pass);
     pass.command_sender.send(encoder.finish()).unwrap();

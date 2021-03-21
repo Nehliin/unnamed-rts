@@ -56,8 +56,9 @@ pub struct HeightMap {
     size: u32,
 }
 
+
 impl HeightMap {
-    pub fn new(
+    fn from_displacement_map(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         size: u32,
@@ -244,9 +245,9 @@ impl HeightMapPass {
             .unwrap();
         let texture = TextureContent {
             label: Some("Displacement map"),
-            format: gltf::image::Format::R8G8B8A8,
-            bytes: Cow::Owned(img.to_rgba8().to_vec()),
-            stride: 4,
+            format: gltf::image::Format::R8,
+            bytes: Cow::Owned(img.as_luma8().expect("Grayscale displacement map").to_vec()),
+            stride: 1,
             size: wgpu::Extent3d {
                 width: img.width(),
                 height: img.height(),
@@ -256,7 +257,7 @@ impl HeightMapPass {
         let mut transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
         transform.scale = Vec3::splat(0.1);
         transform.rotation = Quat::from_rotation_x(PI / 2.0);
-        let temp_map = HeightMap::new(device, queue, 256, texture, transform);
+        let temp_map = HeightMap::from_displacement_map(device, queue, 256, texture, transform);
 
         HeightMapPass {
             render_pipeline,

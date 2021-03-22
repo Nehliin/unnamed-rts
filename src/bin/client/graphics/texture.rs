@@ -49,6 +49,25 @@ impl<'a> TextureContent<'a> {
             gltf::image::Format::R16G16B16A16 => wgpu::TextureFormat::Rgba16Float,
         }
     }
+
+    pub fn push_to_gpu(&self, allocated_texture: &wgpu::Texture, queue: &Queue) {
+        let texture_data_layout = wgpu::TextureDataLayout {
+            offset: 0,
+            bytes_per_row: self.stride * self.size.width,
+            rows_per_image: 0,
+        };
+        let texture_view = wgpu::TextureCopyView {
+            texture: allocated_texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+        };
+        queue.write_texture(
+            texture_view,
+            &self.bytes,
+            texture_data_layout,
+            self.size,
+        )
+    }
 }
 
 impl<'a> From<&'a gltf::image::Data> for TextureContent<'a> {

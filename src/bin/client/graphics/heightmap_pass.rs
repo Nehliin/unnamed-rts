@@ -189,26 +189,6 @@ impl<'a> HeightMap<'a> {
         self.displacement_texture.bytes.to_mut()
     }
 
-    fn update(&self, queue: &wgpu::Queue) {
-        let texture_data_layout = wgpu::TextureDataLayout {
-            offset: 0,
-            bytes_per_row: self.displacement_texture.stride * self.displacement_texture.size.width,
-            rows_per_image: 0,
-        };
-        let texture_size = self.displacement_texture.size;
-        let texture_view = wgpu::TextureCopyView {
-            texture: &self.displacement_map,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-        };
-        queue.write_texture(
-            texture_view,
-            &self.displacement_texture.bytes,
-            texture_data_layout,
-            texture_size,
-        )
-    }
-
     pub fn get_or_create_layout(device: &wgpu::Device) -> &'static wgpu::BindGroupLayout {
         static LAYOUT: OnceCell<wgpu::BindGroupLayout> = OnceCell::new();
         LAYOUT.get_or_init(move || {
@@ -303,7 +283,7 @@ impl HeightMapPass {
 #[system]
 pub fn update(#[resource] queue: &wgpu::Queue, #[resource] height_map: &mut HeightMap) {
     if height_map.needs_update {
-        height_map.update(queue);
+        height_map.displacement_texture.push_to_gpu(&height_map.displacement_map, queue);
         height_map.needs_update = false;
     }
 }

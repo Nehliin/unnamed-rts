@@ -42,12 +42,12 @@ impl VertexBuffer for MapVertex {
     }
 }
 
-pub struct HeightMap {
+pub struct HeightMap<'a> {
     vertex_buffer: ImmutableVertexData<MapVertex>,
     index_buffer: wgpu::Buffer,
     num_indexes: u32,
     displacement_map: wgpu::Texture,
-    displacement_buffer: Vec<u8>,
+    displacement_texture: TextureContent<'a>,
     needs_update: bool,
     bind_group: wgpu::BindGroup,
     transform: Transform,
@@ -96,13 +96,13 @@ fn create_vertecies(size: u32) -> (Vec<MapVertex>, Vec<u32>) {
     (vertecies, indicies)
 }
 
-impl HeightMap {
+impl<'a> HeightMap<'a> {
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         size: u32,
         transform: Transform,
-    ) -> HeightMap {
+    ) -> HeightMap<'a> {
         let texture_size = wgpu::Extent3d {
             width: size,
             height: size,
@@ -123,9 +123,9 @@ impl HeightMap {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         size: u32,
-        texture: TextureContent<'_>,
+        texture: TextureContent<'a>,
         transform: Transform,
-    ) -> HeightMap {
+    ) -> HeightMap<'a> {
         let (vertecies, indicies) = create_vertecies(size);
         let num_indexes = indicies.len() as u32;
         let vertex_buffer = MapVertex::allocate_immutable_buffer(device, &vertecies);
@@ -172,7 +172,7 @@ impl HeightMap {
             instance_buffer,
             num_indexes,
             displacement_map,
-            displacement_buffer: texture.bytes.to_vec(),
+            displacement_texture: texture,
             needs_update: false,
             transform,
             bind_group,
@@ -186,20 +186,16 @@ impl HeightMap {
 
     pub fn get_buffer_mut(&mut self) -> &mut [u8] {
         self.needs_update = true;
-        &mut self.displacement_buffer
+        self.displacement_texture.bytes.to_mut()
     }
 
     fn update(&self, queue: &wgpu::Queue) {
         let texture_data_layout = wgpu::TextureDataLayout {
             offset: 0,
-            bytes_per_row: self.size,
+            bytes_per_row: self.displacement_texture.stride * self.displacement_texture.size.width,
             rows_per_image: 0,
         };
-        let texture_size = wgpu::Extent3d {
-            width: self.size,
-            height: self.size,
-            depth: 1,
-        };
+        let texture_size = self.displacement_texture.size;
         let texture_view = wgpu::TextureCopyView {
             texture: &self.displacement_map,
             mip_level: 0,
@@ -207,7 +203,7 @@ impl HeightMap {
         };
         queue.write_texture(
             texture_view,
-            &self.displacement_buffer,
+            &self.displacement_texture.bytes,
             texture_data_layout,
             texture_size,
         )

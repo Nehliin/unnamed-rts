@@ -12,6 +12,7 @@ use crate::{
 };
 use glam::*;
 use legion::{world::SubWorld, *};
+use rayon::prelude::*;
 use unnamed_rts::components::*;
 use unnamed_rts::resources::*;
 use unnamed_rts::{components::Selectable, resources::Time};
@@ -94,9 +95,10 @@ pub fn height_map_modification(
     #[resource] mouse_button_state: &MouseButtonState,
     #[resource] mouse_pos: &CursorPosition,
     #[resource] window_size: &WindowSize,
+    #[resource] time: &Time,
     #[resource] height_map: &mut HeightMap,
 ) {
-    if mouse_button_state.pressed_current_frame(&MouseButton::Left) {
+    if mouse_button_state.is_pressed(&MouseButton::Left) {
         let ray = camera.raycast(mouse_pos, window_size);
         // check intersection with the heightmap
         let normal = Vec3A::new(0.0, 1.0, 0.0);
@@ -111,26 +113,26 @@ pub fn height_map_modification(
                 let target = (t * ray.direction) + ray.origin;
                 let local_coords = height_map.get_transform().get_model_matrix().inverse()
                     * Vec4::new(target.x, target.y, target.z, 1.0);
-                // assuming row order 
-                // TODO: Smooth this out 
-                if let Some(value) = height_map
+                let radius = 20.0;
+                let strenght = 350.0_f32;
+                let center = local_coords.xy();
+                // assuming row order
+                // TODO: Not very performance frendly
+                height_map
                     .get_buffer_mut()
-                    .get_mut(local_coords.y as usize * 256 + local_coords.x as usize)
-                {
-                    *value = 255;
-                }
-                if let Some(value) = height_map
-                    .get_buffer_mut()
-                    .get_mut((local_coords.y + 1.0) as usize * 256 + local_coords.x as usize)
-                {
-                    *value = 255;
-                }
-                if let Some(value) = height_map
-                    .get_buffer_mut()
-                    .get_mut((local_coords.y - 1.0) as usize * 256 + local_coords.x as usize)
-                {
-                    *value = 255;
-                }
+                    .par_chunks_exact_mut(256)
+                    .enumerate()
+                    .for_each(|(y, chunk)| {
+                        chunk.par_iter_mut().enumerate().for_each(|(x, byte)| {
+                            let distance = Vec2::new(x as f32, y as f32).distance(center);
+                            if distance < radius {
+                                let raise =
+                                    (strenght * (radius - distance) / radius) * time.delta_time;
+                                *byte =
+                                    std::cmp::min(255, (*byte as f32 + raise as f32).round() as u32) as u8;
+                            }
+                        })
+                    });
             }
         }
     }

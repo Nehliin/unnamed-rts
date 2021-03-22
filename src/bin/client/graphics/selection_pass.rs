@@ -23,6 +23,7 @@ pub fn draw(
     #[resource] depth_texture: &DepthTexture,
     #[resource] device: &wgpu::Device,
     #[resource] current_frame: &wgpu::SwapChainTexture,
+    #[resource] camera: &Camera,
     query: &mut Query<(&Transform, &Selectable, &Handle<GltfModel>)>,
 ) {
     // update selected units instance buffer
@@ -68,7 +69,7 @@ pub fn draw(
     });
     render_pass.push_debug_group("Selection pass");
     render_pass.set_pipeline(&pass.render_pipeline);
-    render_pass.set_bind_group(0, &pass.camera_bind_group, &[]);
+    render_pass.set_bind_group(0, &camera.bind_group(), &[]);
     let mut query = <(Read<Transform>, Read<Selectable>, Read<Handle<GltfModel>>)>::query();
     query.for_each_chunk(world, |chunk| {
         let (_, selectable, models) = chunk.get_components();
@@ -92,7 +93,6 @@ pub fn draw(
 
 pub struct SelectionPass {
     render_pipeline: wgpu::RenderPipeline,
-    camera_bind_group: wgpu::BindGroup,
     // This should be handled better
     instance_buffer: MutableVertexData<InstanceData>,
     command_sender: Sender<wgpu::CommandBuffer>,
@@ -101,35 +101,15 @@ pub struct SelectionPass {
 impl SelectionPass {
     pub fn new(
         device: &wgpu::Device,
-        camera: &Camera,
         command_sender: Sender<wgpu::CommandBuffer>,
     ) -> SelectionPass {
         let vs_module = device.create_shader_module(&include_spirv!("shaders/model.vert.spv"));
         let fs_module = device.create_shader_module(&include_spirv!("shaders/flat_color.frag.spv"));
-        let camera_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Camera layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStage::VERTEX,
-                    ty: Camera::get_binding_type(),
-                    count: None,
-                }],
-            });
-
-        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Camera bindgroup"),
-            layout: &camera_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: camera.get_binding_resource(),
-            }],
-        });
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Selection pipeline layout"),
-                bind_group_layouts: &[&camera_bind_group_layout],
+                bind_group_layouts: &[Camera::get_or_create_layout(device)],
                 push_constant_ranges: &[],
             });
 
@@ -180,7 +160,6 @@ impl SelectionPass {
         let instance_buffer = VertexBuffer::allocate_mutable_buffer(device, &buffer_data);
         SelectionPass {
             render_pipeline,
-            camera_bind_group,
             command_sender,
             instance_buffer,
         }

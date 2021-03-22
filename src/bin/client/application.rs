@@ -10,9 +10,11 @@ use crate::{
         debug_lines_pass::{self, DebugLinesPass},
         gltf::GltfModel,
         grid_pass::{self, GridPass},
-        model_pass::{self, ModelPass},
+        heightmap_pass::{self, HeightMapPass},
         lights::{self, LightUniformBuffer},
+        model_pass::{self, ModelPass},
         selection_pass::{self, SelectionPass},
+        texture::TextureContent,
         ui::{
             ui_context::{UiContext, WindowSize},
             ui_pass::UiPass,
@@ -23,12 +25,17 @@ use crate::{
 };
 use crossbeam_channel::{Receiver, Sender};
 use debug_lines_pass::BoundingBoxMap;
-use glam::Vec3;
+use glam::{Quat, Vec3};
+use heightmap_pass::HeightMap;
+use image::GenericImageView;
 use input::CursorPosition;
 use legion::*;
 use log::warn;
-use std::time::Instant;
-use unnamed_rts::resources::{NetworkSerialization, Time};
+use std::{borrow::Cow, f32::consts::PI, time::Instant};
+use unnamed_rts::{
+    components::Transform,
+    resources::{NetworkSerialization, Time},
+};
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
     PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
@@ -120,6 +127,7 @@ impl App {
         let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
         let (debug_sender, debug_rc) = crossbeam_channel::bounded(1);
         let (model_sender, model_rc) = crossbeam_channel::bounded(1);
+        let (heightmap_sender, heightmap_rc) = crossbeam_channel::bounded(1);
         let (lines_sender, lines_rc) = crossbeam_channel::bounded(1);
         let (selectable_sender, selectable_rc) = crossbeam_channel::bounded(1);
         let light_uniform = LightUniformBuffer::new(&device);
@@ -130,25 +138,24 @@ impl App {
             .add_system(lights::update_system())
             .add_system(model_pass::draw_system(ModelPass::new(
                 &device,
-                &camera,
                 model_sender,
             )))
             .add_system(selection_pass::draw_system(SelectionPass::new(
                 &device,
-                &camera,
                 selectable_sender,
+            )))
+            .add_system(client_systems::height_map_modification_system())
+            .add_system(heightmap_pass::update_system())
+            .add_system(heightmap_pass::draw_system(HeightMapPass::new(
+                &device,
+                heightmap_sender,
             )))
             .add_system(ui_systems::update_ui_system())
             .add_system(client_systems::selection_system())
-            .add_system(grid_pass::draw_system(GridPass::new(
-                &device,
-                &camera,
-                debug_sender,
-            )))
+            .add_system(grid_pass::draw_system(GridPass::new(&device, debug_sender)))
             .add_system(debug_lines_pass::update_bounding_boxes_system())
             .add_system(debug_lines_pass::draw_system(DebugLinesPass::new(
                 &device,
-                &camera,
                 lines_sender,
             )))
             .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
@@ -160,6 +167,25 @@ impl App {
             .add_system(input::event_system())
             .build();
 
+        let img = image::io::Reader::open("assets/HeightMapExample.jpg")
+            .unwrap()
+            .decode()
+            .unwrap();
+        let texture = TextureContent {
+            label: Some("Displacement map"),
+            format: gltf::image::Format::R8,
+            bytes: Cow::Owned(img.as_luma8().expect("Grayscale displacement map").to_vec()),
+            stride: 1,
+            size: wgpu::Extent3d {
+                width: img.width(),
+                height: img.height(),
+                depth: 1,
+            },
+        };
+        let mut transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
+        transform.scale = Vec3::splat(0.1);
+        transform.rotation = Quat::from_rotation_x(PI / 2.0);
+        resources.insert(HeightMap::from_displacement_map(&device, &queue, 256, texture, transform));
         resources.insert(DepthTexture::new(&device, &sc_desc));
         resources.insert(device);
         resources.insert(light_uniform);
@@ -206,7 +232,14 @@ impl App {
             swap_chain,
             surface,
             sc_desc,
-            command_receivers: vec![model_rc, selectable_rc, debug_rc, lines_rc, ui_rc],
+            command_receivers: vec![
+                model_rc,
+                heightmap_rc,
+                selectable_rc,
+                debug_rc,
+                lines_rc,
+                ui_rc,
+            ],
             text_input_sender,
             mouse_scroll_sender,
             mouse_motion_sender,

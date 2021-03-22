@@ -58,6 +58,7 @@ pub fn draw(
     #[resource] asset_storage: &Assets<GltfModel>,
     #[resource] current_frame: &SwapChainTexture,
     #[resource] debug_settings: &DebugMenueSettings,
+    #[resource] camera: &Camera,
     query: &mut Query<(&Transform, &Handle<GltfModel>)>,
 ) {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -87,7 +88,7 @@ pub fn draw(
     });
     render_pass.push_debug_group("Debug lines debug group");
     render_pass.set_pipeline(pipeline);
-    render_pass.set_bind_group(0, &pass.camera_bind_group, &[]);
+    render_pass.set_bind_group(0, &camera.bind_group(), &[]);
     if debug_settings.show_bounding_boxes {
         query.for_each_chunk(world, |chunk| {
             let (transforms, models) = chunk.get_components();
@@ -166,14 +167,12 @@ impl VertexBuffer for BoxVert {
 
 pub struct DebugLinesPass {
     render_pipeline: wgpu::RenderPipeline,
-    camera_bind_group: wgpu::BindGroup,
     command_sender: Sender<wgpu::CommandBuffer>,
 }
 
 impl DebugLinesPass {
     pub fn new(
         device: &wgpu::Device,
-        camera: &Camera,
         command_sender: Sender<wgpu::CommandBuffer>,
     ) -> DebugLinesPass {
         let vs_module =
@@ -181,30 +180,10 @@ impl DebugLinesPass {
         let fs_module =
             device.create_shader_module(&include_spirv!("shaders/debug_lines.frag.spv"));
 
-        let camera_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Camera layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStage::VERTEX,
-                    ty: Camera::get_binding_type(),
-                    count: None,
-                }],
-            });
-
-        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Camera bindgroup"),
-            layout: &camera_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: camera.get_binding_resource(),
-            }],
-        });
-
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Debug lines pass pipeline layout"),
-                bind_group_layouts: &[&camera_bind_group_layout],
+                bind_group_layouts: &[Camera::get_or_create_layout(device)],
                 push_constant_ranges: &[],
             });
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -250,7 +229,6 @@ impl DebugLinesPass {
             multisample: wgpu::MultisampleState::default(),
         });
         DebugLinesPass {
-            camera_bind_group,
             command_sender,
             render_pipeline,
         }

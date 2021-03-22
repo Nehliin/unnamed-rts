@@ -3,6 +3,7 @@ pub mod common;
 pub mod debug_lines_pass;
 pub mod gltf;
 pub mod grid_pass;
+pub mod heightmap_pass;
 pub mod lights;
 pub mod model_pass;
 pub mod selection_pass;

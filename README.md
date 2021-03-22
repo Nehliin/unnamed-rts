@@ -13,6 +13,7 @@ Current goals:
 - [ ] Animations
 - [ ] RTS game mechanics
 - [ ] Map editor
+  - [x] Terrain editor (currently proof of concept)
 -  Basic Online multiplayer support is in progress using laminar. Ambition and quality of this goal depends amount of time I spend on this project. 
    - [x] Server owns the player state and updates client at ~30hz
    - [x] Client(s) send actions which are handled by the server (like move command) 

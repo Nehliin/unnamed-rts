@@ -123,7 +123,7 @@ pub fn height_map_modification(
                     .par_chunks_exact_mut(256)
                     .enumerate()
                     .for_each(|(y, chunk)| {
-                        chunk.par_iter_mut().enumerate().for_each(|(x, byte)| {
+                        chunk.iter_mut().enumerate().for_each(|(x, byte)| {
                             let distance = Vec2::new(x as f32, y as f32).distance(center);
                             if distance < radius {
                                 let raise =

@@ -128,8 +128,10 @@ pub fn height_map_modification(
                             if distance < radius {
                                 let raise =
                                     (strenght * (radius - distance) / radius) * time.delta_time;
-                                *byte =
-                                    std::cmp::min(255, (*byte as f32 + raise as f32).round() as u32) as u8;
+                                *byte = std::cmp::min(
+                                    255,
+                                    (*byte as f32 + raise as f32).round() as u32,
+                                ) as u8;
                             }
                         })
                     });

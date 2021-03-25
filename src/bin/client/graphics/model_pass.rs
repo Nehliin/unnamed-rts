@@ -1,16 +1,16 @@
+use crate::assets::{Assets, Handle};
 use crossbeam_channel::Sender;
 use legion::{world::SubWorld, *};
 use unnamed_rts::components::Transform;
 use wgpu::include_spirv;
-use crate::assets::{Assets, Handle};
 
 use super::{
     camera::Camera,
     common::{DepthTexture, DEPTH_FORMAT},
     gltf::GltfModel,
     gltf::PbrMaterial,
-    lights::LightUniformBuffer,
     gltf::{InstanceData, MeshVertex},
+    lights::LightUniformBuffer,
     vertex_buffers::VertexBuffer,
 };
 
@@ -103,10 +103,7 @@ pub struct ModelPass {
 }
 
 impl ModelPass {
-    pub fn new(
-        device: &wgpu::Device,
-        command_sender: Sender<wgpu::CommandBuffer>,
-    ) -> ModelPass {
+    pub fn new(device: &wgpu::Device, command_sender: Sender<wgpu::CommandBuffer>) -> ModelPass {
         let vs_module = device.create_shader_module(&include_spirv!("shaders/model.vert.spv"));
         let fs_module = device.create_shader_module(&include_spirv!("shaders/model.frag.spv"));
 

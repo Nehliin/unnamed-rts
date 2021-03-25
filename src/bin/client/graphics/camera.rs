@@ -141,7 +141,7 @@ impl Camera {
             yaw: -90.0,
             pitch: 0.0,
             gpu_buffer,
-            bind_group
+            bind_group,
         }
     }
 

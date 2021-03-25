@@ -60,10 +60,7 @@ pub struct GridPass {
 }
 
 impl GridPass {
-    pub fn new(
-        device: &wgpu::Device,
-        command_sender: Sender<wgpu::CommandBuffer>,
-    ) -> GridPass {
+    pub fn new(device: &wgpu::Device, command_sender: Sender<wgpu::CommandBuffer>) -> GridPass {
         let vs_module = device.create_shader_module(&include_spirv!("shaders/grid.vert.spv"));
         let fs_module = device.create_shader_module(&include_spirv!("shaders/grid.frag.spv"));
 

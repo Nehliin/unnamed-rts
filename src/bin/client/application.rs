@@ -185,7 +185,9 @@ impl App {
         let mut transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
         transform.scale = Vec3::splat(0.1);
         transform.rotation = Quat::from_rotation_x(PI / 2.0);
-        resources.insert(HeightMap::from_displacement_map(&device, &queue, 256, texture, transform));
+        resources.insert(HeightMap::from_displacement_map(
+            &device, &queue, 256, texture, transform,
+        ));
         resources.insert(DepthTexture::new(&device, &sc_desc));
         resources.insert(device);
         resources.insert(light_uniform);

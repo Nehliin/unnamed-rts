@@ -1,4 +1,6 @@
-use super::{camera::Camera, common::DepthTexture, common::DEPTH_FORMAT};
+use super::{
+    camera::Camera, common::DepthTexture, common::DEPTH_FORMAT, texture::update_texture_data,
+};
 use super::{gltf::InstanceData, vertex_buffers::ImmutableVertexData};
 use bytemuck::{Pod, Zeroable};
 use crossbeam_channel::Sender;
@@ -111,7 +113,7 @@ impl<'a> HeightMap<'a> {
         let texels = vec![0; (size * size) as usize];
         let texture = TextureContent {
             label: Some("Displacement map"),
-            format: gltf::image::Format::R8,
+            format: wgpu::TextureFormat::R8Unorm,
             bytes: Cow::Owned(texels),
             stride: 1,
             size: texture_size,
@@ -283,7 +285,11 @@ impl HeightMapPass {
 #[system]
 pub fn update(#[resource] queue: &wgpu::Queue, #[resource] height_map: &mut HeightMap) {
     if height_map.needs_update {
-        height_map.displacement_texture.push_to_gpu(&height_map.displacement_map, queue);
+        update_texture_data(
+            &height_map.displacement_texture,
+            &height_map.displacement_map,
+            queue,
+        );
         height_map.needs_update = false;
     }
 }

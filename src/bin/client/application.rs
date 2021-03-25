@@ -173,7 +173,7 @@ impl App {
             .unwrap();
         let texture = TextureContent {
             label: Some("Displacement map"),
-            format: gltf::image::Format::R8,
+            format: wgpu::TextureFormat::R8Unorm,
             bytes: Cow::Owned(img.as_luma8().expect("Grayscale displacement map").to_vec()),
             stride: 1,
             size: wgpu::Extent3d {

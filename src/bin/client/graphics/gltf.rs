@@ -470,7 +470,7 @@ fn get_white_placeholder_texture(
             bytes: Cow::Owned(vec![255, 255, 255, 255]),
             size,
             stride: 4,
-            format: gltf::image::Format::R8G8B8A8,
+            format: wgpu::TextureFormat::Rgba8Unorm,
         };
         let texture = allocate_simple_texture(device, queue, &content, false);
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -511,7 +511,7 @@ fn get_normal_placeholder_texture(
             bytes: Cow::Owned(vec![128, 128, 255, 255]),
             size,
             stride: 4,
-            format: gltf::image::Format::R8G8B8A8,
+            format: wgpu::TextureFormat::Rgba8Unorm,
         };
         let texture = allocate_simple_texture(device, queue, &content, false);
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());

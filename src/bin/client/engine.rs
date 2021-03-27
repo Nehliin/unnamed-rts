@@ -1,3 +1,5 @@
+use std::mem::MaybeUninit;
+
 use crate::{
     assets::{self, Assets},
     graphics::{
@@ -138,24 +140,29 @@ impl Engine {
         }
     }
 
-    // maybe use a system for this instead?
     pub fn resize(&mut self, window_size: &WindowSize) {
+        self.sc_desc.width = window_size.physical_width;
+        self.sc_desc.height = window_size.physical_height;
+        // Swapchain output needs to be dropped before the swapchain
+        let _ = self.resources.remove::<SwapChainTexture>();
         let device = self
             .resources
             .get::<Device>()
             .expect("Device to be registerd");
-        self.sc_desc.width = window_size.physical_width;
-        self.sc_desc.height = window_size.physical_height;
-        // This will lead to crashes becase the swapchain is created before the old one is dropped
+        //self.swap_chain = None;
         self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
-        // TODO MOVE TO on_resize
-        let mut camera = self.resources.get_mut::<Camera>().unwrap();
-        camera.update_aspect_ratio(window_size.physical_width, window_size.physical_height);
-        self.resources.get_mut::<DepthTexture>().unwrap().resize(
-            &device,
-            self.sc_desc.width,
-            self.sc_desc.height,
-        );
+        drop(device);
+        Self::resize_states(&mut self.states, &mut self.resources, window_size);
+    }
+
+    fn resize_states(
+        states: &mut [Box<dyn State>],
+        resources: &mut Resources,
+        window_size: &WindowSize,
+    ) {
+        states
+            .iter_mut()
+            .for_each(|state| state.on_resize(resources, window_size));
     }
 
     pub fn recreate_swap_chain(&mut self) {
@@ -297,15 +304,16 @@ impl Engine {
         drop(time);
 
         self.resources.remove::<SwapChainTexture>();
-        self.resources
-            .insert(self.swap_chain.get_current_frame()?.output);
+        self.resources.insert(
+            self.swap_chain
+                .get_current_frame()?
+                .output,
+        );
         let states = &mut self.states;
-        let mut world = &mut self.world;
-        let mut resources = &mut self.resources;
-        self.schedule.execute(world, resources);
+        self.schedule.execute(&mut self.world, &mut self.resources);
         {
             states.iter_mut().for_each(|state| {
-                state.on_update();
+                state.on_tick();
             });
         }
         handle_server_update(&mut self.world, &mut self.resources);

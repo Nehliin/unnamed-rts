@@ -12,6 +12,7 @@ use crate::{assets::{self, Assets}, client_network::{add_client_components, conn
 pub enum StateTransition {
     Pop,
     Push(Box<dyn State>),
+    Noop,
 }
 pub trait State {
     fn on_init(
@@ -19,7 +20,8 @@ pub trait State {
         world: &mut World,
         resources: &mut Resources,
     );
-    fn on_update(&mut self) -> Option<StateTransition>;
+    fn on_tick(&mut self) -> StateTransition;
+    fn on_resize(&mut self, resources: &mut Resources, new_size: &WindowSize) {}
     fn on_destroy(&mut self);
     fn on_backgrouded(
         &mut self,
@@ -89,11 +91,11 @@ impl State for GameState {
         drop(assets);
         drop(size);
         drop(queue);
+        resources.insert(NetworkSerialization::default());
         connect_to_server(world, resources);
         add_client_components(world, resources, &suit);
 
         resources.insert(depth_texture);
-        resources.insert(NetworkSerialization::default());
         resources.insert(height_map);
         resources.insert(DebugMenueSettings {
             show_grid: true,
@@ -103,8 +105,19 @@ impl State for GameState {
         resources.insert(camera);
     }
 
-    fn on_update(&mut self) -> Option<StateTransition> {
-        None
+    fn on_tick(&mut self) -> StateTransition {
+       StateTransition::Noop 
+    }
+
+    fn on_resize(&mut self, resources: &mut Resources, window_size: &WindowSize) {
+        let mut camera = resources.get_mut::<Camera>().unwrap();
+        let device = resources.get::<Device>().unwrap();
+        camera.update_aspect_ratio(window_size.physical_width, window_size.physical_height);
+        resources.get_mut::<DepthTexture>().unwrap().resize(
+            &device,
+            window_size.physical_width,
+            window_size.physical_height,
+        );
     }
 
     fn on_destroy(&mut self) {

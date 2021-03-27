@@ -9,6 +9,7 @@ use winit::{
 
 mod application;
 mod assets;
+mod state;
 mod client_network;
 mod client_systems;
 mod graphics;

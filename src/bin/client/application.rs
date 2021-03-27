@@ -1,41 +1,14 @@
-use crate::client_network::handle_server_update;
-use crate::client_network::{add_client_components, connect_to_server};
-use crate::client_systems;
-use crate::client_systems::DebugMenueSettings;
-use crate::{
-    assets::{self, Assets},
-    graphics::{
-        camera::{self, Camera},
-        common::DepthTexture,
-        debug_lines_pass::{self, DebugLinesPass},
-        gltf::GltfModel,
-        grid_pass::{self, GridPass},
-        heightmap_pass::{self, HeightMapPass},
-        lights::{self, LightUniformBuffer},
-        model_pass::{self, ModelPass},
-        selection_pass::{self, SelectionPass},
-        texture::TextureContent,
-        ui::{
+use crate::{assets::{self, Assets}, graphics::{camera::Camera, common::DepthTexture, gltf::GltfModel, ui::{
             ui_context::{UiContext, WindowSize},
             ui_pass::UiPass,
             ui_systems,
-        },
-    },
-    input::{self, KeyboardState, MouseButtonState, MouseMotion, Text},
-};
+        }}, input::{self, KeyboardState, MouseButtonState, MouseMotion, Text}};
+use crate::{client_network::handle_server_update, state::State};
 use crossbeam_channel::{Receiver, Sender};
-use debug_lines_pass::BoundingBoxMap;
-use glam::{Quat, Vec3};
-use heightmap_pass::HeightMap;
-use image::GenericImageView;
 use input::CursorPosition;
 use legion::*;
 use log::warn;
-use std::{borrow::Cow, f32::consts::PI, time::Instant};
-use unnamed_rts::{
-    components::Transform,
-    resources::{NetworkSerialization, Time},
-};
+use unnamed_rts::resources::{NetworkSerialization, Time};
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
     PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
@@ -53,6 +26,7 @@ use winit::{
 pub struct App {
     world: World,
     resources: Resources,
+    states: Vec<Box<dyn State>>,
     schedule: Schedule,
     swap_chain: SwapChain,
     surface: Surface,
@@ -114,90 +88,16 @@ impl App {
         };
         //window.set_cursor_grab(true).unwrap();
         //window.set_cursor_visible(false);
-        let camera = Camera::new(
-            &device,
-            Vec3::new(0., 2., 3.5),
-            Vec3::new(0.0, 0.0, -1.0),
-            size.width,
-            size.height,
-        );
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
         let mut world = World::default();
         let mut resources = Resources::default();
-        let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
-        let (debug_sender, debug_rc) = crossbeam_channel::bounded(1);
-        let (model_sender, model_rc) = crossbeam_channel::bounded(1);
-        let (heightmap_sender, heightmap_rc) = crossbeam_channel::bounded(1);
-        let (lines_sender, lines_rc) = crossbeam_channel::bounded(1);
-        let (selectable_sender, selectable_rc) = crossbeam_channel::bounded(1);
-        let light_uniform = LightUniformBuffer::new(&device);
-        let schedule = Schedule::builder()
-            .add_system(assets::asset_load_system::<GltfModel>())
-            .add_system(camera::free_flying_camera_system())
-            .add_system(model_pass::update_system())
-            .add_system(lights::update_system())
-            .add_system(model_pass::draw_system(ModelPass::new(
-                &device,
-                model_sender,
-            )))
-            .add_system(selection_pass::draw_system(SelectionPass::new(
-                &device,
-                selectable_sender,
-            )))
-            .add_system(client_systems::height_map_modification_system())
-            .add_system(heightmap_pass::update_system())
-            .add_system(heightmap_pass::draw_system(HeightMapPass::new(
-                &device,
-                heightmap_sender,
-            )))
-            .add_system(ui_systems::update_ui_system())
-            .add_system(client_systems::selection_system())
-            .add_system(grid_pass::draw_system(GridPass::new(&device, debug_sender)))
-            .add_system(debug_lines_pass::update_bounding_boxes_system())
-            .add_system(debug_lines_pass::draw_system(DebugLinesPass::new(
-                &device,
-                lines_sender,
-            )))
-            .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
-            .add_system(client_systems::draw_debug_ui_system())
-            .add_system(ui_systems::end_ui_frame_system(UiPass::new(
-                &device, ui_sender,
-            )))
-            .add_system(client_systems::move_action_system())
-            .add_system(input::event_system())
-            .build();
-
-        let img = image::io::Reader::open("assets/HeightMapExample.jpg")
-            .unwrap()
-            .decode()
-            .unwrap();
-        let texture = TextureContent {
-            label: Some("Displacement map"),
-            format: wgpu::TextureFormat::R8Unorm,
-            bytes: Cow::Owned(img.as_luma8().expect("Grayscale displacement map").to_vec()),
-            stride: 1,
-            size: wgpu::Extent3d {
-                width: img.width(),
-                height: img.height(),
-                depth: 1,
-            },
-        };
-        let mut transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
-        transform.scale = Vec3::splat(0.1);
-        transform.rotation = Quat::from_rotation_x(PI / 2.0);
-        resources.insert(HeightMap::from_displacement_map(
-            &device, &queue, 256, texture, transform,
-        ));
         resources.insert(DepthTexture::new(&device, &sc_desc));
         resources.insert(device);
-        resources.insert(light_uniform);
         resources.insert(queue);
         resources.insert(Time {
             current_time: std::time::Instant::now(),
             delta_time: 0.0,
         });
-        resources.insert(camera);
-        resources.insert(BoundingBoxMap::default());
         // Event readers and input
         let (text_input_sender, rc) = crossbeam_channel::unbounded();
         resources.insert(input::EventReader::<Text>::new(rc));
@@ -214,34 +114,22 @@ impl App {
 
         resources.insert(NetworkSerialization::default());
         // prelode assets: TODO: do this in app main and fetch handle based on path instead
-        let mut assets = Assets::<GltfModel>::new();
-        let suit = assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
         init_ui_resources(&mut resources, &size, window.scale_factor() as f32);
 
-        resources.insert(assets);
-        resources.insert(DebugMenueSettings {
-            show_grid: true,
-            show_bounding_boxes: true,
-        });
-
-        // Set up network and connect to server
-        connect_to_server(&mut world, &mut resources);
-        add_client_components(&mut world, &mut resources, &suit);
+        resources.insert(Assets::<GltfModel>::new());
+        let mut state = crate::state::GameState {};
+        let mut command_receivers = vec![];
+        state.on_init(&mut world, &mut resources);
+        let schedule =  state.on_forgrounded(&mut world, &mut resources, &mut command_receivers);
         App {
             world,
-            schedule,
             resources,
             swap_chain,
             surface,
             sc_desc,
-            command_receivers: vec![
-                model_rc,
-                heightmap_rc,
-                selectable_rc,
-                debug_rc,
-                lines_rc,
-                ui_rc,
-            ],
+            schedule,
+            command_receivers,
+            states: vec![Box::new(state)],
             text_input_sender,
             mouse_scroll_sender,
             mouse_motion_sender,
@@ -408,7 +296,15 @@ impl App {
         self.resources.remove::<SwapChainTexture>();
         self.resources
             .insert(self.swap_chain.get_current_frame()?.output);
-        self.schedule.execute(&mut self.world, &mut self.resources);
+        let states = &mut self.states;
+        let mut world = &mut self.world;
+        let mut resources = &mut self.resources;
+        self.schedule.execute(world, resources);
+        {
+            states.iter_mut().for_each(|state| {
+                state.on_update();
+            });
+        }
         handle_server_update(&mut self.world, &mut self.resources);
 
         // How to handle the different uniforms?

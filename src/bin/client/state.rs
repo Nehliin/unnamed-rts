@@ -4,26 +4,10 @@ use crossbeam_channel::Receiver;
 use glam::{Quat, Vec3};
 use image::GenericImageView;
 use legion::*;
-use unnamed_rts::components::Transform;
+use unnamed_rts::{components::Transform, resources::NetworkSerialization};
 use wgpu::{CommandBuffer, Device, Queue};
 
-use crate::{
-    assets::{self, Assets},
-    client_network::{add_client_components, connect_to_server},
-    client_systems::{self, DebugMenueSettings},
-    graphics::{
-        camera::{self, Camera},
-        debug_lines_pass::{self, BoundingBoxMap},
-        gltf::GltfModel,
-        grid_pass,
-        heightmap_pass::{self, HeightMap},
-        lights::{self, LightUniformBuffer},
-        model_pass, selection_pass,
-        texture::TextureContent,
-        ui::{ui_context::WindowSize, ui_pass::UiPass, ui_systems},
-    },
-    input,
-};
+use crate::{assets::{self, Assets}, client_network::{add_client_components, connect_to_server}, client_systems::{self, DebugMenueSettings}, graphics::{camera::{self, Camera}, common::DepthTexture, debug_lines_pass::{self, BoundingBoxMap}, gltf::GltfModel, grid_pass, heightmap_pass::{self, HeightMap}, lights::{self, LightUniformBuffer}, model_pass, selection_pass, texture::TextureContent, ui::{ui_context::WindowSize, ui_pass::UiPass, ui_systems}}, input};
 
 pub enum StateTransition {
     Pop,
@@ -61,6 +45,7 @@ impl State for GameState {
         resources: &mut Resources,
     ) {
         resources.insert(BoundingBoxMap::default());
+        resources.insert(Assets::<GltfModel>::new());
         let size = resources
             .get::<WindowSize>()
             .expect("Window size to be present");
@@ -99,6 +84,7 @@ impl State for GameState {
         // Set up network and connect to server
         let suit = assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
         let height_map = HeightMap::from_displacement_map(&device, &queue, 256, texture, transform);
+        let depth_texture= DepthTexture::new(&device, size.physical_width, size.physical_height);
         drop(device);
         drop(assets);
         drop(size);
@@ -106,6 +92,8 @@ impl State for GameState {
         connect_to_server(world, resources);
         add_client_components(world, resources, &suit);
 
+        resources.insert(depth_texture);
+        resources.insert(NetworkSerialization::default());
         resources.insert(height_map);
         resources.insert(DebugMenueSettings {
             show_grid: true,

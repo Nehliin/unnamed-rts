@@ -1,8 +1,17 @@
-use crate::{assets::{self, Assets}, graphics::{camera::Camera, common::DepthTexture, gltf::GltfModel, ui::{
+use crate::{
+    assets::{self, Assets},
+    graphics::{
+        camera::Camera,
+        common::DepthTexture,
+        gltf::GltfModel,
+        ui::{
             ui_context::{UiContext, WindowSize},
             ui_pass::UiPass,
             ui_systems,
-        }}, input::{self, KeyboardState, MouseButtonState, MouseMotion, Text}};
+        },
+    },
+    input::{self, KeyboardState, MouseButtonState, MouseMotion, Text},
+};
 use crate::{client_network::handle_server_update, state::State};
 use crossbeam_channel::{Receiver, Sender};
 use input::CursorPosition;
@@ -23,7 +32,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
-pub struct App {
+pub struct Engine {
     world: World,
     resources: Resources,
     states: Vec<Box<dyn State>>,
@@ -38,20 +47,8 @@ pub struct App {
     command_receivers: Vec<Receiver<CommandBuffer>>,
 }
 
-fn init_ui_resources(resources: &mut Resources, size: &PhysicalSize<u32>, scale_factor: f32) {
-    let window_size = WindowSize {
-        physical_width: size.width,
-        physical_height: size.height,
-        scale_factor,
-    };
-
-    let ui_context = UiContext::new(&window_size);
-    resources.insert(ui_context);
-    resources.insert(window_size);
-}
-
-impl App {
-    pub async fn new(window: &Window) -> App {
+impl Engine {
+    pub async fn new(window: &Window) -> Engine {
         let size = window.inner_size();
         let instance = if cfg!(mac) {
             Instance::new(BackendBit::METAL)
@@ -91,7 +88,16 @@ impl App {
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
         let mut world = World::default();
         let mut resources = Resources::default();
-        resources.insert(DepthTexture::new(&device, &sc_desc));
+
+        let window_size = WindowSize {
+            physical_width: size.width,
+            physical_height: size.height,
+            scale_factor: window.scale_factor() as f32,
+        };
+        let ui_context = UiContext::new(&window_size);
+
+        resources.insert(ui_context);
+        resources.insert(window_size);
         resources.insert(device);
         resources.insert(queue);
         resources.insert(Time {
@@ -108,20 +114,15 @@ impl App {
         resources.insert(input::EventReader::<MouseMotion>::new(rc));
         let (modifiers_state_sender, rc) = crossbeam_channel::unbounded();
         resources.insert(input::EventReader::<ModifiersState>::new(rc));
-
         resources.insert(KeyboardState::default());
         resources.insert(MouseButtonState::default());
 
-        resources.insert(NetworkSerialization::default());
-        // prelode assets: TODO: do this in app main and fetch handle based on path instead
-        init_ui_resources(&mut resources, &size, window.scale_factor() as f32);
-
-        resources.insert(Assets::<GltfModel>::new());
         let mut state = crate::state::GameState {};
         let mut command_receivers = vec![];
         state.on_init(&mut world, &mut resources);
-        let schedule =  state.on_forgrounded(&mut world, &mut resources, &mut command_receivers);
-        App {
+        let schedule = state.on_forgrounded(&mut world, &mut resources, &mut command_receivers);
+
+        Engine {
             world,
             resources,
             swap_chain,
@@ -147,12 +148,14 @@ impl App {
         self.sc_desc.height = window_size.physical_height;
         // This will lead to crashes becase the swapchain is created before the old one is dropped
         self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
+        // TODO MOVE TO on_resize
         let mut camera = self.resources.get_mut::<Camera>().unwrap();
         camera.update_aspect_ratio(window_size.physical_width, window_size.physical_height);
-        self.resources
-            .get_mut::<DepthTexture>()
-            .unwrap()
-            .resize(&device, &self.sc_desc);
+        self.resources.get_mut::<DepthTexture>().unwrap().resize(
+            &device,
+            self.sc_desc.width,
+            self.sc_desc.height,
+        );
     }
 
     pub fn recreate_swap_chain(&mut self) {
@@ -284,7 +287,7 @@ impl App {
             _ => false,
         }
     }
-    // Use system instead?
+
     pub fn render(&mut self) -> Result<(), wgpu::SwapChainError> {
         // move this somewhere else:
         let mut time = self.resources.get_mut::<Time>().unwrap();

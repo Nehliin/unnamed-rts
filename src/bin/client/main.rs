@@ -1,4 +1,4 @@
-use application::App;
+use engine::Engine;
 use futures::executor::block_on;
 use log::warn;
 use winit::{
@@ -7,7 +7,7 @@ use winit::{
     window::WindowBuilder,
 };
 
-mod application;
+mod engine;
 mod assets;
 mod state;
 mod client_network;
@@ -25,7 +25,7 @@ fn main() {
         .with_title("RTS!")
         .build(&event_loop)
         .expect("Failed to create window");
-    let mut app = block_on(App::new(&window));
+    let mut app = block_on(Engine::new(&window));
     event_loop.run(move |event, _, control_flow| {
         if !app.event_handler(&event, &window.id()) {
             match event {

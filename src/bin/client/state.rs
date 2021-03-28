@@ -1,10 +1,13 @@
-use std::{borrow::Cow, f32::consts::PI, time::Instant};
 use core::fmt::Debug;
 use crossbeam_channel::Receiver;
 use glam::{Quat, Vec3};
 use image::GenericImageView;
 use legion::*;
-use unnamed_rts::{components::Transform, resources::{NetworkSerialization, WindowSize}};
+use std::{borrow::Cow, f32::consts::PI, time::Instant};
+use unnamed_rts::{
+    components::Transform,
+    resources::{NetworkSerialization, WindowSize},
+};
 use wgpu::{CommandBuffer, Device, Queue};
 
 use crate::{
@@ -21,7 +24,7 @@ use crate::{
         lights::{self, LightUniformBuffer},
         model_pass, selection_pass,
         texture::TextureContent,
-        ui::{ ui_pass::UiPass, ui_systems},
+        ui::{ui_pass::UiPass, ui_systems},
     },
     input,
 };

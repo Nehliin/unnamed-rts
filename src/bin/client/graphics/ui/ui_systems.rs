@@ -9,10 +9,7 @@ use winit::event::{ModifiersState, MouseButton, MouseScrollDelta};
 
 use crate::input::{self, EventReader};
 
-use super::{
-    ui_context::{UiContext},
-    ui_pass::UiPass,
-};
+use super::{ui_context::UiContext, ui_pass::UiPass};
 
 #[allow(clippy::clippy::too_many_arguments)]
 #[system]

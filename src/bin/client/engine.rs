@@ -2,10 +2,7 @@ use std::{any::TypeId, time::Instant};
 
 use crate::{client_network::handle_server_update, state::State};
 use crate::{
-    graphics::ui::{
-        ui_context::{UiContext},
-        ui_pass, ui_systems,
-    },
+    graphics::ui::{ui_context::UiContext, ui_pass, ui_systems},
     input::{self, KeyboardState, MouseButtonState, MouseMotion, Text},
 };
 use crossbeam_channel::{Receiver, Sender};

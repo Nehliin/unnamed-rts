@@ -7,7 +7,6 @@ use wgpu::{
     CommandBuffer, Device,
 };
 
-
 #[derive(Debug)]
 enum BufferType {
     Uniform,

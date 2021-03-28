@@ -1,32 +1,25 @@
-use std::mem::MaybeUninit;
+use std::{any::TypeId, time::Instant};
 
+use crate::{client_network::handle_server_update, state::State};
 use crate::{
-    assets::{self, Assets},
-    graphics::{
-        camera::Camera,
-        common::DepthTexture,
-        gltf::GltfModel,
-        ui::{
-            ui_context::{UiContext, WindowSize},
-            ui_pass::UiPass,
-            ui_systems,
-        },
+    graphics::ui::{
+        ui_context::{UiContext},
+        ui_pass, ui_systems,
     },
     input::{self, KeyboardState, MouseButtonState, MouseMotion, Text},
 };
-use crate::{client_network::handle_server_update, state::State};
 use crossbeam_channel::{Receiver, Sender};
+use fxhash::FxHashMap;
 use input::CursorPosition;
-use legion::*;
-use log::warn;
-use unnamed_rts::resources::{NetworkSerialization, Time};
+use legion::{systems::Step, *};
+use log::{info, warn};
+use unnamed_rts::resources::{Time, WindowSize};
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
     PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
     TextureFormat, TextureUsage,
 };
 use winit::{
-    dpi::PhysicalSize,
     event::{
         DeviceEvent, ElementState, Event, KeyboardInput, ModifiersState, MouseButton,
         MouseScrollDelta,
@@ -34,10 +27,92 @@ use winit::{
     window::{Window, WindowId},
 };
 
+#[derive(Debug)]
+struct ErasedState {
+    state: Box<dyn State>,
+    id: TypeId,
+}
+#[derive(Debug, Default)]
+struct StateStack {
+    stack: Vec<ErasedState>,
+    state_schedule: FxHashMap<TypeId, Schedule>,
+}
+
+impl StateStack {
+    pub fn push<S: State + 'static>(
+        &mut self,
+        mut state: S,
+        world: &mut World,
+        resources: &mut Resources,
+        command_receivers: &mut Vec<Receiver<CommandBuffer>>,
+    ) {
+        // initialize the new state
+        info!("Initializing state: {:?}", state);
+        state.on_init(world, resources);
+        info!("On foregrounded: {:?}", state);
+        let id = TypeId::of::<S>();
+        let new_schedule = state.on_forgrounded(world, resources, command_receivers);
+        self.state_schedule.insert(id, new_schedule);
+        if let Some(previous_foreground) = self.stack.last_mut() {
+            let background_schedule =
+                previous_foreground
+                    .state
+                    .on_backgrouded(world, resources, command_receivers);
+            self.state_schedule
+                .insert(previous_foreground.id, background_schedule);
+        }
+        info!("Pushing state: {:?}", state);
+        self.stack.push(ErasedState {
+            state: Box::new(state),
+            id,
+        });
+    }
+
+    pub fn pop(
+        &mut self,
+        world: &mut World,
+        resources: &mut Resources,
+        command_receivers: &mut Vec<Receiver<CommandBuffer>>,
+    ) {
+        info!("Popping state");
+        if let Some(mut current_foreground) = self.stack.pop() {
+            info!("Destroying state previous head");
+            current_foreground.state.on_destroy(world, resources);
+        }
+        if let Some(new_forground) = self.stack.last_mut() {
+            info!("Foregrounding new state");
+            let new_schedule =
+                new_forground
+                    .state
+                    .on_forgrounded(world, resources, command_receivers);
+            self.state_schedule.insert(new_forground.id, new_schedule);
+        }
+    }
+
+    pub fn states_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut Box<dyn State + 'static>> {
+        self.stack.iter_mut().map(|erased| &mut erased.state)
+    }
+
+    pub fn system_schedule_steps(&mut self) -> Vec<Step> {
+        let mut state_schedule = std::mem::take(&mut self.state_schedule);
+        self.stack
+            .iter()
+            .rev()
+            .map(|state| {
+                state_schedule
+                    .remove(&state.id)
+                    .expect("State to be present in schedule map")
+            })
+            .map(|schedule| schedule.into_vec())
+            .flatten()
+            .collect()
+    }
+}
+
 pub struct Engine {
     world: World,
     resources: Resources,
-    states: Vec<Box<dyn State>>,
+    state_stack: StateStack,
     schedule: Schedule,
     swap_chain: SwapChain,
     surface: Surface,
@@ -98,6 +173,21 @@ impl Engine {
         };
         let ui_context = UiContext::new(&window_size);
 
+        // Schedule construction
+        let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
+        let mut initial_systems = Schedule::builder()
+            .add_system(ui_systems::update_ui_system())
+            .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
+            .build()
+            .into_vec();
+        let mut closing_systems = Schedule::builder()
+            .add_system(ui_systems::end_ui_frame_system(ui_pass::UiPass::new(
+                &device, ui_sender,
+            )))
+            .add_system(input::event_system())
+            .build()
+            .into_vec();
+
         resources.insert(ui_context);
         resources.insert(window_size);
         resources.insert(device);
@@ -119,10 +209,20 @@ impl Engine {
         resources.insert(KeyboardState::default());
         resources.insert(MouseButtonState::default());
 
-        let mut state = crate::state::GameState {};
+        let state = crate::state::GameState {};
         let mut command_receivers = vec![];
-        state.on_init(&mut world, &mut resources);
-        let schedule = state.on_forgrounded(&mut world, &mut resources, &mut command_receivers);
+        let mut state_stack = StateStack::default();
+        state_stack.push(state, &mut world, &mut resources, &mut command_receivers);
+
+        command_receivers.push(ui_rc);
+
+        let mut state_systems = state_stack.system_schedule_steps();
+
+        let mut all_steps =
+            Vec::with_capacity(initial_systems.len() + closing_systems.len() + state_systems.len());
+        all_steps.append(&mut initial_systems);
+        all_steps.append(&mut state_systems);
+        all_steps.append(&mut closing_systems);
 
         Engine {
             world,
@@ -130,9 +230,9 @@ impl Engine {
             swap_chain,
             surface,
             sc_desc,
-            schedule,
+            schedule: Schedule::from(all_steps),
             command_receivers,
-            states: vec![Box::new(state)],
+            state_stack,
             text_input_sender,
             mouse_scroll_sender,
             mouse_motion_sender,
@@ -152,17 +252,19 @@ impl Engine {
         //self.swap_chain = None;
         self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
         drop(device);
-        Self::resize_states(&mut self.states, &mut self.resources, window_size);
+        Self::resize_states(
+            self.state_stack.states_mut(),
+            &mut self.resources,
+            window_size,
+        );
     }
 
-    fn resize_states(
-        states: &mut [Box<dyn State>],
+    fn resize_states<'a>(
+        states: impl Iterator<Item = &'a mut Box<dyn State + 'static>>,
         resources: &mut Resources,
         window_size: &WindowSize,
     ) {
-        states
-            .iter_mut()
-            .for_each(|state| state.on_resize(resources, window_size));
+        states.for_each(|state| state.on_resize(resources, window_size));
     }
 
     pub fn recreate_swap_chain(&mut self) {
@@ -304,18 +406,12 @@ impl Engine {
         drop(time);
 
         self.resources.remove::<SwapChainTexture>();
-        self.resources.insert(
-            self.swap_chain
-                .get_current_frame()?
-                .output,
-        );
-        let states = &mut self.states;
+        self.resources
+            .insert(self.swap_chain.get_current_frame()?.output);
         self.schedule.execute(&mut self.world, &mut self.resources);
-        {
-            states.iter_mut().for_each(|state| {
-                state.on_tick();
-            });
-        }
+        self.state_stack.states_mut().for_each(|state| {
+            state.on_tick();
+        });
         handle_server_update(&mut self.world, &mut self.resources);
 
         // How to handle the different uniforms?

@@ -1,28 +1,42 @@
 use std::{borrow::Cow, f32::consts::PI, time::Instant};
-
+use core::fmt::Debug;
 use crossbeam_channel::Receiver;
 use glam::{Quat, Vec3};
 use image::GenericImageView;
 use legion::*;
-use unnamed_rts::{components::Transform, resources::NetworkSerialization};
+use unnamed_rts::{components::Transform, resources::{NetworkSerialization, WindowSize}};
 use wgpu::{CommandBuffer, Device, Queue};
 
-use crate::{assets::{self, Assets}, client_network::{add_client_components, connect_to_server}, client_systems::{self, DebugMenueSettings}, graphics::{camera::{self, Camera}, common::DepthTexture, debug_lines_pass::{self, BoundingBoxMap}, gltf::GltfModel, grid_pass, heightmap_pass::{self, HeightMap}, lights::{self, LightUniformBuffer}, model_pass, selection_pass, texture::TextureContent, ui::{ui_context::WindowSize, ui_pass::UiPass, ui_systems}}, input};
+use crate::{
+    assets::{self, Assets},
+    client_network::{add_client_components, connect_to_server},
+    client_systems::{self, DebugMenueSettings},
+    graphics::{
+        camera::{self, Camera},
+        common::DepthTexture,
+        debug_lines_pass::{self, BoundingBoxMap},
+        gltf::GltfModel,
+        grid_pass,
+        heightmap_pass::{self, HeightMap},
+        lights::{self, LightUniformBuffer},
+        model_pass, selection_pass,
+        texture::TextureContent,
+        ui::{ ui_pass::UiPass, ui_systems},
+    },
+    input,
+};
 
 pub enum StateTransition {
     Pop,
     Push(Box<dyn State>),
     Noop,
 }
-pub trait State {
-    fn on_init(
-        &mut self,
-        world: &mut World,
-        resources: &mut Resources,
-    );
+pub trait State: Debug {
+    fn on_init(&mut self, world: &mut World, resources: &mut Resources);
     fn on_tick(&mut self) -> StateTransition;
     fn on_resize(&mut self, resources: &mut Resources, new_size: &WindowSize) {}
-    fn on_destroy(&mut self);
+    // Todo: clean up command receivers?
+    fn on_destroy(&mut self, world: &mut World, resources: &mut Resources);
     fn on_backgrouded(
         &mut self,
         world: &mut World,
@@ -41,11 +55,7 @@ pub trait State {
 pub struct GameState {}
 
 impl State for GameState {
-    fn on_init(
-        &mut self,
-        world: &mut World,
-        resources: &mut Resources,
-    ) {
+    fn on_init(&mut self, world: &mut World, resources: &mut Resources) {
         resources.insert(BoundingBoxMap::default());
         resources.insert(Assets::<GltfModel>::new());
         let size = resources
@@ -86,7 +96,7 @@ impl State for GameState {
         // Set up network and connect to server
         let suit = assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
         let height_map = HeightMap::from_displacement_map(&device, &queue, 256, texture, transform);
-        let depth_texture= DepthTexture::new(&device, size.physical_width, size.physical_height);
+        let depth_texture = DepthTexture::new(&device, size.physical_width, size.physical_height);
         drop(device);
         drop(assets);
         drop(size);
@@ -106,7 +116,7 @@ impl State for GameState {
     }
 
     fn on_tick(&mut self) -> StateTransition {
-       StateTransition::Noop 
+        StateTransition::Noop
     }
 
     fn on_resize(&mut self, resources: &mut Resources, window_size: &WindowSize) {
@@ -120,7 +130,7 @@ impl State for GameState {
         );
     }
 
-    fn on_destroy(&mut self) {
+    fn on_destroy(&mut self, world: &mut World, resources: &mut Resources) {
         todo!()
     }
 
@@ -139,7 +149,6 @@ impl State for GameState {
         resources: &mut Resources,
         command_receivers: &mut Vec<Receiver<CommandBuffer>>,
     ) -> Schedule {
-        let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
         let (debug_sender, debug_rc) = crossbeam_channel::bounded(1);
         let (model_sender, model_rc) = crossbeam_channel::bounded(1);
         let (heightmap_sender, heightmap_rc) = crossbeam_channel::bounded(1);
@@ -150,7 +159,6 @@ impl State for GameState {
         command_receivers.push(selectable_rc);
         command_receivers.push(debug_rc);
         command_receivers.push(lines_rc);
-        command_receivers.push(ui_rc); 
         let device = resources.get::<Device>().expect("Device to be present");
         Schedule::builder()
             .add_system(assets::asset_load_system::<GltfModel>())
@@ -169,7 +177,6 @@ impl State for GameState {
             .add_system(heightmap_pass::draw_system(
                 heightmap_pass::HeightMapPass::new(&device, heightmap_sender),
             ))
-            .add_system(ui_systems::update_ui_system())
             .add_system(client_systems::selection_system())
             .add_system(grid_pass::draw_system(grid_pass::GridPass::new(
                 &device,
@@ -179,16 +186,8 @@ impl State for GameState {
             .add_system(debug_lines_pass::draw_system(
                 debug_lines_pass::DebugLinesPass::new(&device, lines_sender),
             ))
-            // THIS SHOULDN'T BE HERE
-            .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
             .add_system(client_systems::draw_debug_ui_system())
-            // THIS SHOULDN'T BE HERE
-            .add_system(ui_systems::end_ui_frame_system(UiPass::new(
-                &device, ui_sender,
-            )))
             .add_system(client_systems::move_action_system())
-            // THIS SHOULDN'T BE HERE
-            .add_system(input::event_system())
             .build()
     }
 }

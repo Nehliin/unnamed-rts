@@ -7,13 +7,13 @@ use winit::{
     window::WindowBuilder,
 };
 
-mod engine;
 mod assets;
-mod state;
 mod client_network;
 mod client_systems;
+mod engine;
 mod graphics;
 mod input;
+mod state;
 
 fn main() {
     env_logger::builder()

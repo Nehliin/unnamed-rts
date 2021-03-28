@@ -10,7 +10,20 @@ use legion::{query::LayoutFilter, serialize::Canon, *};
 use serde::{de::DeserializeSeed, Deserialize, Serialize};
 
 use crate::components::{EntityType, Transform, Velocity};
+#[derive(Debug, Clone, Copy)]
+pub struct WindowSize {
+    pub physical_width: u32,
+    pub physical_height: u32,
+    pub scale_factor: f32,
+}
 
+impl WindowSize {
+    pub fn logical_size(&self) -> (u32, u32) {
+        let logical_width = self.physical_width as f32 / self.scale_factor;
+        let logical_height = self.physical_height as f32 / self.scale_factor;
+        (logical_width as u32, logical_height as u32)
+    }
+}
 #[derive(Debug)]
 pub struct Time {
     pub current_time: std::time::Instant,

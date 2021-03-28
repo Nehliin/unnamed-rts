@@ -4,10 +4,9 @@ use crevice::std430::Std430;
 use glam::*;
 use legion::*;
 use once_cell::sync::OnceCell;
-use unnamed_rts::resources::Time;
+use unnamed_rts::resources::{Time, WindowSize};
 use winit::event::{MouseButton, VirtualKeyCode};
 
-use super::ui::ui_context::WindowSize;
 #[derive(Debug)]
 pub struct Camera {
     direction: Vec3A,

@@ -3,10 +3,7 @@ use std::net::SocketAddr;
 use crate::{
     assets::{Assets, Handle},
     graphics::{
-        camera::Camera,
-        gltf::GltfModel,
-        heightmap_pass::HeightMap,
-        ui::ui_context::{UiContext, WindowSize},
+        camera::Camera, gltf::GltfModel, heightmap_pass::HeightMap, ui::ui_context::UiContext,
     },
     input::{CursorPosition, MouseButtonState},
 };

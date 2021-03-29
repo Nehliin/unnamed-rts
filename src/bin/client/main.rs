@@ -1,6 +1,7 @@
 use engine::Engine;
 use futures::executor::block_on;
-use log::warn;
+#[macro_use]
+extern crate log;
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -14,6 +15,7 @@ mod engine;
 mod graphics;
 mod input;
 mod state;
+mod state_stack;
 
 fn main() {
     env_logger::builder()

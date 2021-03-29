@@ -45,8 +45,10 @@ serde = {version = "1", features = ["derive"]}
 gltf = "0.15"
 fxhash = "0.2"
 
+
 [dev-dependencies]
 criterion = "0.3"
+paste = "1"
 
 [[bench]]
 name = "intersection_bench"

@@ -1,15 +1,13 @@
-use std::{any::TypeId, time::Instant};
-
+use std::{ time::Instant};
 use crate::{client_network::handle_server_update, state::State};
 use crate::{
     graphics::ui::{ui_context::UiContext, ui_pass, ui_systems},
     input::{self, KeyboardState, MouseButtonState, MouseMotion, Text},
+    state_stack::StateStack,
 };
 use crossbeam_channel::{Receiver, Sender};
-use fxhash::FxHashMap;
 use input::CursorPosition;
 use legion::{systems::Step, *};
-use log::{info, warn};
 use unnamed_rts::resources::{Time, WindowSize};
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
@@ -24,82 +22,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
-#[derive(Debug)]
-struct ErasedState {
-    state: Box<dyn State>,
-    id: TypeId,
-}
-#[derive(Debug, Default)]
-struct StateStack {
-    stack: Vec<ErasedState>,
-    state_schedule: FxHashMap<TypeId, Schedule>,
-}
 
-impl StateStack {
-    pub fn push<S: State + 'static>(
-        &mut self,
-        mut state: S,
-        world: &mut World,
-        resources: &mut Resources,
-        command_receivers: &mut Vec<Receiver<CommandBuffer>>,
-    ) {
-        // initialize the new state
-        info!("Initializing state: {:?}", state);
-        state.on_init(world, resources, command_receivers);
-        info!("On foregrounded: {:?}", state);
-        let id = TypeId::of::<S>();
-        let new_schedule = state.foreground_schedule();
-        self.state_schedule.insert(id, new_schedule);
-        if let Some(previous_foreground) = self.stack.last_mut() {
-            let background_schedule = previous_foreground.state.background_schedule();
-            self.state_schedule
-                .insert(previous_foreground.id, background_schedule);
-        }
-        info!("Pushing state: {:?}", state);
-        self.stack.push(ErasedState {
-            state: Box::new(state),
-            id,
-        });
-    }
-
-    pub fn pop(&mut self, world: &mut World, resources: &mut Resources) {
-        info!("Popping state");
-        if let Some(mut current_foreground) = self.stack.pop() {
-            info!("Destroying state previous head");
-            current_foreground.state.on_destroy(world, resources);
-        }
-        if let Some(new_forground) = self.stack.last_mut() {
-            info!("Foregrounding new state");
-            let new_schedule = new_forground.state.foreground_schedule();
-            self.state_schedule.insert(new_forground.id, new_schedule);
-        }
-    }
-
-    // option 1: run each schedule individually drawback, non optimal schedule execution (possible to parellalize more)
-    // option 2: all passes are resources -> foreground/background can be called many times without constructing more gpu resourcs
-    // benefits: optimizied scheduling, no extra resource allocation on state transitions,
-
-    pub fn states_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut Box<dyn State + 'static>> {
-        self.stack.iter_mut().map(|erased| &mut erased.state)
-    }
-
-    pub fn system_schedule_steps(&mut self) -> Vec<Step> {
-        let mut state_schedule = std::mem::take(&mut self.state_schedule);
-        self.stack
-            .iter()
-            .rev()
-            .map(|state| {
-                let schedule = state_schedule
-                    .remove(&state.id)
-                    .expect("State to be present in schedule map");
-                //state_schedule.insert(state.id, v)
-                schedule
-            })
-            .map(|schedule| schedule.into_vec())
-            .flatten()
-            .collect()
-    }
-}
 
 pub struct Engine {
     world: World,
@@ -204,16 +127,13 @@ impl Engine {
         let state = crate::state::GameState {};
         let mut command_receivers = vec![];
         let mut state_stack = StateStack::default();
-        state_stack.push(state, &mut world, &mut resources, &mut command_receivers);
-
+        let mut state_steps = state_stack.push(state, &mut world, &mut resources, &mut command_receivers);
         command_receivers.push(ui_rc);
 
-        let mut state_systems = state_stack.system_schedule_steps();
-
         let mut all_steps =
-            Vec::with_capacity(initial_systems.len() + closing_systems.len() + state_systems.len());
+            Vec::with_capacity(initial_systems.len() + closing_systems.len() + state_steps.len());
         all_steps.append(&mut initial_systems);
-        all_steps.append(&mut state_systems);
+        all_steps.append(&mut state_steps);
         all_steps.append(&mut closing_systems);
 
         Engine {

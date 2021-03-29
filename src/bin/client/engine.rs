@@ -45,16 +45,13 @@ impl StateStack {
     ) {
         // initialize the new state
         info!("Initializing state: {:?}", state);
-        state.on_init(world, resources);
+        state.on_init(world, resources, command_receivers);
         info!("On foregrounded: {:?}", state);
         let id = TypeId::of::<S>();
-        let new_schedule = state.on_forgrounded(world, resources, command_receivers);
+        let new_schedule = state.foreground_schedule();
         self.state_schedule.insert(id, new_schedule);
         if let Some(previous_foreground) = self.stack.last_mut() {
-            let background_schedule =
-                previous_foreground
-                    .state
-                    .on_backgrouded(world, resources, command_receivers);
+            let background_schedule = previous_foreground.state.background_schedule();
             self.state_schedule
                 .insert(previous_foreground.id, background_schedule);
         }
@@ -65,12 +62,7 @@ impl StateStack {
         });
     }
 
-    pub fn pop(
-        &mut self,
-        world: &mut World,
-        resources: &mut Resources,
-        command_receivers: &mut Vec<Receiver<CommandBuffer>>,
-    ) {
+    pub fn pop(&mut self, world: &mut World, resources: &mut Resources) {
         info!("Popping state");
         if let Some(mut current_foreground) = self.stack.pop() {
             info!("Destroying state previous head");
@@ -78,13 +70,14 @@ impl StateStack {
         }
         if let Some(new_forground) = self.stack.last_mut() {
             info!("Foregrounding new state");
-            let new_schedule =
-                new_forground
-                    .state
-                    .on_forgrounded(world, resources, command_receivers);
+            let new_schedule = new_forground.state.foreground_schedule();
             self.state_schedule.insert(new_forground.id, new_schedule);
         }
     }
+
+    // option 1: run each schedule individually drawback, non optimal schedule execution (possible to parellalize more)
+    // option 2: all passes are resources -> foreground/background can be called many times without constructing more gpu resourcs
+    // benefits: optimizied scheduling, no extra resource allocation on state transitions,
 
     pub fn states_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut Box<dyn State + 'static>> {
         self.stack.iter_mut().map(|erased| &mut erased.state)
@@ -96,9 +89,11 @@ impl StateStack {
             .iter()
             .rev()
             .map(|state| {
-                state_schedule
+                let schedule = state_schedule
                     .remove(&state.id)
-                    .expect("State to be present in schedule map")
+                    .expect("State to be present in schedule map");
+                //state_schedule.insert(state.id, v)
+                schedule
             })
             .map(|schedule| schedule.into_vec())
             .flatten()

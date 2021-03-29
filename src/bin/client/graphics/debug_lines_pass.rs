@@ -51,7 +51,7 @@ pub fn update_bounding_boxes(
 #[system]
 pub fn draw(
     world: &SubWorld,
-    #[state] pass: &DebugLinesPass,
+    #[resource] pass: &DebugLinesPass,
     #[resource] bounding_box_map: &BoundingBoxMap,
     #[resource] device: &wgpu::Device,
     #[resource] depth_texture: &DepthTexture,

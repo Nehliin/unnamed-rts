@@ -1,12 +1,8 @@
 use anyhow::Result;
+use fxhash::FxHashMap;
 use legion::*;
 use log::{error, info};
-use std::{
-    collections::{ VecDeque},
-    marker::PhantomData,
-    sync::atomic::Ordering,
-};
-use fxhash::FxHashMap;
+use std::{collections::VecDeque, marker::PhantomData, sync::atomic::Ordering};
 use std::{
     fmt::Debug,
     hash::Hash,

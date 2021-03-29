@@ -10,9 +10,9 @@ use crate::{
     client_systems::DebugMenueSettings,
 };
 use crossbeam_channel::Sender;
+use fxhash::FxHashMap;
 use glam::Vec3;
 use legion::*;
-use fxhash::FxHashMap;
 use unnamed_rts::components::Transform;
 use wgpu::{include_spirv, SwapChainTexture};
 use world::SubWorld;

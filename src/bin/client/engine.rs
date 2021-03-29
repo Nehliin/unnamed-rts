@@ -1,4 +1,3 @@
-use std::{ time::Instant};
 use crate::{client_network::handle_server_update, state::State};
 use crate::{
     graphics::ui::{ui_context::UiContext, ui_pass, ui_systems},
@@ -8,6 +7,7 @@ use crate::{
 use crossbeam_channel::{Receiver, Sender};
 use input::CursorPosition;
 use legion::{systems::Step, *};
+use std::time::Instant;
 use unnamed_rts::resources::{Time, WindowSize};
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
@@ -21,8 +21,6 @@ use winit::{
     },
     window::{Window, WindowId},
 };
-
-
 
 pub struct Engine {
     world: World,
@@ -127,7 +125,8 @@ impl Engine {
         let state = crate::state::GameState {};
         let mut command_receivers = vec![];
         let mut state_stack = StateStack::default();
-        let mut state_steps = state_stack.push(state, &mut world, &mut resources, &mut command_receivers);
+        let mut state_steps =
+            state_stack.push(state, &mut world, &mut resources, &mut command_receivers);
         command_receivers.push(ui_rc);
 
         let mut all_steps =
@@ -312,7 +311,7 @@ impl Engine {
     pub fn render(&mut self) -> Result<(), wgpu::SwapChainError> {
         // move this somewhere else:
         let mut time = self.resources.get_mut::<Time>().unwrap();
-        let now = std::time::Instant::now();
+        let now = Instant::now();
         time.delta_time = (now - time.current_time).as_secs_f32();
         time.current_time = now;
         drop(time);

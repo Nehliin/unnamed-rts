@@ -1,11 +1,8 @@
 use anyhow::Result;
+use fxhash::FxHashMap;
 use legion::*;
 use log::{error, info};
-use std::{
-    collections::{HashMap, VecDeque},
-    marker::PhantomData,
-    sync::atomic::Ordering,
-};
+use std::{collections::VecDeque, marker::PhantomData, sync::atomic::Ordering};
 use std::{
     fmt::Debug,
     hash::Hash,
@@ -55,14 +52,14 @@ pub trait AssetLoader: Sized {
 }
 
 pub struct Assets<T: AssetLoader> {
-    storage: HashMap<Handle<T>, T>,
+    storage: FxHashMap<Handle<T>, T>,
     gpu_load_queue: VecDeque<(Handle<T>, PathBuf)>,
 }
 
 impl<T: AssetLoader> Assets<T> {
     pub fn new() -> Assets<T> {
         Assets {
-            storage: HashMap::default(),
+            storage: FxHashMap::default(),
             gpu_load_queue: VecDeque::default(),
         }
     }
@@ -93,7 +90,7 @@ impl<T: AssetLoader> Assets<T> {
     #[inline]
     fn clear_load_queue_impl(
         load_queue: &VecDeque<(Handle<T>, PathBuf)>,
-        storage: &mut HashMap<Handle<T>, T>,
+        storage: &mut FxHashMap<Handle<T>, T>,
         device: &Device,
         queue: &Queue,
     ) -> Result<()> {

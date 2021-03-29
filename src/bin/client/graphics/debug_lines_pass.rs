@@ -10,9 +10,9 @@ use crate::{
     client_systems::DebugMenueSettings,
 };
 use crossbeam_channel::Sender;
+use fxhash::FxHashMap;
 use glam::Vec3;
 use legion::*;
-use std::collections::HashMap;
 use unnamed_rts::components::Transform;
 use wgpu::{include_spirv, SwapChainTexture};
 use world::SubWorld;
@@ -20,7 +20,7 @@ use world::SubWorld;
 #[derive(Debug, Default)]
 // This should be refactored to be component based instead of using this resource
 pub struct BoundingBoxMap {
-    vertex_info_map: HashMap<Handle<GltfModel>, ImmutableVertexData<BoxVert>>,
+    vertex_info_map: FxHashMap<Handle<GltfModel>, ImmutableVertexData<BoxVert>>,
 }
 
 #[system]
@@ -51,7 +51,7 @@ pub fn update_bounding_boxes(
 #[system]
 pub fn draw(
     world: &SubWorld,
-    #[state] pass: &DebugLinesPass,
+    #[resource] pass: &DebugLinesPass,
     #[resource] bounding_box_map: &BoundingBoxMap,
     #[resource] device: &wgpu::Device,
     #[resource] depth_texture: &DepthTexture,

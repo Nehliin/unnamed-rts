@@ -296,7 +296,7 @@ pub fn update(#[resource] queue: &wgpu::Queue, #[resource] height_map: &mut Heig
 
 #[system]
 pub fn draw(
-    #[state] pass: &HeightMapPass,
+    #[resource] pass: &HeightMapPass,
     #[resource] current_frame: &wgpu::SwapChainTexture,
     #[resource] device: &wgpu::Device,
     #[resource] depth_texture: &DepthTexture,

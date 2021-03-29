@@ -42,7 +42,7 @@ pub fn update(
 #[system]
 pub fn draw(
     world: &SubWorld,
-    #[state] pass: &ModelPass,
+    #[resource] pass: &ModelPass,
     #[resource] asset_storage: &Assets<GltfModel>,
     #[resource] depth_texture: &DepthTexture,
     #[resource] device: &wgpu::Device,

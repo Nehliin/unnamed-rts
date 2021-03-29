@@ -17,7 +17,7 @@ use super::common::DepthTexture;
 #[allow(clippy::clippy::too_many_arguments)]
 pub fn draw(
     world: &SubWorld,
-    #[state] pass: &SelectionPass,
+    #[resource] pass: &SelectionPass,
     #[resource] queue: &wgpu::Queue,
     #[resource] asset_storage: &Assets<GltfModel>,
     #[resource] depth_texture: &DepthTexture,

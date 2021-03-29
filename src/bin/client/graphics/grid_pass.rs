@@ -10,7 +10,7 @@ use wgpu::include_spirv;
 
 #[system]
 pub fn draw(
-    #[state] pass: &GridPass,
+    #[resource] pass: &GridPass,
     #[resource] debug_settings: &DebugMenueSettings,
     #[resource] device: &wgpu::Device,
     #[resource] depth_texture: &DepthTexture,

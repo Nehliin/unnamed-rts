@@ -3,16 +3,13 @@ use std::time::Instant;
 use egui::{pos2, vec2};
 use input::{CursorPosition, Text};
 use legion::*;
-use unnamed_rts::resources::Time;
+use unnamed_rts::resources::{Time, WindowSize};
 use wgpu::{CommandEncoderDescriptor, Device, Queue, SwapChainTexture};
 use winit::event::{ModifiersState, MouseButton, MouseScrollDelta};
 
 use crate::input::{self, EventReader};
 
-use super::{
-    ui_context::{UiContext, WindowSize},
-    ui_pass::UiPass,
-};
+use super::{ui_context::UiContext, ui_pass::UiPass};
 
 #[allow(clippy::clippy::too_many_arguments)]
 #[system]

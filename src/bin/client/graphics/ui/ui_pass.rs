@@ -1,12 +1,11 @@
 use bytemuck::{Pod, Zeroable};
 use crossbeam_channel::Sender;
+use unnamed_rts::resources::WindowSize;
 use wgpu::{
     include_spirv,
     util::{BufferInitDescriptor, DeviceExt},
     CommandBuffer, Device,
 };
-
-use super::ui_context::WindowSize;
 
 #[derive(Debug)]
 enum BufferType {

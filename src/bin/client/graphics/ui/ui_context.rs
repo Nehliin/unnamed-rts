@@ -1,20 +1,6 @@
 use egui::{paint::ClippedShape, vec2, CtxRef, RawInput};
+use unnamed_rts::resources::WindowSize;
 use winit::event::ModifiersState;
-
-#[derive(Debug, Clone, Copy)]
-pub struct WindowSize {
-    pub physical_width: u32,
-    pub physical_height: u32,
-    pub scale_factor: f32,
-}
-
-impl WindowSize {
-    pub fn logical_size(&self) -> (u32, u32) {
-        let logical_width = self.physical_width as f32 / self.scale_factor;
-        let logical_height = self.physical_height as f32 / self.scale_factor;
-        (logical_width as u32, logical_height as u32)
-    }
-}
 
 pub struct CursorPosition {
     pub x: f64,

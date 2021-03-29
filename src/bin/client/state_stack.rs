@@ -126,7 +126,7 @@ mod tests {
                         res.on_init += 1;
                     }
 
-                    fn on_tick(&mut self) -> crate::state::StateTransition {
+                    fn on_foreground_tick(&mut self) -> crate::state::StateTransition {
                         crate::state::StateTransition::Noop
                     }
 

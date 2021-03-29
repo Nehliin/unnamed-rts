@@ -47,7 +47,7 @@ impl<T: AssetLoader> Eq for Handle<T> {}
 static mut CURRENT_ID: AtomicU32 = AtomicU32::new(0);
 // vagely inspired by bevy
 pub trait AssetLoader: Sized {
-    fn load(path: &PathBuf, device: &Device, queue: &Queue) -> Result<Self>;
+    fn load(path: &Path, device: &Device, queue: &Queue) -> Result<Self>;
     fn extensions() -> &'static [&'static str];
 }
 

@@ -40,9 +40,9 @@ pub trait State: Debug {
         resources: &mut Resources,
         command_receivers: &mut Vec<Receiver<CommandBuffer>>,
     );
-    // Only called when in foreground 
+    // Only called when in foreground
     fn on_foreground_tick(&mut self) -> StateTransition;
-    fn on_resize(&mut self, resources: &mut Resources, new_size: &WindowSize) {}
+    fn on_resize(&mut self, _resources: &mut Resources, _new_size: &WindowSize) {}
     // Todo: clean up command receivers?
     fn on_destroy(&mut self, world: &mut World, resources: &mut Resources);
     fn background_schedule(&self) -> Schedule;
@@ -154,7 +154,7 @@ impl State for GameState {
         );
     }
 
-    fn on_destroy(&mut self, world: &mut World, resources: &mut Resources) {
+    fn on_destroy(&mut self, _world: &mut World, _resources: &mut Resources) {
         todo!()
     }
 

@@ -691,8 +691,8 @@ impl GltfModel {
 }
 
 impl AssetLoader for GltfModel {
-    fn load(path: &std::path::PathBuf, device: &Device, queue: &Queue) -> Result<Self> {
-        GltfModel::load(device, queue, path.as_path())
+    fn load(path: &Path, device: &Device, queue: &Queue) -> Result<Self> {
+        GltfModel::load(device, queue, path)
     }
 
     fn extensions() -> &'static [&'static str] {

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use super::{
     camera::Camera, common::DepthTexture, common::DEPTH_FORMAT, texture::update_texture_data,
 };
@@ -55,7 +56,6 @@ pub struct HeightMap<'a> {
     transform: Transform,
     // TODO remove
     instance_buffer: MutableVertexData<InstanceData>,
-    size: u32,
 }
 
 fn create_vertecies(size: u32) -> (Vec<MapVertex>, Vec<u32>) {
@@ -178,7 +178,6 @@ impl<'a> HeightMap<'a> {
             needs_update: false,
             transform,
             bind_group,
-            size,
         }
     }
 

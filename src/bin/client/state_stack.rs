@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::state::State;
 use crossbeam_channel::Receiver;
 use legion::{systems::Step, *};
@@ -15,18 +16,18 @@ pub struct StateStack {
 // option 2 is implemented here
 impl StateStack {
     #[must_use]
-    pub fn push<S: State + 'static>(
+    pub fn push(
         &mut self,
-        mut state: S,
+        mut state: Box<dyn State>,
         world: &mut World,
         resources: &mut Resources,
         command_receivers: &mut Vec<Receiver<CommandBuffer>>,
     ) -> Vec<Step> {
         // initialize the new state
-        info!("Initializing state: {:?}", state);
+        info!("Initializing state new state");
         state.on_init(world, resources, command_receivers);
-        info!("Pushing state: {:?}", state);
-        self.stack.push(Box::new(state));
+        info!("Pushing state onto stack");
+        self.stack.push(state);
         self.calc_schedule_steps()
     }
 
@@ -56,6 +57,11 @@ impl StateStack {
             current_foreground.on_destroy(world, resources);
         }
         self.calc_schedule_steps()
+    }
+
+    #[must_use]
+    pub fn peek_mut(&mut self) -> Option<&mut Box<dyn State>> {
+        self.stack.last_mut()
     }
 
     pub fn states_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut Box<dyn State + 'static>> {
@@ -156,7 +162,12 @@ mod tests {
         resources.insert(StateAResources::default());
 
         let mut state_stack = StateStack::default();
-        let steps = state_stack.push(StateA, &mut world, &mut resources, &mut Vec::new());
+        let steps = state_stack.push(
+            Box::new(StateA),
+            &mut world,
+            &mut resources,
+            &mut Vec::new(),
+        );
 
         let res = resources.get::<StateAResources>().unwrap();
         assert_eq!(res.on_init, 1);
@@ -178,7 +189,12 @@ mod tests {
         resources.insert(StateAResources::default());
 
         let mut state_stack = StateStack::default();
-        let steps = state_stack.push(StateA, &mut world, &mut resources, &mut Vec::new());
+        let steps = state_stack.push(
+            Box::new(StateA),
+            &mut world,
+            &mut resources,
+            &mut Vec::new(),
+        );
 
         let mut schedule = Schedule::from(steps);
         schedule.execute(&mut world, &mut resources);

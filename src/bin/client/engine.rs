@@ -6,7 +6,7 @@ use crate::{
 };
 use crossbeam_channel::{Receiver, Sender};
 use input::CursorPosition;
-use legion::{systems::Step, *};
+use legion::*;
 use std::time::Instant;
 use unnamed_rts::resources::{Time, WindowSize};
 use wgpu::{
@@ -125,8 +125,12 @@ impl Engine {
         let state = crate::state::GameState {};
         let mut command_receivers = vec![];
         let mut state_stack = StateStack::default();
-        let mut state_steps =
-            state_stack.push(state, &mut world, &mut resources, &mut command_receivers);
+        let mut state_steps = state_stack.push(
+            Box::new(state),
+            &mut world,
+            &mut resources,
+            &mut command_receivers,
+        );
         command_receivers.push(ui_rc);
 
         let mut all_steps =
@@ -160,7 +164,6 @@ impl Engine {
             .resources
             .get::<Device>()
             .expect("Device to be registerd");
-        //self.swap_chain = None;
         self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
         drop(device);
         Self::resize_states(
@@ -320,9 +323,25 @@ impl Engine {
         self.resources
             .insert(self.swap_chain.get_current_frame()?.output);
         self.schedule.execute(&mut self.world, &mut self.resources);
-        self.state_stack.states_mut().for_each(|state| {
-            state.on_tick();
-        });
+        if let Some(foreground) = self.state_stack.peek_mut() {
+            match foreground.on_foreground_tick() {
+                crate::state::StateTransition::Pop => {
+                    let new_steps = self.state_stack.pop(&mut self.world, &mut self.resources);
+                    self.schedule = Schedule::from(new_steps);
+                }
+                crate::state::StateTransition::Push(new_state) => {
+                    let new_steps = self.state_stack.push(
+                        new_state,
+                        &mut self.world,
+                        &mut self.resources,
+                        &mut self.command_receivers,
+                    );
+                    self.schedule = Schedule::from(new_steps);
+                }
+                crate::state::StateTransition::Noop => {}
+            }
+        }
+
         handle_server_update(&mut self.world, &mut self.resources);
 
         // How to handle the different uniforms?

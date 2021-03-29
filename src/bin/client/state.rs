@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use core::fmt::Debug;
 use crossbeam_channel::Receiver;
 use glam::{Quat, Vec3};
@@ -39,8 +40,8 @@ pub trait State: Debug {
         resources: &mut Resources,
         command_receivers: &mut Vec<Receiver<CommandBuffer>>,
     );
-
-    fn on_tick(&mut self) -> StateTransition;
+    // Only called when in foreground 
+    fn on_foreground_tick(&mut self) -> StateTransition;
     fn on_resize(&mut self, resources: &mut Resources, new_size: &WindowSize) {}
     // Todo: clean up command receivers?
     fn on_destroy(&mut self, world: &mut World, resources: &mut Resources);
@@ -138,7 +139,7 @@ impl State for GameState {
         resources.insert(camera);
     }
 
-    fn on_tick(&mut self) -> StateTransition {
+    fn on_foreground_tick(&mut self) -> StateTransition {
         StateTransition::Noop
     }
 

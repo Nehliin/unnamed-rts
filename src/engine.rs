@@ -54,6 +54,8 @@ pub struct Engine {
     mouse_motion_sender: Sender<MouseMotion>,
     modifiers_state_sender: Sender<ModifiersState>,
     command_receivers: Vec<Receiver<CommandBuffer>>,
+    // this ain't beautiful
+    ui_rc: Receiver<CommandBuffer>,
 }
 
 impl Engine {
@@ -129,7 +131,7 @@ impl Engine {
         resources.insert(input::EventReader::<ModifiersState>::new(rc));
         resources.insert(KeyboardState::default());
         resources.insert(MouseButtonState::default());
-        let command_receivers = vec![ui_rc];
+        let command_receivers = vec![];
         let state_stack = StateStack::default();
 
         Engine {
@@ -145,6 +147,7 @@ impl Engine {
             mouse_scroll_sender,
             mouse_motion_sender,
             modifiers_state_sender,
+            ui_rc,
         }
     }
 
@@ -355,7 +358,12 @@ impl Engine {
             }
         }
         let queue = self.resources.get_mut::<Queue>().unwrap();
-        queue.submit(self.command_receivers.iter().map(|rc| rc.recv().unwrap()));
+        queue.submit(
+            self.command_receivers
+                .iter() 
+                .chain(std::iter::once(&self.ui_rc))
+                .map(|rc| rc.recv().unwrap()),
+        );
 
         Ok(())
     }

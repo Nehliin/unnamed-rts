@@ -19,7 +19,7 @@ pub trait State: Debug {
     );
     // Only called when in foreground
     fn on_foreground_tick(&mut self) -> StateTransition;
-    fn on_resize(&mut self, _resources: &mut Resources, _new_size: &WindowSize) {}
+    fn on_resize(&mut self, _resources: &Resources, _new_size: &WindowSize) {}
     // Todo: clean up command receivers?
     fn on_destroy(&mut self, world: &mut World, resources: &mut Resources);
     fn background_schedule(&self) -> Schedule;
@@ -87,6 +87,10 @@ impl StateStack {
 
     pub fn states_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut Box<dyn State + 'static>> {
         self.stack.iter_mut()
+    }
+
+    pub fn resize_states(&mut self, new_size: &WindowSize, resources: &Resources) {
+        self.stack.iter_mut().rev().for_each(|state| state.on_resize(resources, new_size));
     }
 
     fn calc_schedule_steps(&self) -> Vec<Step> {

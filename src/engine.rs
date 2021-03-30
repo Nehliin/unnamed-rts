@@ -22,44 +22,15 @@ use winit::{
     window::{Window, WindowId},
 };
 
-fn construct_schedule(state_steps: &mut Vec<Step>) -> Schedule {
-    let mut initial_systems = Schedule::builder()
-        .add_system(ui_systems::update_ui_system())
-        .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
-        .build()
-        .into_vec();
-    let mut closing_systems = Schedule::builder()
-        .add_system(ui_systems::end_ui_frame_system())
-        .add_system(input::event_system())
-        .build()
-        .into_vec();
-    let mut all_steps =
-        Vec::with_capacity(initial_systems.len() + closing_systems.len() + state_steps.len());
-    all_steps.append(&mut initial_systems);
-    all_steps.append(state_steps);
-    all_steps.append(&mut closing_systems);
-    Schedule::from(all_steps)
-}
-
-pub struct Engine {
-    world: World,
-    resources: Resources,
-    state_stack: StateStack,
-    schedule: Schedule,
+pub struct Renderer {
     swap_chain: SwapChain,
     surface: Surface,
     sc_desc: SwapChainDescriptor,
-    text_input_sender: Sender<Text>,
-    mouse_scroll_sender: Sender<MouseScrollDelta>,
-    mouse_motion_sender: Sender<MouseMotion>,
-    modifiers_state_sender: Sender<ModifiersState>,
     command_receivers: Vec<Receiver<CommandBuffer>>,
-    // this ain't beautiful
-    ui_rc: Receiver<CommandBuffer>,
 }
 
-impl Engine {
-    pub async fn new(window: &Window) -> Engine {
+impl Renderer {
+    pub async fn init(window: &Window, resourcs: &mut Resources) -> Renderer {
         let size = window.inner_size();
         let instance = if cfg!(mac) {
             Instance::new(BackendBit::METAL)
@@ -94,11 +65,86 @@ impl Engine {
             height: size.height,
             present_mode: wgpu::PresentMode::Immediate,
         };
-        //window.set_cursor_grab(true).unwrap();
-        //window.set_cursor_visible(false);
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
+        resourcs.insert(device);
+        resourcs.insert(queue);
+        Renderer {
+            swap_chain,
+            surface,
+            sc_desc,
+            command_receivers: Vec::default(),
+        }
+    }
+
+    pub fn resize(&mut self, new_size: &WindowSize, resources: &mut Resources) {
+        self.sc_desc.width = new_size.physical_width;
+        self.sc_desc.height = new_size.physical_height;
+        // Swapchain output needs to be dropped before the swapchain
+        let _ = resources.remove::<SwapChainTexture>();
+        let device = resources.get::<Device>().expect("Device to be registerd");
+        self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
+    }
+
+    pub fn begin_frame(&self, resources: &mut Resources) {
+        resources.remove::<SwapChainTexture>();
+        resources.insert(
+            self.swap_chain
+                .get_current_frame()
+                .expect("Expected frame to be available")
+                .output,
+        );
+    }
+
+    pub fn submit_frame(&self, resources: &mut Resources, ui_rc: &Receiver<CommandBuffer>) {
+        let queue = resources.get_mut::<Queue>().unwrap();
+        queue.submit(
+            self.command_receivers
+                .iter()
+                .chain(std::iter::once(ui_rc))
+                .map(|rc| rc.recv().unwrap()),
+        );
+    }
+}
+
+fn construct_schedule(state_steps: &mut Vec<Step>) -> Schedule {
+    let mut initial_systems = Schedule::builder()
+        .add_system(ui_systems::update_ui_system())
+        .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
+        .build()
+        .into_vec();
+    let mut closing_systems = Schedule::builder()
+        .add_system(ui_systems::end_ui_frame_system())
+        .add_system(input::event_system())
+        .build()
+        .into_vec();
+    let mut all_steps =
+        Vec::with_capacity(initial_systems.len() + closing_systems.len() + state_steps.len());
+    all_steps.append(&mut initial_systems);
+    all_steps.append(state_steps);
+    all_steps.append(&mut closing_systems);
+    Schedule::from(all_steps)
+}
+
+pub struct Engine {
+    world: World,
+    resources: Resources,
+    state_stack: StateStack,
+    schedule: Schedule,
+    text_input_sender: Sender<Text>,
+    mouse_scroll_sender: Sender<MouseScrollDelta>,
+    mouse_motion_sender: Sender<MouseMotion>,
+    modifiers_state_sender: Sender<ModifiersState>,
+    renderer: Renderer,
+    // this ain't beautiful
+    ui_rc: Receiver<CommandBuffer>,
+}
+
+impl Engine {
+    pub async fn new(window: &Window) -> Engine {
+        let size = window.inner_size();
         let world = World::default();
         let mut resources = Resources::default();
+        let renderer = Renderer::init(window, &mut resources).await;
 
         let window_size = WindowSize {
             physical_width: size.width,
@@ -109,12 +155,12 @@ impl Engine {
 
         // Schedule construction
         let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
-
-        resources.insert(ui_pass::UiPass::new(&device, ui_sender));
+        let device = resources.get::<Device>().unwrap();
+        let ui_pass = ui_pass::UiPass::new(&device, ui_sender);
+        drop(device);
+        resources.insert(ui_pass);
         resources.insert(ui_context);
         resources.insert(window_size);
-        resources.insert(device);
-        resources.insert(queue);
         resources.insert(Time {
             current_time: std::time::Instant::now(),
             delta_time: 0.0,
@@ -131,18 +177,14 @@ impl Engine {
         resources.insert(input::EventReader::<ModifiersState>::new(rc));
         resources.insert(KeyboardState::default());
         resources.insert(MouseButtonState::default());
-        let command_receivers = vec![];
         let state_stack = StateStack::default();
 
         Engine {
             world,
             resources,
-            swap_chain,
-            surface,
-            sc_desc,
             schedule: construct_schedule(&mut Vec::new()),
-            command_receivers,
             state_stack,
+            renderer,
             text_input_sender,
             mouse_scroll_sender,
             mouse_motion_sender,
@@ -156,7 +198,7 @@ impl Engine {
             state,
             &mut self.world,
             &mut self.resources,
-            &mut self.command_receivers,
+            &mut self.renderer.command_receivers,
         );
         self.schedule = construct_schedule(&mut state_steps);
     }
@@ -166,36 +208,15 @@ impl Engine {
             states,
             &mut self.world,
             &mut self.resources,
-            &mut self.command_receivers,
+            &mut self.renderer.command_receivers,
         );
         self.schedule = construct_schedule(&mut state_steps);
     }
 
-    pub fn resize(&mut self, window_size: &WindowSize) {
-        self.sc_desc.width = window_size.physical_width;
-        self.sc_desc.height = window_size.physical_height;
-        // Swapchain output needs to be dropped before the swapchain
-        let _ = self.resources.remove::<SwapChainTexture>();
-        let device = self
-            .resources
-            .get::<Device>()
-            .expect("Device to be registerd");
-        self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
-        drop(device);
-        Self::resize_states(
-            self.state_stack.states_mut(),
-            &mut self.resources,
-            window_size,
-        );
-    }
-
-    fn resize_states<'a>(
-        states: impl Iterator<Item = &'a mut Box<dyn State + 'static>>,
-        resources: &mut Resources,
-        window_size: &WindowSize,
-    ) {
-        states.for_each(|state| state.on_resize(resources, window_size));
-    }
+    pub fn resize(&mut self, new_size: &WindowSize) {
+        self.renderer.resize(new_size, &mut self.resources);
+        self.state_stack.resize_states(new_size, &self.resources);
+    } 
 
     pub fn recreate_swap_chain(&mut self) {
         let window_size = self.resources.get::<WindowSize>().unwrap();
@@ -335,9 +356,7 @@ impl Engine {
         time.current_time = now;
         drop(time);
 
-        self.resources.remove::<SwapChainTexture>();
-        self.resources
-            .insert(self.swap_chain.get_current_frame()?.output);
+        self.renderer.begin_frame(&mut self.resources);
         self.schedule.execute(&mut self.world, &mut self.resources);
         if let Some(foreground) = self.state_stack.peek_mut() {
             match foreground.on_foreground_tick() {
@@ -350,21 +369,14 @@ impl Engine {
                         new_state,
                         &mut self.world,
                         &mut self.resources,
-                        &mut self.command_receivers,
+                        &mut self.renderer.command_receivers,
                     );
                     self.schedule = Schedule::from(new_steps);
                 }
                 StateTransition::Noop => {}
             }
         }
-        let queue = self.resources.get_mut::<Queue>().unwrap();
-        queue.submit(
-            self.command_receivers
-                .iter() 
-                .chain(std::iter::once(&self.ui_rc))
-                .map(|rc| rc.recv().unwrap()),
-        );
-
+        self.renderer.submit_frame(&mut self.resources, &self.ui_rc);
         Ok(())
     }
 }

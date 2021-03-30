@@ -47,7 +47,6 @@ impl<T> EventReader<T> {
     }
 }
 
-// Resize event?
 #[system]
 pub fn event(
     #[resource] text_input: &mut EventReader<Text>,

@@ -1,4 +1,5 @@
-use engine::Engine;
+use game_state::GameState;
+use unnamed_rts::{engine::Engine, states::State};
 use futures::executor::block_on;
 #[macro_use]
 extern crate log;
@@ -8,14 +9,9 @@ use winit::{
     window::WindowBuilder,
 };
 
-mod assets;
 mod client_network;
 mod client_systems;
-mod engine;
-mod graphics;
-mod input;
-mod state;
-mod state_stack;
+mod game_state;
 
 fn main() {
     env_logger::builder()
@@ -28,6 +24,7 @@ fn main() {
         .build(&event_loop)
         .expect("Failed to create window");
     let mut app = block_on(Engine::new(&window));
+    app.push_state(Box::new(GameState {}) as Box<dyn State>);
     event_loop.run(move |event, _, control_flow| {
         if !app.event_handler(&event, &window.id()) {
             match event {

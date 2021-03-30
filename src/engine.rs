@@ -1,14 +1,14 @@
-use crate::{client_network::handle_server_update, state::State};
 use crate::{
-    graphics::ui::{ui_context::UiContext, ui_pass, ui_systems},
     input::{self, KeyboardState, MouseButtonState, MouseMotion, Text},
-    state_stack::StateStack,
+    resources::{Time, WindowSize},
+    states::State,
+    states::{StateStack, StateTransition},
+    ui::{ui_context::UiContext, ui_pass, ui_systems},
 };
 use crossbeam_channel::{Receiver, Sender};
 use input::CursorPosition;
-use legion::*;
+use legion::{systems::Step, *};
 use std::time::Instant;
-use unnamed_rts::resources::{Time, WindowSize};
 use wgpu::{
     BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
     PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
@@ -21,6 +21,25 @@ use winit::{
     },
     window::{Window, WindowId},
 };
+
+fn construct_schedule(state_steps: &mut Vec<Step>) -> Schedule {
+    let mut initial_systems = Schedule::builder()
+        .add_system(ui_systems::update_ui_system())
+        .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
+        .build()
+        .into_vec();
+    let mut closing_systems = Schedule::builder()
+        .add_system(ui_systems::end_ui_frame_system())
+        .add_system(input::event_system())
+        .build()
+        .into_vec();
+    let mut all_steps =
+        Vec::with_capacity(initial_systems.len() + closing_systems.len() + state_steps.len());
+    all_steps.append(&mut initial_systems);
+    all_steps.append(state_steps);
+    all_steps.append(&mut closing_systems);
+    Schedule::from(all_steps)
+}
 
 pub struct Engine {
     world: World,
@@ -76,7 +95,7 @@ impl Engine {
         //window.set_cursor_grab(true).unwrap();
         //window.set_cursor_visible(false);
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
-        let mut world = World::default();
+        let world = World::default();
         let mut resources = Resources::default();
 
         let window_size = WindowSize {
@@ -88,19 +107,8 @@ impl Engine {
 
         // Schedule construction
         let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
-        let mut initial_systems = Schedule::builder()
-            .add_system(ui_systems::update_ui_system())
-            .add_system(ui_systems::begin_ui_frame_system(Instant::now()))
-            .build()
-            .into_vec();
-        let mut closing_systems = Schedule::builder()
-            .add_system(ui_systems::end_ui_frame_system(ui_pass::UiPass::new(
-                &device, ui_sender,
-            )))
-            .add_system(input::event_system())
-            .build()
-            .into_vec();
 
+        resources.insert(ui_pass::UiPass::new(&device, ui_sender));
         resources.insert(ui_context);
         resources.insert(window_size);
         resources.insert(device);
@@ -121,23 +129,8 @@ impl Engine {
         resources.insert(input::EventReader::<ModifiersState>::new(rc));
         resources.insert(KeyboardState::default());
         resources.insert(MouseButtonState::default());
-
-        let state = crate::state::GameState {};
-        let mut command_receivers = vec![];
-        let mut state_stack = StateStack::default();
-        let mut state_steps = state_stack.push(
-            Box::new(state),
-            &mut world,
-            &mut resources,
-            &mut command_receivers,
-        );
-        command_receivers.push(ui_rc);
-
-        let mut all_steps =
-            Vec::with_capacity(initial_systems.len() + closing_systems.len() + state_steps.len());
-        all_steps.append(&mut initial_systems);
-        all_steps.append(&mut state_steps);
-        all_steps.append(&mut closing_systems);
+        let command_receivers = vec![ui_rc];
+        let state_stack = StateStack::default();
 
         Engine {
             world,
@@ -145,7 +138,7 @@ impl Engine {
             swap_chain,
             surface,
             sc_desc,
-            schedule: Schedule::from(all_steps),
+            schedule: construct_schedule(&mut Vec::new()),
             command_receivers,
             state_stack,
             text_input_sender,
@@ -153,6 +146,26 @@ impl Engine {
             mouse_motion_sender,
             modifiers_state_sender,
         }
+    }
+
+    pub fn push_state(&mut self, state: Box<dyn State>) {
+        let mut state_steps = self.state_stack.push(
+            state,
+            &mut self.world,
+            &mut self.resources,
+            &mut self.command_receivers,
+        );
+        self.schedule = construct_schedule(&mut state_steps);
+    }
+
+    pub fn push_all_states(&mut self, states: Vec<Box<dyn State>>) {
+        let mut state_steps = self.state_stack.push_all(
+            states,
+            &mut self.world,
+            &mut self.resources,
+            &mut self.command_receivers,
+        );
+        self.schedule = construct_schedule(&mut state_steps);
     }
 
     pub fn resize(&mut self, window_size: &WindowSize) {
@@ -325,11 +338,11 @@ impl Engine {
         self.schedule.execute(&mut self.world, &mut self.resources);
         if let Some(foreground) = self.state_stack.peek_mut() {
             match foreground.on_foreground_tick() {
-                crate::state::StateTransition::Pop => {
+                StateTransition::Pop => {
                     let new_steps = self.state_stack.pop(&mut self.world, &mut self.resources);
                     self.schedule = Schedule::from(new_steps);
                 }
-                crate::state::StateTransition::Push(new_state) => {
+                StateTransition::Push(new_state) => {
                     let new_steps = self.state_stack.push(
                         new_state,
                         &mut self.world,
@@ -338,13 +351,9 @@ impl Engine {
                     );
                     self.schedule = Schedule::from(new_steps);
                 }
-                crate::state::StateTransition::Noop => {}
+                StateTransition::Noop => {}
             }
         }
-
-        handle_server_update(&mut self.world, &mut self.resources);
-
-        // How to handle the different uniforms?
         let queue = self.resources.get_mut::<Queue>().unwrap();
         queue.submit(self.command_receivers.iter().map(|rc| rc.recv().unwrap()));
 

@@ -1,4 +1,4 @@
-use crate::client_systems::DebugMenueSettings;
+use crate::resources::DebugRenderSettings;
 
 use super::{
     camera::Camera,
@@ -11,7 +11,7 @@ use wgpu::include_spirv;
 #[system]
 pub fn draw(
     #[resource] pass: &GridPass,
-    #[resource] debug_settings: &DebugMenueSettings,
+    #[resource] debug_settings: &DebugRenderSettings,
     #[resource] device: &wgpu::Device,
     #[resource] depth_texture: &DepthTexture,
     #[resource] camera: &Camera,

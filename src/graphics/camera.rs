@@ -4,7 +4,7 @@ use crevice::std430::Std430;
 use glam::*;
 use legion::*;
 use once_cell::sync::OnceCell;
-use unnamed_rts::resources::{Time, WindowSize};
+use crate::resources::{Time, WindowSize};
 use winit::event::{MouseButton, VirtualKeyCode};
 
 #[derive(Debug)]

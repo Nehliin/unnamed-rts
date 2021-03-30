@@ -1,21 +1,12 @@
 #![allow(dead_code)]
+use crate::{client_network::{self, add_client_components, connect_to_server}, client_systems::{self}};
 use core::fmt::Debug;
 use crossbeam_channel::Receiver;
 use glam::{Quat, Vec3};
 use image::GenericImageView;
 use legion::*;
 use std::{borrow::Cow, f32::consts::PI};
-use unnamed_rts::{
-    components::Transform,
-    resources::{NetworkSerialization, WindowSize},
-};
-use wgpu::{CommandBuffer, Device, Queue};
-
-use crate::{
-    assets::{self, Assets},
-    client_network::{add_client_components, connect_to_server},
-    client_systems::{self, DebugMenueSettings},
-    graphics::{
+use unnamed_rts::{assets::{self, Assets}, graphics::{
         camera::{self, Camera},
         common::DepthTexture,
         debug_lines_pass::{self, BoundingBoxMap},
@@ -25,29 +16,12 @@ use crate::{
         lights::{self, LightUniformBuffer},
         model_pass, selection_pass,
         texture::TextureContent,
-    },
+    }, resources::DebugRenderSettings, states::{State, StateTransition}};
+use unnamed_rts::{
+    components::Transform,
+    resources::{NetworkSerialization, WindowSize},
 };
-
-pub enum StateTransition {
-    Pop,
-    Push(Box<dyn State>),
-    Noop,
-}
-pub trait State: Debug {
-    fn on_init(
-        &mut self,
-        world: &mut World,
-        resources: &mut Resources,
-        command_receivers: &mut Vec<Receiver<CommandBuffer>>,
-    );
-    // Only called when in foreground
-    fn on_foreground_tick(&mut self) -> StateTransition;
-    fn on_resize(&mut self, _resources: &mut Resources, _new_size: &WindowSize) {}
-    // Todo: clean up command receivers?
-    fn on_destroy(&mut self, world: &mut World, resources: &mut Resources);
-    fn background_schedule(&self) -> Schedule;
-    fn foreground_schedule(&self) -> Schedule;
-}
+use wgpu::{CommandBuffer, Device, Queue};
 
 #[derive(Debug)]
 pub struct GameState {}
@@ -131,7 +105,7 @@ impl State for GameState {
 
         resources.insert(depth_texture);
         resources.insert(height_map);
-        resources.insert(DebugMenueSettings {
+        resources.insert(DebugRenderSettings {
             show_grid: true,
             show_bounding_boxes: true,
         });
@@ -179,6 +153,7 @@ impl State for GameState {
             .add_system(debug_lines_pass::draw_system())
             .add_system(client_systems::draw_debug_ui_system())
             .add_system(client_systems::move_action_system())
+            .add_system(client_network::server_update_system())
             .build()
     }
 }

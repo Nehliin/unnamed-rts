@@ -24,6 +24,14 @@ impl WindowSize {
         (logical_width as u32, logical_height as u32)
     }
 }
+
+
+#[derive(Debug)]
+pub struct DebugRenderSettings {
+    pub show_grid: bool,
+    pub show_bounding_boxes: bool,
+}
+
 #[derive(Debug)]
 pub struct Time {
     pub current_time: std::time::Instant,

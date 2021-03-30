@@ -9,7 +9,7 @@ use glam::Vec2;
 use legion::{self, *};
 use once_cell::sync::OnceCell;
 use std::borrow::Cow;
-use unnamed_rts::components::Transform;
+use crate::components::Transform;
 use wgpu::{
     include_spirv,
     util::{BufferInitDescriptor, DeviceExt},

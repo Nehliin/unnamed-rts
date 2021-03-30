@@ -1,6 +1,6 @@
 use glam::Vec3;
 use laminar::{Config, Packet, SocketEvent};
-use legion::{systems::CommandBuffer, EntityStore, *};
+use legion::{systems::CommandBuffer, world::SubWorld, EntityStore, *};
 use log::{error, info, warn};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::{net::SocketAddr, time::Duration};
@@ -11,7 +11,7 @@ use unnamed_rts::{
     },
 };
 
-use crate::{
+use unnamed_rts::{
     assets::Handle,
     graphics::{gltf::GltfModel, lights::PointLight},
 };
@@ -84,9 +84,16 @@ pub fn add_client_components(
     command_buffer.flush(world, resources);
 }
 
-pub fn handle_server_update(world: &mut World, resources: &mut Resources) {
-    let network = resources.get::<NetworkSocket>().unwrap();
-    let net_serialization = resources.get::<NetworkSerialization>().unwrap();
+// If this ever leads to problems (SubWorld for example not including all the necessary entities) 
+// Then revert to taking entire world and resources as args instead of having this as a system. Then put
+// it on_foreground tick instead
+#[system]
+pub fn server_update(
+    world: &mut SubWorld,
+    #[resource] network: &NetworkSocket,
+    #[resource] net_serialization: &NetworkSerialization,
+    _query: &mut Query<&mut Transform>,
+) {
     for event in network.receiver.try_iter() {
         match event {
             SocketEvent::Packet(packet) => {

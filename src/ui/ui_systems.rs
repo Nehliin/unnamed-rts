@@ -1,9 +1,9 @@
 use std::time::Instant;
 
+use crate::resources::{Time, WindowSize};
 use egui::{pos2, vec2};
 use input::{CursorPosition, Text};
 use legion::*;
-use crate::resources::{Time, WindowSize};
 use wgpu::{CommandEncoderDescriptor, Device, Queue, SwapChainTexture};
 use winit::event::{ModifiersState, MouseButton, MouseScrollDelta};
 

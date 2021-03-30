@@ -1,5 +1,5 @@
-use egui::{paint::ClippedShape, vec2, CtxRef, RawInput};
 use crate::resources::WindowSize;
+use egui::{paint::ClippedShape, vec2, CtxRef, RawInput};
 use winit::event::ModifiersState;
 
 pub struct CursorPosition {

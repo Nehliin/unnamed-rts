@@ -1,6 +1,6 @@
+use futures::executor::block_on;
 use game_state::GameState;
 use unnamed_rts::{engine::Engine, states::State};
-use futures::executor::block_on;
 #[macro_use]
 extern crate log;
 use winit::{

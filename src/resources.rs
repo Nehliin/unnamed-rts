@@ -25,7 +25,6 @@ impl WindowSize {
     }
 }
 
-
 #[derive(Debug)]
 pub struct DebugRenderSettings {
     pub show_grid: bool,

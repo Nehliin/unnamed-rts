@@ -1,6 +1,6 @@
+use crate::resources::WindowSize;
 use bytemuck::{Pod, Zeroable};
 use crossbeam_channel::Sender;
-use crate::resources::WindowSize;
 use wgpu::{
     include_spirv,
     util::{BufferInitDescriptor, DeviceExt},
@@ -42,8 +42,10 @@ pub struct UiPass {
 
 impl UiPass {
     pub fn new(device: &Device, command_sender: Sender<CommandBuffer>) -> UiPass {
-        let vs_module = device.create_shader_module(&include_spirv!("../graphics/shaders/ui.vert.spv"));
-        let fs_module = device.create_shader_module(&include_spirv!("../graphics/shaders/ui.frag.spv"));
+        let vs_module =
+            device.create_shader_module(&include_spirv!("../graphics/shaders/ui.vert.spv"));
+        let fs_module =
+            device.create_shader_module(&include_spirv!("../graphics/shaders/ui.frag.spv"));
 
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("ui_uniform_buffer"),

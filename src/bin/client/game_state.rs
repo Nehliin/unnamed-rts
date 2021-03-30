@@ -1,12 +1,17 @@
 #![allow(dead_code)]
-use crate::{client_network::{self, add_client_components, connect_to_server}, client_systems::{self}};
+use crate::{
+    client_network::{self, add_client_components, connect_to_server},
+    client_systems::{self},
+};
 use core::fmt::Debug;
 use crossbeam_channel::Receiver;
 use glam::{Quat, Vec3};
 use image::GenericImageView;
 use legion::*;
 use std::{borrow::Cow, f32::consts::PI};
-use unnamed_rts::{assets::{self, Assets}, graphics::{
+use unnamed_rts::{
+    assets::{self, Assets},
+    graphics::{
         camera::{self, Camera},
         common::DepthTexture,
         debug_lines_pass::{self, BoundingBoxMap},
@@ -16,7 +21,10 @@ use unnamed_rts::{assets::{self, Assets}, graphics::{
         lights::{self, LightUniformBuffer},
         model_pass, selection_pass,
         texture::TextureContent,
-    }, resources::DebugRenderSettings, states::{State, StateTransition}};
+    },
+    resources::DebugRenderSettings,
+    states::{State, StateTransition},
+};
 use unnamed_rts::{
     components::Transform,
     resources::{NetworkSerialization, WindowSize},
@@ -43,7 +51,7 @@ impl State for GameState {
         command_receivers.push(selectable_rc);
         command_receivers.push(debug_rc);
         command_receivers.push(lines_rc);
-        resources.insert(Assets::<GltfModel>::new());
+        resources.insert(Assets::<GltfModel>::default());
         let device = resources.get::<Device>().expect("Device to be present");
         let grid_pass = grid_pass::GridPass::new(&device, debug_sender);
         let model_pass = model_pass::ModelPass::new(&device, model_sender);

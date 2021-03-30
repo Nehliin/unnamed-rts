@@ -84,7 +84,7 @@ pub fn add_client_components(
     command_buffer.flush(world, resources);
 }
 
-// If this ever leads to problems (SubWorld for example not including all the necessary entities) 
+// If this ever leads to problems (SubWorld for example not including all the necessary entities)
 // Then revert to taking entire world and resources as args instead of having this as a system. Then put
 // it on_foreground tick instead
 #[system]

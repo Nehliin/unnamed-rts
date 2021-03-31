@@ -27,7 +27,7 @@ winit = "0.24"
 futures = "0.3"
 env_logger = "0.8"
 mint = "0.5"
-glam = {version = "0.12", features = ["mint", "serde", "debug-glam-assert", "bytemuck"]}
+glam = {version = "0.13", features = ["mint", "serde", "debug-glam-assert", "bytemuck"]}
 wgpu = "0.7"
 log = "0.4"
 legion = "0.4" 

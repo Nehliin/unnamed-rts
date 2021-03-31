@@ -27,9 +27,9 @@ fn setup_world(world: &mut World, net_serilization: &NetworkSerialization) -> Ve
         (
             EntityType::BasicUnit,
             Transform::new(
-                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::ZERO,
                 Vec3::new(1.0, 1.0, 1.0),
-                Quat::identity(),
+                Quat::IDENTITY,
             ),
             Velocity {
                 velocity: Vec3::splat(0.0),

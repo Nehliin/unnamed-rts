@@ -31,7 +31,7 @@ pub struct Transform {
 // TODO: implement buildar macro or by hand (new builder struct)
 impl Transform {
     pub fn from_position(position: Vec3) -> Self {
-        let rotation = Quat::identity();
+        let rotation = Quat::IDENTITY;
         let scale = Vec3::splat(1.0);
         Transform {
             translation: position,

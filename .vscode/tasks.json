@@ -30,9 +30,21 @@
 			"label": "Run client"
 		},
 		{
+			"type": "cargo",
+			"command": "run",
+			"args": [
+				"--bin",
+				"map-editor"
+			],
+			"problemMatcher": [
+				"$rustc"
+			],
+			"label": "Run map editor"
+		},
+		{
 			"label": "Run RTS debug",
-			"type": "shell",
-			"command": "./run-client-server.sh",
+			"command": "powershell",
+			"args": ["./run-client-server.ps1"],
 			"presentation": {
 				"reveal": "always",
 			},

@@ -81,6 +81,7 @@ pub fn move_action(
     }
 }
 
+// TODO: remove this from client, should only be part of map editor
 #[system]
 pub fn height_map_modification(
     #[resource] camera: &Camera,

@@ -22,7 +22,8 @@ pub struct Renderer {
     swap_chain: SwapChain,
     surface: Surface,
     sc_desc: SwapChainDescriptor,
-    command_receivers: Vec<Receiver<CommandBuffer>>,
+    state_command_receivers: Vec<Receiver<CommandBuffer>>,
+    post_state_command_receivers: Vec<Receiver<CommandBuffer>> 
 }
 
 impl Renderer {
@@ -68,8 +69,13 @@ impl Renderer {
             swap_chain,
             surface,
             sc_desc,
-            command_receivers: Vec::default(),
+            state_command_receivers: Vec::default(),
+            post_state_command_receivers: Vec::default(),
         }
+    }
+
+    pub fn push_post_state_command_receiver(&mut self, receiver: Receiver<CommandBuffer>) {
+        self.post_state_command_receivers.push(receiver);
     }
 
     pub fn resize(&mut self, new_size: &WindowSize, resources: &mut Resources) {
@@ -91,12 +97,12 @@ impl Renderer {
         );
     }
 
-    pub fn submit_frame(&self, resources: &mut Resources, ui_rc: &Receiver<CommandBuffer>) {
+    pub fn submit_frame(&self, resources: &mut Resources) {
         let queue = resources.get_mut::<Queue>().unwrap();
         queue.submit(
-            self.command_receivers
+            self.state_command_receivers
                 .iter()
-                .chain(std::iter::once(ui_rc))
+                .chain(&self.post_state_command_receivers)
                 .filter_map(|rc| rc.try_recv().ok()),
         );
     }
@@ -128,38 +134,39 @@ pub struct Engine {
     schedule: Schedule,
     renderer: Renderer,
     input_handler: InputHandler,
-    // this ain't beautiful
-    ui_rc: Receiver<CommandBuffer>,
 }
 
 impl Engine {
     pub async fn new(window: &Window) -> Engine {
-        let size = window.inner_size();
         let world = World::default();
         let mut resources = Resources::default();
-        let renderer = Renderer::init(window, &mut resources).await;
+        let mut renderer = Renderer::init(window, &mut resources).await;
 
+        let size = window.inner_size();
         let window_size = WindowSize {
             physical_width: size.width,
             physical_height: size.height,
             scale_factor: window.scale_factor() as f32,
         };
-        let ui_context = UiContext::new(&window_size);
 
-        // Schedule construction
+        // Setup ui
+        let ui_context = UiContext::new(&window_size);
         let (ui_sender, ui_rc) = crossbeam_channel::bounded(1);
         let device = resources.get::<Device>().unwrap();
         let ui_pass = ui_pass::UiPass::new(&device, ui_sender);
+        renderer.push_post_state_command_receiver(ui_rc);
         drop(device);
         resources.insert(ui_pass);
         resources.insert(ui_context);
         resources.insert(window_size);
+        
         resources.insert(Time {
             current_time: std::time::Instant::now(),
             delta_time: 0.0,
         });
         // Event readers and input
         let input_handler = InputHandler::init(&mut resources);
+
         let state_stack = StateStack::default();
 
         Engine {
@@ -169,7 +176,6 @@ impl Engine {
             state_stack,
             renderer,
             input_handler,
-            ui_rc,
         }
     }
 
@@ -178,7 +184,7 @@ impl Engine {
             state,
             &mut self.world,
             &mut self.resources,
-            &mut self.renderer.command_receivers,
+            &mut self.renderer.state_command_receivers,
         );
         self.schedule = construct_schedule(&mut state_steps);
     }
@@ -188,7 +194,7 @@ impl Engine {
             states,
             &mut self.world,
             &mut self.resources,
-            &mut self.renderer.command_receivers,
+            &mut self.renderer.state_command_receivers,
         );
         self.schedule = construct_schedule(&mut state_steps);
     }
@@ -275,14 +281,14 @@ impl Engine {
                         new_state,
                         &mut self.world,
                         &mut self.resources,
-                        &mut self.renderer.command_receivers,
+                        &mut self.renderer.state_command_receivers,
                     );
                     self.schedule = Schedule::from(new_steps);
                 }
                 StateTransition::Noop => {}
             }
         }
-        self.renderer.submit_frame(&mut self.resources, &self.ui_rc);
+        self.renderer.submit_frame(&mut self.resources);
         Ok(())
     }
 }

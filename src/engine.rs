@@ -23,7 +23,7 @@ pub struct Renderer {
     surface: Surface,
     sc_desc: SwapChainDescriptor,
     state_command_receivers: Vec<Receiver<CommandBuffer>>,
-    post_state_command_receivers: Vec<Receiver<CommandBuffer>> 
+    post_state_command_receivers: Vec<Receiver<CommandBuffer>>,
 }
 
 impl Renderer {
@@ -159,7 +159,7 @@ impl Engine {
         resources.insert(ui_pass);
         resources.insert(ui_context);
         resources.insert(window_size);
-        
+
         resources.insert(Time {
             current_time: std::time::Instant::now(),
             delta_time: 0.0,

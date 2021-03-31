@@ -1,7 +1,135 @@
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{Receiver, Sender};
 use legion::*;
 use std::collections::HashSet;
-use winit::event::{ModifiersState, MouseButton, MouseScrollDelta, *};
+use winit::{
+    dpi::PhysicalPosition,
+    event::{ModifiersState, MouseButton, MouseScrollDelta, *},
+};
+
+pub struct InputHandler {
+    text_input_sender: Sender<Text>,
+    mouse_scroll_sender: Sender<MouseScrollDelta>,
+    mouse_motion_sender: Sender<MouseMotion>,
+    modifiers_state_sender: Sender<ModifiersState>,
+}
+
+impl InputHandler {
+    pub fn init(resources: &mut Resources) -> InputHandler {
+        let (text_input_sender, text_rc) = crossbeam_channel::unbounded();
+        let (mouse_scroll_sender, mouse_scroll_rc) = crossbeam_channel::unbounded();
+        let (mouse_motion_sender, mouse_motion_rc) = crossbeam_channel::unbounded();
+        let (modifiers_state_sender, modifiers_rc) = crossbeam_channel::unbounded();
+        resources.insert(EventReader::<Text>::new(text_rc));
+        resources.insert(EventReader::<MouseScrollDelta>::new(mouse_scroll_rc));
+        resources.insert(EventReader::<MouseMotion>::new(mouse_motion_rc));
+        resources.insert(EventReader::<ModifiersState>::new(modifiers_rc));
+        resources.insert(CursorPosition::default());
+        resources.insert(KeyboardState::default());
+        resources.insert(MouseButtonState::default());
+
+        InputHandler {
+            text_input_sender,
+            mouse_motion_sender,
+            modifiers_state_sender,
+            mouse_scroll_sender,
+        }
+    }
+
+    pub fn handle_cursor_moved(
+        &self,
+        position: &PhysicalPosition<f64>,
+        resources: &Resources,
+    ) -> bool {
+        let mut cursor_position = resources.get_mut::<CursorPosition>().unwrap();
+        cursor_position.x = position.x;
+        cursor_position.y = position.y;
+        true
+    }
+    pub fn handle_modifiers_changed(&self, modifier_state: ModifiersState) -> bool {
+        let _ = self.modifiers_state_sender.send(modifier_state);
+        true
+    }
+
+    pub fn handle_recived_char(&self, codepoint: char) -> bool {
+        let _ = self.text_input_sender.send(Text { codepoint });
+        true
+    }
+
+    pub fn handle_device_event(&self, event: &DeviceEvent, resources: &Resources) -> bool {
+        match *event {
+            DeviceEvent::MouseMotion { delta } => {
+                let _ = self.mouse_motion_sender.send(MouseMotion {
+                    delta_x: delta.0,
+                    delta_y: delta.1,
+                });
+                true
+            }
+            DeviceEvent::MouseWheel { delta } => {
+                let _ = self.mouse_scroll_sender.send(delta);
+                true
+            }
+            DeviceEvent::Button { button, state } => {
+                let mut mouse_button_state = resources.get_mut::<MouseButtonState>().unwrap();
+                if state == ElementState::Pressed {
+                    match button {
+                        1 => {
+                            mouse_button_state.set_pressed(&MouseButton::Left);
+                            true
+                        }
+                        2 => {
+                            mouse_button_state.set_pressed(&MouseButton::Middle);
+                            true
+                        }
+                        3 => {
+                            mouse_button_state.set_pressed(&MouseButton::Right);
+                            true
+                        }
+                        _ => false,
+                    }
+                } else {
+                    match button {
+                        1 => {
+                            mouse_button_state.set_released(&MouseButton::Left);
+                            true
+                        }
+                        2 => {
+                            mouse_button_state.set_released(&MouseButton::Middle);
+                            true
+                        }
+                        3 => {
+                            mouse_button_state.set_released(&MouseButton::Right);
+                            true
+                        }
+                        _ => false,
+                    }
+                }
+            }
+            DeviceEvent::Key(KeyboardInput {
+                state,
+                virtual_keycode,
+                ..
+            }) => {
+                let mut keyboard_state = resources.get_mut::<KeyboardState>().unwrap();
+                if state == ElementState::Pressed {
+                    if let Some(key) = virtual_keycode {
+                        keyboard_state.set_pressed(key);
+                    } else {
+                        warn!("Couldn't read keyboard input!");
+                    }
+                    true
+                } else {
+                    if let Some(key) = virtual_keycode {
+                        keyboard_state.set_released(key);
+                    } else {
+                        warn!("Couldn't read keyboard input!");
+                    }
+                    true
+                }
+            }
+            _ => false,
+        }
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct Text {

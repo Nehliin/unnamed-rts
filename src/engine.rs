@@ -1,12 +1,11 @@
 use crate::{
-    input::{self, KeyboardState, MouseButtonState, MouseMotion, Text},
+    input::{self, InputHandler},
     resources::{Time, WindowSize},
     states::State,
     states::{StateStack, StateTransition},
     ui::{ui_context::UiContext, ui_pass, ui_systems},
 };
-use crossbeam_channel::{Receiver, Sender};
-use input::CursorPosition;
+use crossbeam_channel::Receiver;
 use legion::{systems::Step, *};
 use std::time::Instant;
 use wgpu::{
@@ -15,10 +14,7 @@ use wgpu::{
     TextureFormat, TextureUsage,
 };
 use winit::{
-    event::{
-        DeviceEvent, ElementState, Event, KeyboardInput, ModifiersState, MouseButton,
-        MouseScrollDelta,
-    },
+    event::Event,
     window::{Window, WindowId},
 };
 
@@ -101,7 +97,7 @@ impl Renderer {
             self.command_receivers
                 .iter()
                 .chain(std::iter::once(ui_rc))
-                .map(|rc| rc.recv().unwrap()),
+                .filter_map(|rc| rc.try_recv().ok()),
         );
     }
 }
@@ -130,11 +126,8 @@ pub struct Engine {
     resources: Resources,
     state_stack: StateStack,
     schedule: Schedule,
-    text_input_sender: Sender<Text>,
-    mouse_scroll_sender: Sender<MouseScrollDelta>,
-    mouse_motion_sender: Sender<MouseMotion>,
-    modifiers_state_sender: Sender<ModifiersState>,
     renderer: Renderer,
+    input_handler: InputHandler,
     // this ain't beautiful
     ui_rc: Receiver<CommandBuffer>,
 }
@@ -166,17 +159,7 @@ impl Engine {
             delta_time: 0.0,
         });
         // Event readers and input
-        let (text_input_sender, rc) = crossbeam_channel::unbounded();
-        resources.insert(input::EventReader::<Text>::new(rc));
-        resources.insert(input::CursorPosition::default());
-        let (mouse_scroll_sender, rc) = crossbeam_channel::unbounded();
-        resources.insert(input::EventReader::<MouseScrollDelta>::new(rc));
-        let (mouse_motion_sender, rc) = crossbeam_channel::unbounded();
-        resources.insert(input::EventReader::<MouseMotion>::new(rc));
-        let (modifiers_state_sender, rc) = crossbeam_channel::unbounded();
-        resources.insert(input::EventReader::<ModifiersState>::new(rc));
-        resources.insert(KeyboardState::default());
-        resources.insert(MouseButtonState::default());
+        let input_handler = InputHandler::init(&mut resources);
         let state_stack = StateStack::default();
 
         Engine {
@@ -185,10 +168,7 @@ impl Engine {
             schedule: construct_schedule(&mut Vec::new()),
             state_stack,
             renderer,
-            text_input_sender,
-            mouse_scroll_sender,
-            mouse_motion_sender,
-            modifiers_state_sender,
+            input_handler,
             ui_rc,
         }
     }
@@ -216,7 +196,7 @@ impl Engine {
     pub fn resize(&mut self, new_size: &WindowSize) {
         self.renderer.resize(new_size, &mut self.resources);
         self.state_stack.resize_states(new_size, &self.resources);
-    } 
+    }
 
     pub fn recreate_swap_chain(&mut self) {
         let window_size = self.resources.get::<WindowSize>().unwrap();
@@ -254,96 +234,22 @@ impl Engine {
                     true
                 }
                 winit::event::WindowEvent::ModifiersChanged(modifier_state) => {
-                    let _ = self.modifiers_state_sender.send(*modifier_state);
-                    true
+                    self.input_handler.handle_modifiers_changed(*modifier_state)
                 }
-                winit::event::WindowEvent::CursorMoved { position, .. } => {
-                    let mut cursor_position = self.resources.get_mut::<CursorPosition>().unwrap();
-                    cursor_position.x = position.x;
-                    cursor_position.y = position.y;
-                    true
-                }
+
+                winit::event::WindowEvent::CursorMoved { position, .. } => self
+                    .input_handler
+                    .handle_cursor_moved(position, &self.resources),
                 winit::event::WindowEvent::ReceivedCharacter(char) => {
-                    let _ = self.text_input_sender.send(Text { codepoint: *char });
-                    true
+                    self.input_handler.handle_recived_char(*char)
                 }
                 //todo?
                 //winit::event::WindowEvent::CursorLeft { device_id } => {}
                 _ => false,
             },
-            Event::DeviceEvent { event, .. } => match *event {
-                DeviceEvent::MouseMotion { delta } => {
-                    let _ = self.mouse_motion_sender.send(MouseMotion {
-                        delta_x: delta.0,
-                        delta_y: delta.1,
-                    });
-                    true
-                }
-                DeviceEvent::MouseWheel { delta } => {
-                    let _ = self.mouse_scroll_sender.send(delta);
-                    true
-                }
-                DeviceEvent::Button { button, state } => {
-                    let mut mouse_button_state =
-                        self.resources.get_mut::<MouseButtonState>().unwrap();
-                    if state == ElementState::Pressed {
-                        match button {
-                            1 => {
-                                mouse_button_state.set_pressed(&MouseButton::Left);
-                                true
-                            }
-                            2 => {
-                                mouse_button_state.set_pressed(&MouseButton::Middle);
-                                true
-                            }
-                            3 => {
-                                mouse_button_state.set_pressed(&MouseButton::Right);
-                                true
-                            }
-                            _ => false,
-                        }
-                    } else {
-                        match button {
-                            1 => {
-                                mouse_button_state.set_released(&MouseButton::Left);
-                                true
-                            }
-                            2 => {
-                                mouse_button_state.set_released(&MouseButton::Middle);
-                                true
-                            }
-                            3 => {
-                                mouse_button_state.set_released(&MouseButton::Right);
-                                true
-                            }
-                            _ => false,
-                        }
-                    }
-                }
-                DeviceEvent::Key(KeyboardInput {
-                    state,
-                    virtual_keycode,
-                    ..
-                }) => {
-                    let mut keyboard_state = self.resources.get_mut::<KeyboardState>().unwrap();
-                    if state == ElementState::Pressed {
-                        if let Some(key) = virtual_keycode {
-                            keyboard_state.set_pressed(key);
-                        } else {
-                            warn!("Couldn't read keyboard input!");
-                        }
-                        true
-                    } else {
-                        if let Some(key) = virtual_keycode {
-                            keyboard_state.set_released(key);
-                        } else {
-                            warn!("Couldn't read keyboard input!");
-                        }
-                        true
-                    }
-                }
-                _ => false,
-            },
+            Event::DeviceEvent { event, .. } => self
+                .input_handler
+                .handle_device_event(event, &self.resources),
             _ => false,
         }
     }

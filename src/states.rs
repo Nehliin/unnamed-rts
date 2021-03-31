@@ -90,7 +90,10 @@ impl StateStack {
     }
 
     pub fn resize_states(&mut self, new_size: &WindowSize, resources: &Resources) {
-        self.stack.iter_mut().rev().for_each(|state| state.on_resize(resources, new_size));
+        self.stack
+            .iter_mut()
+            .rev()
+            .for_each(|state| state.on_resize(resources, new_size));
     }
 
     fn calc_schedule_steps(&self) -> Vec<Step> {

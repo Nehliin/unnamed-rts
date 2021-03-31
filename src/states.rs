@@ -1,9 +1,30 @@
 #![allow(dead_code)]
-use crate::state::State;
+use crate::resources::WindowSize;
+use core::fmt::Debug;
 use crossbeam_channel::Receiver;
 use legion::{systems::Step, *};
 use wgpu::CommandBuffer;
 
+pub enum StateTransition {
+    Pop,
+    Push(Box<dyn State>),
+    Noop,
+}
+pub trait State: Debug {
+    fn on_init(
+        &mut self,
+        world: &mut World,
+        resources: &mut Resources,
+        command_receivers: &mut Vec<Receiver<CommandBuffer>>,
+    );
+    // Only called when in foreground
+    fn on_foreground_tick(&mut self) -> StateTransition;
+    fn on_resize(&mut self, _resources: &Resources, _new_size: &WindowSize) {}
+    // Todo: clean up command receivers?
+    fn on_destroy(&mut self, world: &mut World, resources: &mut Resources);
+    fn background_schedule(&self) -> Schedule;
+    fn foreground_schedule(&self) -> Schedule;
+}
 // Re add type id here if needed later on for downcasting
 // or debug logging
 #[derive(Debug, Default)]
@@ -68,6 +89,13 @@ impl StateStack {
         self.stack.iter_mut()
     }
 
+    pub fn resize_states(&mut self, new_size: &WindowSize, resources: &Resources) {
+        self.stack
+            .iter_mut()
+            .rev()
+            .for_each(|state| state.on_resize(resources, new_size));
+    }
+
     fn calc_schedule_steps(&self) -> Vec<Step> {
         if self.stack.is_empty() {
             return Vec::new();
@@ -126,8 +154,8 @@ mod tests {
                         res.on_init += 1;
                     }
 
-                    fn on_foreground_tick(&mut self) -> crate::state::StateTransition {
-                        crate::state::StateTransition::Noop
+                    fn on_foreground_tick(&mut self) -> StateTransition {
+                        StateTransition::Noop
                     }
 
                     fn on_destroy(&mut self, _world: &mut World, resources: &mut Resources) {

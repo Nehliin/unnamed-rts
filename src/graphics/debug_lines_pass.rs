@@ -5,15 +5,15 @@ use super::{
     gltf::InstanceData,
     vertex_buffers::{ImmutableVertexData, VertexBuffer, VertexBufferData},
 };
+use crate::components::Transform;
 use crate::{
     assets::{Assets, Handle},
-    client_systems::DebugMenueSettings,
+    resources::DebugRenderSettings,
 };
 use crossbeam_channel::Sender;
 use fxhash::FxHashMap;
 use glam::Vec3;
 use legion::*;
-use unnamed_rts::components::Transform;
 use wgpu::{include_spirv, SwapChainTexture};
 use world::SubWorld;
 
@@ -57,7 +57,7 @@ pub fn draw(
     #[resource] depth_texture: &DepthTexture,
     #[resource] asset_storage: &Assets<GltfModel>,
     #[resource] current_frame: &SwapChainTexture,
-    #[resource] debug_settings: &DebugMenueSettings,
+    #[resource] debug_settings: &DebugRenderSettings,
     #[resource] camera: &Camera,
     query: &mut Query<(&Transform, &Handle<GltfModel>)>,
 ) {

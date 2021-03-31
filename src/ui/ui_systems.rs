@@ -1,9 +1,9 @@
 use std::time::Instant;
 
+use crate::resources::{Time, WindowSize};
 use egui::{pos2, vec2};
 use input::{CursorPosition, Text};
 use legion::*;
-use unnamed_rts::resources::{Time, WindowSize};
 use wgpu::{CommandEncoderDescriptor, Device, Queue, SwapChainTexture};
 use winit::event::{ModifiersState, MouseButton, MouseScrollDelta};
 
@@ -115,7 +115,7 @@ pub fn begin_ui_frame(
 // However, better to map texture id = already loaded texture (via Aseets<>) and handle it from there
 #[system]
 pub fn end_ui_frame(
-    #[state] pass: &mut UiPass,
+    #[resource] pass: &mut UiPass,
     #[resource] ui_context: &mut UiContext,
     #[resource] device: &Device,
     #[resource] queue: &Queue,

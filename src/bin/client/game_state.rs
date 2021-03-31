@@ -1,4 +1,8 @@
 #![allow(dead_code)]
+use crate::{
+    client_network::{self, add_client_components, connect_to_server},
+    client_systems::{self},
+};
 use core::fmt::Debug;
 use crossbeam_channel::Receiver;
 use glam::{Quat, Vec3};
@@ -6,15 +10,7 @@ use image::GenericImageView;
 use legion::*;
 use std::{borrow::Cow, f32::consts::PI};
 use unnamed_rts::{
-    components::Transform,
-    resources::{NetworkSerialization, WindowSize},
-};
-use wgpu::{CommandBuffer, Device, Queue};
-
-use crate::{
     assets::{self, Assets},
-    client_network::{add_client_components, connect_to_server},
-    client_systems::{self, DebugMenueSettings},
     graphics::{
         camera::{self, Camera},
         common::DepthTexture,
@@ -26,28 +22,14 @@ use crate::{
         model_pass, selection_pass,
         texture::TextureContent,
     },
+    resources::DebugRenderSettings,
+    states::{State, StateTransition},
 };
-
-pub enum StateTransition {
-    Pop,
-    Push(Box<dyn State>),
-    Noop,
-}
-pub trait State: Debug {
-    fn on_init(
-        &mut self,
-        world: &mut World,
-        resources: &mut Resources,
-        command_receivers: &mut Vec<Receiver<CommandBuffer>>,
-    );
-    // Only called when in foreground
-    fn on_foreground_tick(&mut self) -> StateTransition;
-    fn on_resize(&mut self, _resources: &mut Resources, _new_size: &WindowSize) {}
-    // Todo: clean up command receivers?
-    fn on_destroy(&mut self, world: &mut World, resources: &mut Resources);
-    fn background_schedule(&self) -> Schedule;
-    fn foreground_schedule(&self) -> Schedule;
-}
+use unnamed_rts::{
+    components::Transform,
+    resources::{NetworkSerialization, WindowSize},
+};
+use wgpu::{CommandBuffer, Device, Queue};
 
 #[derive(Debug)]
 pub struct GameState {}
@@ -69,7 +51,7 @@ impl State for GameState {
         command_receivers.push(selectable_rc);
         command_receivers.push(debug_rc);
         command_receivers.push(lines_rc);
-        resources.insert(Assets::<GltfModel>::new());
+        resources.insert(Assets::<GltfModel>::default());
         let device = resources.get::<Device>().expect("Device to be present");
         let grid_pass = grid_pass::GridPass::new(&device, debug_sender);
         let model_pass = model_pass::ModelPass::new(&device, model_sender);
@@ -131,7 +113,7 @@ impl State for GameState {
 
         resources.insert(depth_texture);
         resources.insert(height_map);
-        resources.insert(DebugMenueSettings {
+        resources.insert(DebugRenderSettings {
             show_grid: true,
             show_bounding_boxes: true,
         });
@@ -143,7 +125,7 @@ impl State for GameState {
         StateTransition::Noop
     }
 
-    fn on_resize(&mut self, resources: &mut Resources, window_size: &WindowSize) {
+    fn on_resize(&mut self, resources: &Resources, window_size: &WindowSize) {
         let mut camera = resources.get_mut::<Camera>().unwrap();
         let device = resources.get::<Device>().unwrap();
         camera.update_aspect_ratio(window_size.physical_width, window_size.physical_height);
@@ -179,6 +161,7 @@ impl State for GameState {
             .add_system(debug_lines_pass::draw_system())
             .add_system(client_systems::draw_debug_ui_system())
             .add_system(client_systems::move_action_system())
+            .add_system(client_network::server_update_system())
             .build()
     }
 }

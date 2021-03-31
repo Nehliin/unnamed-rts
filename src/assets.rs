@@ -51,19 +51,22 @@ pub trait AssetLoader: Sized {
     fn extensions() -> &'static [&'static str];
 }
 
+#[derive(Debug)]
 pub struct Assets<T: AssetLoader> {
     storage: FxHashMap<Handle<T>, T>,
     gpu_load_queue: VecDeque<(Handle<T>, PathBuf)>,
 }
 
-impl<T: AssetLoader> Assets<T> {
-    pub fn new() -> Assets<T> {
+impl<T: AssetLoader> Default for Assets<T> {
+    fn default() -> Self {
         Assets {
             storage: FxHashMap::default(),
             gpu_load_queue: VecDeque::default(),
         }
     }
+}
 
+impl<T: AssetLoader> Assets<T> {
     pub fn get(&self, handle: &Handle<T>) -> Option<&T> {
         self.storage.get(handle)
     }

@@ -1,29 +1,24 @@
 use std::net::SocketAddr;
 
-use crate::{
-    assets::{Assets, Handle},
-    graphics::{
-        camera::Camera, gltf::GltfModel, heightmap_pass::HeightMap, ui::ui_context::UiContext,
-    },
-    input::{CursorPosition, MouseButtonState},
-};
 use glam::*;
 use legion::{world::SubWorld, *};
 use rayon::prelude::*;
 use unnamed_rts::components::*;
 use unnamed_rts::resources::*;
+use unnamed_rts::{
+    assets::{Assets, Handle},
+    graphics::{camera::Camera, gltf::GltfModel, heightmap_pass::HeightMap},
+    input::{CursorPosition, MouseButtonState},
+    ui::ui_context::UiContext,
+};
 use unnamed_rts::{components::Selectable, resources::Time};
 use winit::event::MouseButton;
-pub struct DebugMenueSettings {
-    pub show_grid: bool,
-    pub show_bounding_boxes: bool,
-}
 
 #[system]
 pub fn draw_debug_ui(
     world: &SubWorld,
     #[resource] ui_context: &UiContext,
-    #[resource] debug_settings: &mut DebugMenueSettings,
+    #[resource] debug_settings: &mut DebugRenderSettings,
     #[resource] time: &Time,
     query: &mut Query<&Selectable>,
 ) {

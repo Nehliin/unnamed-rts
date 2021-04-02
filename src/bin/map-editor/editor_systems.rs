@@ -15,6 +15,7 @@ pub struct EditorSettings {
     pub edit_heightmap: bool,
     pub hm_tool_radius: f32,
     pub hm_tool_strenght: f32,
+    pub hm_tool_invert: bool,
     pub map_size: u32,
 }
 
@@ -24,6 +25,7 @@ impl Default for EditorSettings {
             edit_heightmap: true,
             hm_tool_radius: 10.0,
             hm_tool_strenght: 10.0,
+            hm_tool_invert: false,
             map_size: 256,
         }
     }
@@ -47,6 +49,7 @@ pub fn editor_ui(
                         egui::Slider::f32(&mut editor_settings.hm_tool_strenght, 1.0..=10.0)
                             .text("Strenght"),
                     );
+                    ui.checkbox(&mut editor_settings.hm_tool_invert, "Invert");
                 });
             }
         });
@@ -81,32 +84,34 @@ pub fn height_map_modification(
     #[resource] height_map: &mut HeightMap,
     #[resource] editor_settings: &EditorSettings,
 ) {
-    if editor_settings.edit_heightmap && mouse_button_state.is_pressed(&MouseButton::Left) {
-        let ray = camera.raycast(mouse_pos, window_size);
-        // check intersection with the heightmap
-        let normal = Vec3A::new(0.0, 1.0, 0.0);
-        let denominator = normal.dot(ray.direction);
-        if denominator.abs() > 0.0001 {
-            // it isn't parallel to the plane
-            // (camera can still theoretically be within the height_map but don't care about that)
-            let height_map_pos: Vec3A = height_map.get_transform().translation.into();
-            let t = (height_map_pos - ray.origin).dot(normal) / denominator;
-            if t >= 0.0 {
-                // there was an intersection
-                let target = (t * ray.direction) + ray.origin;
-                let local_coords = height_map.get_transform().get_model_matrix().inverse()
-                    * Vec4::new(target.x, target.y, target.z, 1.0);
-                let radius = editor_settings.hm_tool_radius;
-                let strenght = editor_settings.hm_tool_strenght;
-                let center = local_coords.xy();
-                if (time.current_time - modification_state.last_update).as_secs_f32()
-                    <= MAX_UPDATE_FREQ
-                {
-                    return;
-                }
-                modification_state.last_update = time.current_time;
-                // assuming row order
-                // TODO: Not very performance frendly   
+    if !editor_settings.edit_heightmap {
+        return;
+    }
+    let ray = camera.raycast(mouse_pos, window_size);
+    // check intersection with the heightmap
+    let normal = Vec3A::new(0.0, 1.0, 0.0);
+    let denominator = normal.dot(ray.direction);
+    if denominator.abs() > 0.0001 {
+        // it isn't parallel to the plane
+        // (camera can still theoretically be within the height_map but don't care about that)
+        let height_map_pos: Vec3A = height_map.get_transform().translation.into();
+        let t = (height_map_pos - ray.origin).dot(normal) / denominator;
+        if t >= 0.0 {
+            // there was an intersection
+            let target = (t * ray.direction) + ray.origin;
+            let local_coords = height_map.get_transform().get_model_matrix().inverse()
+                * Vec4::new(target.x, target.y, target.z, 1.0);
+            let radius = editor_settings.hm_tool_radius;
+            let strenght = editor_settings.hm_tool_strenght;
+            let center = local_coords.xy();
+            if (time.current_time - modification_state.last_update).as_secs_f32() <= MAX_UPDATE_FREQ
+            {
+                return;
+            }
+            modification_state.last_update = time.current_time;
+            // assuming row order
+            // TODO: Not very performance frendly
+            if mouse_button_state.is_pressed(&MouseButton::Left) {
                 height_map
                     .get_buffer_mut()
                     .par_chunks_exact_mut(editor_settings.map_size as usize)
@@ -116,10 +121,17 @@ pub fn height_map_modification(
                             let distance = Vec2::new(x as f32, y as f32).distance(center);
                             if distance < radius {
                                 let raise = strenght * (radius - distance) / radius;
-                                *byte = std::cmp::min(
-                                    255,
-                                    (*byte as f32 + raise as f32).round() as u32,
+                                if editor_settings.hm_tool_invert {
+                                    *byte = std::cmp::max(
+                                    0,
+                                    (*byte as f32 - raise as f32).round() as u32,
                                 ) as u8;
+                                } else {
+                                    *byte = std::cmp::min(
+                                        255,
+                                        (*byte as f32 + raise as f32).round() as u32,
+                                    ) as u8;
+                                };
                             }
                         })
                     });

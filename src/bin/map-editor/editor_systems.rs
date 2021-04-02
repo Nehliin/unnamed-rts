@@ -1,8 +1,54 @@
 use glam::{Vec2, Vec3A, Vec4, Vec4Swizzles};
 use legion::*;
 use rayon::prelude::*;
-use unnamed_rts::{graphics::{camera::Camera, heightmap_pass::HeightMap}, input::{CursorPosition, MouseButtonState}, resources::{Time, WindowSize}};
+use unnamed_rts::{
+    graphics::{camera::Camera, heightmap_pass::HeightMap},
+    input::{CursorPosition, MouseButtonState},
+    resources::{Time, WindowSize},
+    ui::ui_context::UiContext,
+};
 use winit::event::MouseButton;
+#[derive(Default, Debug)]
+pub struct EditorSettings {
+    pub edit_heightmap: bool,
+    pub hm_tool_radius: f32,
+    pub hm_tool_strenght: f32,
+    pub map_size: u32,
+}
+
+#[system]
+pub fn editor_ui(
+    #[resource] ui_context: &UiContext,
+    #[resource] editor_settings: &mut EditorSettings,
+) {
+    egui::SidePanel::left("editor_side_panel", 120.0).show(&ui_context.context, |ui| {
+        ui.vertical_centered(|ui| {
+            ui.checkbox(&mut editor_settings.edit_heightmap, "Edit heightmap");
+            if editor_settings.edit_heightmap {
+                ui.collapsing("Heightmap settings", |ui| {
+                    ui.add(
+                        egui::Slider::f32(&mut editor_settings.hm_tool_radius, 1.0..=100.0)
+                            .text("Radius"),
+                    );
+                    ui.add(
+                        egui::Slider::f32(&mut editor_settings.hm_tool_strenght, 100.0..=500.0)
+                            .text("Strenght"),
+                    );
+                });
+            }
+        });
+    });
+    egui::TopPanel::top("editor_top_panel").show(&ui_context.context, |ui| {
+        ui.horizontal(|ui| {
+            ui.columns(3, |columns| {
+                columns[1].label(format!(
+                    "Map editor: <name>, size: {}",
+                    editor_settings.map_size
+                ));
+            })
+        });
+    });
+}
 
 #[system]
 pub fn height_map_modification(
@@ -12,8 +58,9 @@ pub fn height_map_modification(
     #[resource] window_size: &WindowSize,
     #[resource] time: &Time,
     #[resource] height_map: &mut HeightMap,
+    #[resource] editor_settings: &EditorSettings,
 ) {
-    if mouse_button_state.is_pressed(&MouseButton::Left) {
+    if editor_settings.edit_heightmap && mouse_button_state.is_pressed(&MouseButton::Left) {
         let ray = camera.raycast(mouse_pos, window_size);
         // check intersection with the heightmap
         let normal = Vec3A::new(0.0, 1.0, 0.0);
@@ -28,14 +75,14 @@ pub fn height_map_modification(
                 let target = (t * ray.direction) + ray.origin;
                 let local_coords = height_map.get_transform().get_model_matrix().inverse()
                     * Vec4::new(target.x, target.y, target.z, 1.0);
-                let radius = 20.0;
-                let strenght = 350.0_f32;
+                let radius = editor_settings.hm_tool_radius;
+                let strenght = editor_settings.hm_tool_strenght;
                 let center = local_coords.xy();
                 // assuming row order
                 // TODO: Not very performance frendly
                 height_map
                     .get_buffer_mut()
-                    .par_chunks_exact_mut(256)
+                    .par_chunks_exact_mut(editor_settings.map_size as usize)
                     .enumerate()
                     .for_each(|(y, chunk)| {
                         chunk.iter_mut().enumerate().for_each(|(x, byte)| {

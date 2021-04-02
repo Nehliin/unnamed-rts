@@ -2,7 +2,10 @@ use std::f32::consts::PI;
 
 use glam::{Quat, Vec3};
 use legion::*;
-use unnamed_rts::{assets::{self, Assets}, components::Transform, graphics::{
+use unnamed_rts::{
+    assets::{self, Assets},
+    components::Transform,
+    graphics::{
         camera::{self, Camera},
         common::DepthTexture,
         debug_lines_pass::{self, BoundingBoxMap},
@@ -11,22 +14,15 @@ use unnamed_rts::{assets::{self, Assets}, components::Transform, graphics::{
         heightmap_pass::{self, HeightMap},
         lights::{self, LightUniformBuffer},
         model_pass, selection_pass,
-    }, resources::{DebugRenderSettings, Time, WindowSize}, states::{State, StateTransition}, ui::ui_context::UiContext};
+    },
+    resources::{DebugRenderSettings,  WindowSize},
+    states::{State, StateTransition},
+};
 use wgpu::{Device, Queue};
 
-use crate::editor_systems;
+use crate::editor_systems::{self, EditorSettings};
 
-#[system]
-pub fn draw_debug_ui(
-    #[resource] ui_context: &UiContext,
-    #[resource] time: &Time,
-) {
-    egui::SidePanel::left("Debug menue", 80.0).show(&ui_context.context, |ui| {
-        let label = egui::Label::new(format!("FPS: {:.0}", 1.0 / time.delta_time))
-            .text_color(egui::Color32::WHITE);
-        ui.add(label);
-    });
-}
+
 #[derive(Debug)]
 pub struct EditState {}
 
@@ -71,7 +67,8 @@ impl State for EditState {
         let mut transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
         transform.scale = Vec3::splat(0.1);
         transform.rotation = Quat::from_rotation_x(PI / 2.0);
-        let height_map = HeightMap::new(&device, &queue, 256, transform);
+        let map_size =  256;
+        let height_map = HeightMap::new(&device, &queue, map_size, transform);
 
         // render resources
         let depth_texture = DepthTexture::new(&device, size.physical_width, size.physical_height);
@@ -90,6 +87,11 @@ impl State for EditState {
             show_grid: true,
             show_bounding_boxes: true,
         });
+        let editor_settings = EditorSettings {
+            map_size,
+            ..Default::default()
+        };
+        resources.insert(editor_settings);
         resources.insert(depth_texture);
         resources.insert(height_map);
         resources.insert(light_uniform);
@@ -133,7 +135,7 @@ impl State for EditState {
             .add_system(grid_pass::draw_system())
             .add_system(debug_lines_pass::update_bounding_boxes_system())
             .add_system(debug_lines_pass::draw_system())
-            .add_system(draw_debug_ui_system())
+            .add_system(editor_systems::editor_ui_system())
             .build()
     }
 }

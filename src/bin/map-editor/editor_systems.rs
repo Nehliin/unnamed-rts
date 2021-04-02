@@ -113,7 +113,7 @@ pub fn height_map_modification(
             // TODO: Not very performance frendly
             if mouse_button_state.is_pressed(&MouseButton::Left) {
                 height_map
-                    .get_buffer_mut()
+                    .get_displacement_buffer_mut()
                     .par_chunks_exact_mut(editor_settings.map_size as usize)
                     .enumerate()
                     .for_each(|(y, chunk)| {
@@ -136,6 +136,30 @@ pub fn height_map_modification(
                         })
                     });
             }
+            // Merge with the above step?
+            height_map
+                    .get_color_buffer_mut()
+                    .par_chunks_exact_mut(editor_settings.map_size as usize)
+                    .enumerate()
+                    .for_each(|(y, chunk)| {
+                        chunk.iter_mut().enumerate().for_each(|(x, byte)| {
+                            let distance = Vec2::new(x as f32, y as f32).distance(center);
+                            if distance < radius {
+                                let raise = strenght * (radius - distance) / radius;
+                                if editor_settings.hm_tool_invert {
+                                    *byte = std::cmp::max(
+                                    0,
+                                    (*byte as f32 - raise as f32).round() as u32,
+                                ) as u8;
+                                } else {
+                                    *byte = std::cmp::min(
+                                        255,
+                                        (*byte as f32 + raise as f32).round() as u32,
+                                    ) as u8;
+                                };
+                            }
+                        })
+                    });
         }
     }
 }

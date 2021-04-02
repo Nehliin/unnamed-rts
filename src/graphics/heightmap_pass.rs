@@ -51,6 +51,8 @@ pub struct HeightMap<'a> {
     num_indexes: u32,
     displacement_map: wgpu::Texture,
     displacement_texture: TextureContent<'a>,
+    color: wgpu::Texture,
+    color_texture: TextureContent<'a>,
     needs_update: bool,
     bind_group: wgpu::BindGroup,
     transform: Transform,
@@ -118,14 +120,15 @@ impl<'a> HeightMap<'a> {
             stride: 1,
             size: texture_size,
         };
-        HeightMap::from_displacement_map(device, queue, size, texture, transform)
+        HeightMap::from_displacement_map(device, queue, size, texture, None, transform)
     }
 
     pub fn from_displacement_map(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         size: u32,
-        texture: TextureContent<'a>,
+        displacement_texture: TextureContent<'a>,
+        color_texture: Option<TextureContent<'a>>,
         transform: Transform,
     ) -> HeightMap<'a> {
         let (vertecies, indicies) = create_vertecies(size);
@@ -140,10 +143,30 @@ impl<'a> HeightMap<'a> {
             device,
             &[InstanceData::new(transform.get_model_matrix())],
         );
-        let displacement_map = allocate_simple_texture(device, queue, &texture, false);
-        let view = displacement_map.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        let displacement_map = allocate_simple_texture(device, queue, &displacement_texture, false);
+        let color_texture = color_texture.unwrap_or_else(|| TextureContent {
+            label: Some("Heightmap default color texture"),
+            ..displacement_texture.clone()
+        });
+        let color = allocate_simple_texture(device, queue, &color_texture, false);
+
+        let displacement_view =
+            displacement_map.create_view(&wgpu::TextureViewDescriptor::default());
+        let displacement_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("DisplacementMap texture sampler"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            lod_min_clamp: -100.0,
+            lod_max_clamp: 100.0,
+            ..Default::default()
+        });
+        let color_view = color.create_view(&wgpu::TextureViewDescriptor::default());
+        let color_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Heightmap color texture sampler"),
             address_mode_u: wgpu::AddressMode::Repeat,
             address_mode_v: wgpu::AddressMode::Repeat,
             address_mode_w: wgpu::AddressMode::Repeat,
@@ -159,11 +182,19 @@ impl<'a> HeightMap<'a> {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view),
+                    resource: wgpu::BindingResource::TextureView(&displacement_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
+                    resource: wgpu::BindingResource::Sampler(&displacement_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&color_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(&color_sampler),
                 },
             ],
             label: Some("HeightMap bindgroup"),
@@ -174,7 +205,9 @@ impl<'a> HeightMap<'a> {
             instance_buffer,
             num_indexes,
             displacement_map,
-            displacement_texture: texture,
+            displacement_texture,
+            color,
+            color_texture,
             needs_update: false,
             transform,
             bind_group,
@@ -185,9 +218,14 @@ impl<'a> HeightMap<'a> {
         &self.transform
     }
 
-    pub fn get_buffer_mut(&mut self) -> &mut [u8] {
+    pub fn get_displacement_buffer_mut(&mut self) -> &mut [u8] {
         self.needs_update = true;
         self.displacement_texture.bytes.to_mut()
+    }
+
+    pub fn get_color_buffer_mut(&mut self) -> &mut [u8] {
+        self.needs_update = true;
+        self.color_texture.bytes.to_mut()
     }
 
     pub fn get_or_create_layout(device: &wgpu::Device) -> &'static wgpu::BindGroupLayout {
@@ -208,6 +246,25 @@ impl<'a> HeightMap<'a> {
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStage::VERTEX,
+                        ty: wgpu::BindingType::Sampler {
+                            comparison: false,
+                            filtering: true,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
                         ty: wgpu::BindingType::Sampler {
                             comparison: false,
                             filtering: true,
@@ -287,6 +344,11 @@ pub fn update(#[resource] queue: &wgpu::Queue, #[resource] height_map: &mut Heig
         update_texture_data(
             &height_map.displacement_texture,
             &height_map.displacement_map,
+            queue,
+        );
+        update_texture_data(
+            &height_map.color_texture,
+            &height_map.color,
             queue,
         );
         height_map.needs_update = false;

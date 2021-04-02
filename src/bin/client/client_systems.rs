@@ -112,7 +112,7 @@ pub fn height_map_modification(
                 // assuming row order
                 // TODO: Not very performance frendly
                 height_map
-                    .get_buffer_mut()
+                    .get_displacement_buffer_mut()
                     .par_chunks_exact_mut(256)
                     .enumerate()
                     .for_each(|(y, chunk)| {

@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use wgpu::{Device, Queue};
 
+#[derive(Debug, Clone)]
 pub struct TextureContent<'a> {
     pub label: Option<&'static str>,
     pub format: wgpu::TextureFormat,

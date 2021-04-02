@@ -20,7 +20,7 @@ use unnamed_rts::{
 };
 use wgpu::{Device, Queue};
 
-use crate::editor_systems::{self, EditorSettings};
+use crate::editor_systems::{self, EditorSettings, HeightMapModificationState};
 
 
 #[derive(Debug)]
@@ -129,7 +129,9 @@ impl State for EditState {
             .add_system(lights::update_system())
             .add_system(model_pass::draw_system())
             .add_system(selection_pass::draw_system())
-            .add_system(editor_systems::height_map_modification_system())
+            .add_system(editor_systems::height_map_modification_system(HeightMapModificationState {
+                last_update: std::time::Instant::now()
+            }))
             .add_system(heightmap_pass::update_system())
             .add_system(heightmap_pass::draw_system())
             .add_system(grid_pass::draw_system())

@@ -78,6 +78,7 @@ impl State for GameState {
             .unwrap()
             .decode()
             .unwrap();
+        //TODO: use R16Float instead
         let texture = TextureContent {
             label: Some("Displacement map"),
             format: wgpu::TextureFormat::R8Unorm,

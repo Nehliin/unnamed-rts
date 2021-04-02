@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use glam::{Vec2, Vec3A, Vec4, Vec4Swizzles};
 use legion::*;
 use rayon::prelude::*;
@@ -8,12 +10,23 @@ use unnamed_rts::{
     ui::ui_context::UiContext,
 };
 use winit::event::MouseButton;
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct EditorSettings {
     pub edit_heightmap: bool,
     pub hm_tool_radius: f32,
     pub hm_tool_strenght: f32,
     pub map_size: u32,
+}
+
+impl Default for EditorSettings {
+    fn default() -> Self {
+        EditorSettings {
+            edit_heightmap: true,
+            hm_tool_radius: 10.0,
+            hm_tool_strenght: 10.0,
+            map_size: 256,
+        }
+    }
 }
 
 #[system]
@@ -27,11 +40,11 @@ pub fn editor_ui(
             if editor_settings.edit_heightmap {
                 ui.collapsing("Heightmap settings", |ui| {
                     ui.add(
-                        egui::Slider::f32(&mut editor_settings.hm_tool_radius, 1.0..=100.0)
+                        egui::Slider::f32(&mut editor_settings.hm_tool_radius, 1.0..=300.0)
                             .text("Radius"),
                     );
                     ui.add(
-                        egui::Slider::f32(&mut editor_settings.hm_tool_strenght, 100.0..=500.0)
+                        egui::Slider::f32(&mut editor_settings.hm_tool_strenght, 1.0..=10.0)
                             .text("Strenght"),
                     );
                 });
@@ -50,8 +63,16 @@ pub fn editor_ui(
     });
 }
 
+// TODO: This should be done in a more general way instead
+pub struct HeightMapModificationState {
+    pub last_update: Instant,
+}
+const MAX_UPDATE_FREQ: f32 = 1.0 / 60.0;
+
+#[allow(clippy::too_many_arguments)]
 #[system]
 pub fn height_map_modification(
+    #[state] modification_state: &mut HeightMapModificationState,
     #[resource] camera: &Camera,
     #[resource] mouse_button_state: &MouseButtonState,
     #[resource] mouse_pos: &CursorPosition,
@@ -78,8 +99,14 @@ pub fn height_map_modification(
                 let radius = editor_settings.hm_tool_radius;
                 let strenght = editor_settings.hm_tool_strenght;
                 let center = local_coords.xy();
+                if (time.current_time - modification_state.last_update).as_secs_f32()
+                    <= MAX_UPDATE_FREQ
+                {
+                    return;
+                }
+                modification_state.last_update = time.current_time;
                 // assuming row order
-                // TODO: Not very performance frendly
+                // TODO: Not very performance frendly   
                 height_map
                     .get_buffer_mut()
                     .par_chunks_exact_mut(editor_settings.map_size as usize)
@@ -88,8 +115,7 @@ pub fn height_map_modification(
                         chunk.iter_mut().enumerate().for_each(|(x, byte)| {
                             let distance = Vec2::new(x as f32, y as f32).distance(center);
                             if distance < radius {
-                                let raise =
-                                    (strenght * (radius - distance) / radius) * time.delta_time;
+                                let raise = strenght * (radius - distance) / radius;
                                 *byte = std::cmp::min(
                                     255,
                                     (*byte as f32 + raise as f32).round() as u32,

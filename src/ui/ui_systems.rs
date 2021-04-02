@@ -1,7 +1,10 @@
 use std::time::Instant;
 
-use crate::resources::{Time, WindowSize};
-use egui::{pos2, vec2};
+use crate::{
+    input::MouseMotion,
+    resources::{Time, WindowSize},
+};
+use egui::{pos2, vec2, Pos2};
 use input::{CursorPosition, Text};
 use legion::*;
 use wgpu::{CommandEncoderDescriptor, Device, Queue, SwapChainTexture};
@@ -11,6 +14,30 @@ use crate::input::{self, EventReader};
 
 use super::{ui_context::UiContext, ui_pass::UiPass};
 
+fn handle_mouse_input(
+    mouse_input: &input::MouseButtonState,
+    mouse_button: &MouseButton,
+    mapped_button: egui::PointerButton,
+    current_cursor_pos: Pos2,
+    ui_ctx: &mut UiContext,
+) {
+    if mouse_input.pressed_current_frame(mouse_button) {
+        ui_ctx.raw_input.events.push(egui::Event::PointerButton {
+            pos: current_cursor_pos,
+            button: mapped_button,
+            pressed: true,
+            modifiers: Default::default(),
+        });
+    } else if mouse_input.released_current_frame(mouse_button) {
+        ui_ctx.raw_input.events.push(egui::Event::PointerButton {
+            pos: current_cursor_pos,
+            button: mapped_button,
+            pressed: false,
+            modifiers: Default::default(),
+        });
+    }
+}
+
 #[allow(clippy::clippy::too_many_arguments)]
 #[system]
 pub fn update_ui(
@@ -19,6 +46,7 @@ pub fn update_ui(
     #[resource] modifiers_changed: &EventReader<ModifiersState>,
     #[resource] mouse_position: &CursorPosition,
     #[resource] mouse_scroll: &EventReader<MouseScrollDelta>,
+    #[resource] mouse_motion: &EventReader<MouseMotion>,
     #[resource] text_input: &EventReader<Text>,
     #[resource] mouse_input: &input::MouseButtonState,
     #[resource] key_input: &input::KeyboardState,
@@ -33,11 +61,21 @@ pub fn update_ui(
     ));
 
     // Keep in mind that the cursor left event isn't handled
-    ui_ctx.raw_input.mouse_pos = Some(pos2(
+    let current_cursor_pos = pos2(
         mouse_position.x as f32 / ui_ctx.raw_input.pixels_per_point.unwrap(),
         mouse_position.y as f32 / ui_ctx.raw_input.pixels_per_point.unwrap(),
-    ));
-    ui_ctx.raw_input.mouse_down = mouse_input.is_pressed(&MouseButton::Left);
+    );
+    if mouse_motion.last_event().is_some() {
+        ui_ctx.raw_input.events.push(egui::Event::PointerMoved(pos2(
+            current_cursor_pos.x,
+            current_cursor_pos.y,
+        )));
+    }
+    // Handle mouse input
+    handle_mouse_input(mouse_input, &MouseButton::Left, egui::PointerButton::Primary, current_cursor_pos, ui_ctx);
+    handle_mouse_input(mouse_input, &MouseButton::Right, egui::PointerButton::Secondary, current_cursor_pos, ui_ctx);
+    handle_mouse_input(mouse_input, &MouseButton::Middle, egui::PointerButton::Middle, current_cursor_pos, ui_ctx);
+
     for scroll_delta in mouse_scroll.events() {
         match scroll_delta {
             MouseScrollDelta::LineDelta(x, y) => {

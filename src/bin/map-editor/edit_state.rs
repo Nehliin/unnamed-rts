@@ -2,12 +2,31 @@ use std::f32::consts::PI;
 
 use glam::{Quat, Vec3};
 use legion::*;
-use unnamed_rts::{assets::{self, Assets}, components::Transform, graphics::{camera::{self, Camera}, common::DepthTexture, debug_lines_pass::{self, BoundingBoxMap}, gltf::GltfModel, grid_pass, heightmap_pass::{self, HeightMap}, lights::{self, LightUniformBuffer}, model_pass, selection_pass}, resources::{DebugRenderSettings, WindowSize}, states::{State, StateTransition}};
+use unnamed_rts::{assets::{self, Assets}, components::Transform, graphics::{
+        camera::{self, Camera},
+        common::DepthTexture,
+        debug_lines_pass::{self, BoundingBoxMap},
+        gltf::GltfModel,
+        grid_pass,
+        heightmap_pass::{self, HeightMap},
+        lights::{self, LightUniformBuffer},
+        model_pass, selection_pass,
+    }, resources::{DebugRenderSettings, Time, WindowSize}, states::{State, StateTransition}, ui::ui_context::UiContext};
 use wgpu::{Device, Queue};
 
 use crate::editor_systems;
 
-
+#[system]
+pub fn draw_debug_ui(
+    #[resource] ui_context: &UiContext,
+    #[resource] time: &Time,
+) {
+    egui::SidePanel::left("Debug menue", 80.0).show(&ui_context.context, |ui| {
+        let label = egui::Label::new(format!("FPS: {:.0}", 1.0 / time.delta_time))
+            .text_color(egui::Color32::WHITE);
+        ui.add(label);
+    });
+}
 #[derive(Debug)]
 pub struct EditState {}
 
@@ -30,7 +49,7 @@ impl State for EditState {
         command_receivers.push(debug_rc);
         command_receivers.push(lines_rc);
         resources.insert(Assets::<GltfModel>::default());
-        
+
         let device = resources.get::<Device>().expect("Device to be present");
         let grid_pass = grid_pass::GridPass::new(&device, debug_sender);
         let model_pass = model_pass::ModelPass::new(&device, model_sender);
@@ -60,7 +79,7 @@ impl State for EditState {
         drop(device);
         drop(size);
         drop(queue);
-        
+
         resources.insert(model_pass);
         resources.insert(grid_pass);
         resources.insert(selection_pass);
@@ -89,7 +108,7 @@ impl State for EditState {
     }
 
     fn on_foreground_tick(&mut self) -> unnamed_rts::states::StateTransition {
-       StateTransition::Noop 
+        StateTransition::Noop
     }
 
     fn on_destroy(&mut self, _world: &mut legion::World, _resources: &mut legion::Resources) {
@@ -114,6 +133,7 @@ impl State for EditState {
             .add_system(grid_pass::draw_system())
             .add_system(debug_lines_pass::update_bounding_boxes_system())
             .add_system(debug_lines_pass::draw_system())
+            .add_system(draw_debug_ui_system())
             .build()
     }
 }

@@ -29,12 +29,11 @@ pub struct Renderer {
 impl Renderer {
     pub async fn init(window: &Window, resourcs: &mut Resources) -> Renderer {
         let size = window.inner_size();
-        let instance = if cfg!(mac) {
-            Instance::new(BackendBit::METAL)
-        } else {
-            // DX12 have poor performance and crashes for whatever reason
-            Instance::new(BackendBit::VULKAN)
-        };
+         #[cfg(target_os = "macos")]
+        let instance =  Instance::new(BackendBit::METAL);
+        // DX12 have poor performance and crashes for whatever reason
+        #[cfg(not(target_os = "macos"))]
+        let instance = Instance::new(BackendBit::VULKAN);
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {

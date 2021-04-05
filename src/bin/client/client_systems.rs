@@ -81,6 +81,7 @@ pub fn move_action(
     }
 }
 
+// TODO: remove this from client, should only be part of map editor
 #[system]
 pub fn height_map_modification(
     #[resource] camera: &Camera,
@@ -110,9 +111,10 @@ pub fn height_map_modification(
                 let center = local_coords.xy();
                 // assuming row order
                 // TODO: Not very performance frendly
-                height_map
-                    .get_buffer_mut()
-                    .par_chunks_exact_mut(256)
+                let size = height_map.get_size() as usize;
+                let (_, buffer) = height_map.get_displacement_buffer_mut();
+                buffer
+                    .par_chunks_exact_mut(size)
                     .enumerate()
                     .for_each(|(y, chunk)| {
                         chunk.iter_mut().enumerate().for_each(|(x, byte)| {

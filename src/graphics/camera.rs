@@ -53,20 +53,12 @@ pub fn free_flying_camera(
     #[resource] queue: &wgpu::Queue,
 ) {
     if keyboard_state.is_pressed(VirtualKeyCode::A) {
-        camera.position += camera
-            .direction
-            .cross(Vec3A::new(0.0, 1.0, 0.0))
-            .normalize()
-            * -CAMERA_SPEED
-            * time.delta_time;
+        camera.position +=
+            camera.direction.cross(Vec3A::Y).normalize() * -CAMERA_SPEED * time.delta_time;
     }
     if keyboard_state.is_pressed(VirtualKeyCode::D) {
-        camera.position += camera
-            .direction
-            .cross(Vec3A::new(0.0, 1.0, 0.0))
-            .normalize()
-            * CAMERA_SPEED
-            * time.delta_time;
+        camera.position +=
+            camera.direction.cross(Vec3A::Y).normalize() * CAMERA_SPEED * time.delta_time;
     }
     if keyboard_state.is_pressed(VirtualKeyCode::W) {
         camera.position += camera.direction * CAMERA_SPEED * time.delta_time;
@@ -130,7 +122,7 @@ impl Camera {
         Camera {
             direction: direction.into(),
             position: position.into(),
-            view_matrix: Mat4::look_at_rh(position, view_target, Vec3::new(0.0, 1.0, 0.0)),
+            view_matrix: Mat4::look_at_rh(position, view_target, Vec3::Y),
             proj_matrix: Mat4::perspective_rh_gl(
                 45.0,
                 window_width as f32 / window_height as f32,
@@ -159,7 +151,11 @@ impl Camera {
         let view_space = proj_inverse * clip_space;
         let view_space = Vec4::new(view_space.x, view_space.y, -1.0, 0.0);
         // ray direction in world space coordinates
-        let direction = (view_inverse * view_space).xyz().normalize().into();
+        let direction = (view_inverse * view_space)
+            .xyz()
+            .try_normalize()
+            .expect("Normalization to work")
+            .into();
 
         Ray {
             origin: self.position,
@@ -201,17 +197,17 @@ impl Camera {
         self.view_matrix = Mat4::look_at_rh(
             self.position.into(),
             (self.position + self.direction).into(),
-            Vec3::new(0.0, 1.0, 0.0),
+            Vec3::Y,
         );
     }
 
     #[inline]
     pub fn move_sideways(&mut self, amount: f32) {
-        self.position += self.direction.cross(Vec3A::new(0.0, 1.0, 0.0)).normalize() * amount;
+        self.position += self.direction.cross(Vec3A::Y).normalize() * amount;
         self.view_matrix = Mat4::look_at_rh(
             self.position.into(),
             (self.position + self.direction).into(),
-            Vec3::new(0.0, 1.0, 0.0),
+            Vec3::Y,
         );
     }
 
@@ -263,7 +259,7 @@ impl Camera {
         self.view_matrix = Mat4::look_at_rh(
             self.position.into(),
             (self.position + self.direction).into(),
-            Vec3::new(0.0, 1.0, 0.0),
+            Vec3::Y,
         );
     }
 

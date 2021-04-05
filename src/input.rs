@@ -1,6 +1,6 @@
 use crossbeam_channel::{Receiver, Sender};
+use fxhash::FxHashSet;
 use legion::*;
-use std::collections::HashSet;
 use winit::{
     dpi::PhysicalPosition,
     event::{ModifiersState, MouseButton, MouseScrollDelta, *},
@@ -239,9 +239,9 @@ impl BitSet {
 }
 #[derive(Debug, Default)]
 pub struct MouseButtonState {
-    pressed: HashSet<MouseButton>,
-    pressed_current_frame: HashSet<MouseButton>,
-    released_current_frame: HashSet<MouseButton>,
+    pressed: FxHashSet<MouseButton>,
+    pressed_current_frame: FxHashSet<MouseButton>,
+    released_current_frame: FxHashSet<MouseButton>,
 }
 
 #[allow(dead_code)]
@@ -273,7 +273,7 @@ impl MouseButtonState {
         self.released_current_frame.contains(button)
     }
 
-    pub fn all_pressed(&self) -> &HashSet<MouseButton> {
+    pub fn all_pressed(&self) -> &FxHashSet<MouseButton> {
         &self.pressed
     }
 }
@@ -317,22 +317,23 @@ impl KeyboardState {
         self.released_current_frame.is_set(key as u32)
     }
 
-    pub fn all_pressed(&self) -> HashSet<VirtualKeyCode> {
+    pub fn all_pressed(&self) -> FxHashSet<VirtualKeyCode> {
         Self::convert_to_virtual_keyset(&self.pressed)
     }
 
-    pub fn all_pressed_current_frame(&self) -> HashSet<VirtualKeyCode> {
+    pub fn all_pressed_current_frame(&self) -> FxHashSet<VirtualKeyCode> {
         Self::convert_to_virtual_keyset(&self.pressed_current_frame)
     }
 
-    pub fn all_release_current_frame(&self) -> HashSet<VirtualKeyCode> {
+    pub fn all_release_current_frame(&self) -> FxHashSet<VirtualKeyCode> {
         Self::convert_to_virtual_keyset(&self.released_current_frame)
     }
 
     #[inline]
     // TODO: Return iter here instead
-    fn convert_to_virtual_keyset(storage: &BitSet) -> HashSet<VirtualKeyCode> {
-        let mut result = HashSet::with_capacity(32);
+    fn convert_to_virtual_keyset(storage: &BitSet) -> FxHashSet<VirtualKeyCode> {
+        // with capacity and hasher
+        let mut result = FxHashSet::default();
         for bit in 0..(128 + 64) {
             if storage.is_set(bit) {
                 // SAFETY: Since the fields are private the only modification should have been made

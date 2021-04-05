@@ -49,13 +49,19 @@ pub struct HeightMap<'a> {
     vertex_buffer: ImmutableVertexData<MapVertex>,
     index_buffer: wgpu::Buffer,
     num_indexes: u32,
-    displacement_map: wgpu::Texture,
-    displacement_texture: TextureContent<'a>,
-    needs_update: bool,
+    displacement_texture: wgpu::Texture,
+    displacement_content: TextureContent<'a>,
+    color_texture: wgpu::Texture,
+    color_content: TextureContent<'a>,
+    decal_layer_texture: wgpu::Texture,
+    decal_layer_content: TextureContent<'a>,
+    needs_decal_update: bool,
+    needs_color_displacement_update: bool,
     bind_group: wgpu::BindGroup,
     transform: Transform,
     // TODO remove
     instance_buffer: MutableVertexData<InstanceData>,
+    size: u32,
 }
 
 fn create_vertecies(size: u32) -> (Vec<MapVertex>, Vec<u32>) {
@@ -118,14 +124,22 @@ impl<'a> HeightMap<'a> {
             stride: 1,
             size: texture_size,
         };
-        HeightMap::from_displacement_map(device, queue, size, texture, transform)
+        HeightMap::from_textures(
+            device,
+            queue,
+            size,
+            texture,
+            TextureContent::checkerd(size),
+            transform,
+        )
     }
 
-    pub fn from_displacement_map(
+    pub fn from_textures(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         size: u32,
-        texture: TextureContent<'a>,
+        displacement_content: TextureContent<'a>,
+        color_content: TextureContent<'a>,
         transform: Transform,
     ) -> HeightMap<'a> {
         let (vertecies, indicies) = create_vertecies(size);
@@ -140,10 +154,43 @@ impl<'a> HeightMap<'a> {
             device,
             &[InstanceData::new(transform.get_model_matrix())],
         );
-        let displacement_map = allocate_simple_texture(device, queue, &texture, false);
-        let view = displacement_map.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        let displacement_texture =
+            allocate_simple_texture(device, queue, &displacement_content, false);
+        let color_texture = allocate_simple_texture(device, queue, &color_content, false);
+        let decal_layer_content = TextureContent::black(size);
+        let decal_layer_texture =
+            allocate_simple_texture(device, queue, &decal_layer_content, false);
+
+        let displacement_view =
+            displacement_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let displacement_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("DisplacementMap texture sampler"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            lod_min_clamp: -100.0,
+            lod_max_clamp: 100.0,
+            ..Default::default()
+        });
+        let color_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let color_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Heightmap color texture sampler"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            lod_min_clamp: -100.0,
+            lod_max_clamp: 100.0,
+            ..Default::default()
+        });
+        let decal_view = decal_layer_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let decal_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Heightmap decal layer texture sampler"),
             address_mode_u: wgpu::AddressMode::Repeat,
             address_mode_v: wgpu::AddressMode::Repeat,
             address_mode_w: wgpu::AddressMode::Repeat,
@@ -159,11 +206,27 @@ impl<'a> HeightMap<'a> {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view),
+                    resource: wgpu::BindingResource::TextureView(&displacement_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
+                    resource: wgpu::BindingResource::Sampler(&displacement_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&color_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(&color_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(&decal_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::Sampler(&decal_sampler),
                 },
             ],
             label: Some("HeightMap bindgroup"),
@@ -173,21 +236,47 @@ impl<'a> HeightMap<'a> {
             index_buffer,
             instance_buffer,
             num_indexes,
-            displacement_map,
-            displacement_texture: texture,
-            needs_update: false,
+            displacement_texture,
+            displacement_content,
+            color_texture,
+            color_content,
+            decal_layer_content,
+            decal_layer_texture,
+            needs_decal_update: false,
+            needs_color_displacement_update: false,
             transform,
             bind_group,
+            size,
         }
+    }
+
+    pub fn get_size(&self) -> u32 {
+        self.size
     }
 
     pub fn get_transform(&self) -> &Transform {
         &self.transform
     }
 
-    pub fn get_buffer_mut(&mut self) -> &mut [u8] {
-        self.needs_update = true;
-        self.displacement_texture.bytes.to_mut()
+    pub fn get_displacement_buffer_mut(&mut self) -> (u32, &mut [u8]) {
+        self.needs_color_displacement_update = true;
+        (
+            self.displacement_content.stride,
+            self.displacement_content.bytes.to_mut(),
+        )
+    }
+
+    pub fn get_color_buffer_mut(&mut self) -> (u32, &mut [u8]) {
+        self.needs_color_displacement_update = true;
+        (self.color_content.stride, self.color_content.bytes.to_mut())
+    }
+
+    pub fn get_decal_buffer_mut(&mut self) -> (u32, &mut [u8]) {
+        self.needs_decal_update = true;
+        (
+            self.decal_layer_content.stride,
+            self.decal_layer_content.bytes.to_mut(),
+        )
     }
 
     pub fn get_or_create_layout(device: &wgpu::Device) -> &'static wgpu::BindGroupLayout {
@@ -208,6 +297,44 @@ impl<'a> HeightMap<'a> {
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStage::VERTEX,
+                        ty: wgpu::BindingType::Sampler {
+                            comparison: false,
+                            filtering: true,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler {
+                            comparison: false,
+                            filtering: true,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 5,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
                         ty: wgpu::BindingType::Sampler {
                             comparison: false,
                             filtering: true,
@@ -283,13 +410,24 @@ impl HeightMapPass {
 
 #[system]
 pub fn update(#[resource] queue: &wgpu::Queue, #[resource] height_map: &mut HeightMap) {
-    if height_map.needs_update {
+    if height_map.needs_color_displacement_update {
         update_texture_data(
+            &height_map.displacement_content,
             &height_map.displacement_texture,
-            &height_map.displacement_map,
             queue,
         );
-        height_map.needs_update = false;
+        update_texture_data(&height_map.color_content, &height_map.color_texture, queue);
+        height_map.needs_color_displacement_update = false;
+    }
+
+    if height_map.needs_decal_update {
+        update_texture_data(
+            &height_map.decal_layer_content,
+            &height_map.decal_layer_texture,
+            queue,
+        );
+
+        height_map.needs_decal_update = false;
     }
 }
 

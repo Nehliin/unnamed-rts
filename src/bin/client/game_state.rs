@@ -96,7 +96,14 @@ impl State for GameState {
 
         // Set up network and connect to server
         let suit = assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
-        let height_map = HeightMap::from_textures(&device, &queue, 256, texture, None, transform);
+        let height_map = HeightMap::from_textures(
+            &device,
+            &queue,
+            256,
+            texture,
+            TextureContent::checkerd(256),
+            transform,
+        );
         let depth_texture = DepthTexture::new(&device, size.physical_width, size.physical_height);
         drop(device);
         drop(assets);

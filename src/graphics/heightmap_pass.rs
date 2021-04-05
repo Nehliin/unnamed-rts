@@ -120,10 +120,10 @@ impl<'a> HeightMap<'a> {
             stride: 1,
             size: texture_size,
         };
-        HeightMap::from_displacement_map(device, queue, size, texture, None, transform)
+        HeightMap::from_textures(device, queue, size, texture, None, transform)
     }
 
-    pub fn from_displacement_map(
+    pub fn from_textures(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         size: u32,

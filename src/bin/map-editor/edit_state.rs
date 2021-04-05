@@ -20,7 +20,7 @@ use unnamed_rts::{
 };
 use wgpu::{Device, Queue};
 
-use crate::editor_systems::{self, EditorSettings, HeightMapModificationState};
+use crate::editor_systems::{self, EditorSettings, HeightMapModificationState, HmEditorSettings};
 
 
 #[derive(Debug)]
@@ -88,7 +88,10 @@ impl State for EditState {
             show_bounding_boxes: true,
         });
         let editor_settings = EditorSettings {
-            map_size,
+            hm_settings: HmEditorSettings {
+                map_size,
+                ..Default::default()
+            },
             ..Default::default()
         };
         resources.insert(editor_settings);

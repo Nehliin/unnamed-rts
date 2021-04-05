@@ -10,22 +10,36 @@ use unnamed_rts::{
     ui::ui_context::UiContext,
 };
 use winit::event::MouseButton;
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct EditorSettings {
     pub edit_heightmap: bool,
-    pub hm_tool_radius: f32,
-    pub hm_tool_strenght: f32,
-    pub hm_tool_invert: bool,
-    pub map_size: u32,
+    pub hm_settings: HmEditorSettings,
 }
 
-impl Default for EditorSettings {
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum HmEditorMode {
+    DisplacementMap,
+    // TODO Take in texture
+    ColorTexture,
+}
+
+// Settings for the heightmap
+#[derive(Debug)]
+pub struct HmEditorSettings {
+    pub tool_radius: f32,
+    pub tool_strenght: f32,
+    pub inverted: bool,
+    pub map_size: u32,
+    pub mode: HmEditorMode,
+}
+
+impl Default for HmEditorSettings {
     fn default() -> Self {
-        EditorSettings {
-            edit_heightmap: true,
-            hm_tool_radius: 10.0,
-            hm_tool_strenght: 10.0,
-            hm_tool_invert: false,
+        HmEditorSettings {
+            tool_radius: 10.0,
+            tool_strenght: 10.0,
+            inverted: false,
+            mode: HmEditorMode::DisplacementMap,
             map_size: 256,
         }
     }
@@ -42,14 +56,29 @@ pub fn editor_ui(
             if editor_settings.edit_heightmap {
                 ui.collapsing("Heightmap settings", |ui| {
                     ui.add(
-                        egui::Slider::f32(&mut editor_settings.hm_tool_radius, 1.0..=300.0)
-                            .text("Radius"),
+                        egui::Slider::f32(
+                            &mut editor_settings.hm_settings.tool_radius,
+                            1.0..=300.0,
+                        )
+                        .text("Radius"),
                     );
                     ui.add(
-                        egui::Slider::f32(&mut editor_settings.hm_tool_strenght, 1.0..=10.0)
-                            .text("Strenght"),
+                        egui::Slider::f32(
+                            &mut editor_settings.hm_settings.tool_strenght,
+                            1.0..=10.0,
+                        )
+                        .text("Strenght"),
                     );
-                    ui.checkbox(&mut editor_settings.hm_tool_invert, "Invert");
+                    ui.checkbox(&mut editor_settings.hm_settings.inverted, "Invert");
+                    egui::combo_box_with_label(
+                        ui,
+                        "Edit mode",
+                        format!("{:?}", editor_settings.hm_settings.mode),
+                        |ui| {
+                            ui.selectable_value(&mut editor_settings.hm_settings.mode, HmEditorMode::DisplacementMap, "Displacement Map");
+                            ui.selectable_value(&mut editor_settings.hm_settings.mode, HmEditorMode::ColorTexture, "Color Texture");
+                        },
+                    );
                 });
             }
         });
@@ -59,7 +88,7 @@ pub fn editor_ui(
             ui.columns(3, |columns| {
                 columns[1].label(format!(
                     "Map editor: <name>, size: {}",
-                    editor_settings.map_size
+                    editor_settings.hm_settings.map_size
                 ));
             })
         });
@@ -101,8 +130,8 @@ pub fn height_map_modification(
             let target = (t * ray.direction) + ray.origin;
             let local_coords = height_map.get_transform().get_model_matrix().inverse()
                 * Vec4::new(target.x, target.y, target.z, 1.0);
-            let radius = editor_settings.hm_tool_radius;
-            let strenght = editor_settings.hm_tool_strenght;
+            let radius = editor_settings.hm_settings.tool_radius;
+            let strenght = editor_settings.hm_settings.tool_strenght;
             let center = local_coords.xy();
             if (time.current_time - modification_state.last_update).as_secs_f32() <= MAX_UPDATE_FREQ
             {
@@ -112,54 +141,63 @@ pub fn height_map_modification(
             // assuming row order
             // TODO: Not very performance frendly
             if mouse_button_state.is_pressed(&MouseButton::Left) {
-                height_map
-                    .get_displacement_buffer_mut()
-                    .par_chunks_exact_mut(editor_settings.map_size as usize)
-                    .enumerate()
-                    .for_each(|(y, chunk)| {
-                        chunk.iter_mut().enumerate().for_each(|(x, byte)| {
-                            let distance = Vec2::new(x as f32, y as f32).distance(center);
-                            if distance < radius {
-                                let raise = strenght * (radius - distance) / radius;
-                                if editor_settings.hm_tool_invert {
-                                    *byte = std::cmp::max(
-                                    0,
-                                    (*byte as f32 - raise as f32).round() as u32,
-                                ) as u8;
-                                } else {
-                                    *byte = std::cmp::min(
-                                        255,
-                                        (*byte as f32 + raise as f32).round() as u32,
-                                    ) as u8;
-                                };
-                            }
-                        })
-                    });
+                match editor_settings.hm_settings.mode {
+                    HmEditorMode::DisplacementMap => {
+                        height_map
+                            .get_displacement_buffer_mut()
+                            .par_chunks_exact_mut(editor_settings.hm_settings.map_size as usize)
+                            .enumerate()
+                            .for_each(|(y, chunk)| {
+                                chunk.iter_mut().enumerate().for_each(|(x, byte)| {
+                                    let distance = Vec2::new(x as f32, y as f32).distance(center);
+                                    if distance < radius {
+                                        let raise = strenght * (radius - distance) / radius;
+                                        if editor_settings.hm_settings.inverted {
+                                            *byte = std::cmp::max(
+                                                0,
+                                                (*byte as f32 - raise as f32).round() as u32,
+                                            )
+                                                as u8;
+                                        } else {
+                                            *byte = std::cmp::min(
+                                                255,
+                                                (*byte as f32 + raise as f32).round() as u32,
+                                            )
+                                                as u8;
+                                        };
+                                    }
+                                })
+                            });
+                    }
+                    HmEditorMode::ColorTexture => {
+                        height_map
+                            .get_color_buffer_mut()
+                            .par_chunks_exact_mut(editor_settings.hm_settings.map_size as usize)
+                            .enumerate()
+                            .for_each(|(y, chunk)| {
+                                chunk.iter_mut().enumerate().for_each(|(x, byte)| {
+                                    let distance = Vec2::new(x as f32, y as f32).distance(center);
+                                    if distance < radius {
+                                        let raise = strenght * (radius - distance) / radius;
+                                        if editor_settings.hm_settings.inverted {
+                                            *byte = std::cmp::max(
+                                                0,
+                                                (*byte as f32 - raise as f32).round() as u32,
+                                            )
+                                                as u8;
+                                        } else {
+                                            *byte = std::cmp::min(
+                                                255,
+                                                (*byte as f32 + raise as f32).round() as u32,
+                                            )
+                                                as u8;
+                                        };
+                                    }
+                                })
+                            });
+                    }
+                }
             }
-            // Merge with the above step?
-            height_map
-                    .get_color_buffer_mut()
-                    .par_chunks_exact_mut(editor_settings.map_size as usize)
-                    .enumerate()
-                    .for_each(|(y, chunk)| {
-                        chunk.iter_mut().enumerate().for_each(|(x, byte)| {
-                            let distance = Vec2::new(x as f32, y as f32).distance(center);
-                            if distance < radius {
-                                let raise = strenght * (radius - distance) / radius;
-                                if editor_settings.hm_tool_invert {
-                                    *byte = std::cmp::max(
-                                    0,
-                                    (*byte as f32 - raise as f32).round() as u32,
-                                ) as u8;
-                                } else {
-                                    *byte = std::cmp::min(
-                                        255,
-                                        (*byte as f32 + raise as f32).round() as u32,
-                                    ) as u8;
-                                };
-                            }
-                        })
-                    });
         }
     }
 }

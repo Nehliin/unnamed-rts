@@ -5,8 +5,11 @@ layout(location=0) out vec4 f_color;
 
 layout(set=0, binding=2) uniform texture2D color_texture;
 layout(set=0, binding=3) uniform sampler color_sampler;
+layout(set=0, binding=4) uniform texture2D decal_texture;
+layout(set=0, binding=5) uniform sampler decal_sampler;
 
 void main() {
-    vec3 color = texture(sampler2D(color_texture, color_sampler), tex_coords).rgb;
-    f_color = vec4(color, 1);
+    vec4 color = vec4(texture(sampler2D(color_texture, color_sampler), tex_coords).rgb, 0.0);
+    color += texture(sampler2D(decal_texture, decal_sampler), tex_coords).rgba;
+    f_color = color;
 }

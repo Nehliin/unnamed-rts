@@ -111,9 +111,9 @@ pub fn height_map_modification(
                 let center = local_coords.xy();
                 // assuming row order
                 // TODO: Not very performance frendly
-                height_map
-                    .get_displacement_buffer_mut()
-                    .par_chunks_exact_mut(256)
+                let (_, buffer) = height_map.get_displacement_buffer_mut();
+                buffer
+                    .par_chunks_exact_mut(height_map.get_size() as usize)
                     .enumerate()
                     .for_each(|(y, chunk)| {
                         chunk.iter_mut().enumerate().for_each(|(x, byte)| {

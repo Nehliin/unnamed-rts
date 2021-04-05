@@ -136,6 +136,7 @@ pub fn height_map_modification(
         if t >= 0.0 {
             // there was an intersection
             let target = (t * ray.direction) + ray.origin;
+            // TODO: inbounds check here?
             let local_coords = height_map.get_transform().get_model_matrix().inverse()
                 * Vec4::new(target.x, target.y, target.z, 1.0);
             let radius = editor_settings.hm_settings.tool_radius;
@@ -151,8 +152,8 @@ pub fn height_map_modification(
             if mouse_button_state.is_pressed(&MouseButton::Left) {
                 match editor_settings.hm_settings.mode {
                     HmEditorMode::DisplacementMap => {
-                        height_map
-                            .get_displacement_buffer_mut()
+                        let (_, buffer) = height_map.get_displacement_buffer_mut();
+                        buffer
                             .par_chunks_exact_mut(editor_settings.hm_settings.map_size as usize)
                             .enumerate()
                             .for_each(|(y, chunk)| {
@@ -178,9 +179,8 @@ pub fn height_map_modification(
                             });
                     }
                     HmEditorMode::ColorTexture => {
-                        let stride = height_map.get_color_texture_stride();
-                        height_map
-                            .get_color_buffer_mut()
+                        let (stride, buffer) = height_map.get_color_buffer_mut();
+                        buffer
                             .par_chunks_exact_mut(
                                 (editor_settings.hm_settings.map_size * stride) as usize,
                             )
@@ -193,13 +193,14 @@ pub fn height_map_modification(
                                         let distance =
                                             Vec2::new(x as f32, y as f32).distance(center);
                                         if distance < radius {
-                                            let raise = strenght * (radius - distance) / radius;
+                                            let color = strenght * (radius - distance) / radius;
                                             if editor_settings.hm_settings.inverted {
                                                 let val = std::cmp::max(
                                                     0,
-                                                    (bytes[0] as f32 - raise as f32).round() as u32,
+                                                    (bytes[0] as f32 - color as f32).round() as u32,
                                                 )
                                                     as u8;
+                                                // Shouldn't harde code indexes here..
                                                 bytes[0] = val;
                                                 bytes[1] = 0;
                                                 bytes[2] = 0;
@@ -207,7 +208,7 @@ pub fn height_map_modification(
                                             } else {
                                                 let val = std::cmp::min(
                                                     255,
-                                                    (bytes[0] as f32 + raise as f32).round() as u32,
+                                                    (bytes[0] as f32 + color as f32).round() as u32,
                                                 )
                                                     as u8;
                                                 bytes[0] = val;
@@ -221,6 +222,28 @@ pub fn height_map_modification(
                     }
                 }
             }
+            // TODO: only do this if the intersection is within bounds
+            let (stride, buffer) = height_map.get_decal_buffer_mut();
+            // clear previous decal value, this is innefficient and should be changed to only clear previous
+            // marked radius to avoid removing unrelated things in the decal layer
+            buffer.fill(0);
+            buffer
+                .par_chunks_exact_mut((editor_settings.hm_settings.map_size * stride) as usize)
+                .enumerate()
+                .for_each(|(y, chunk)| {
+                    chunk
+                        .chunks_exact_mut(stride as usize)
+                        .enumerate()
+                        .for_each(|(x, bytes)| {
+                            let distance = Vec2::new(x as f32, y as f32).distance(center);
+                            if (radius - 2.0) < distance && distance < radius {
+                                bytes[0] = 0;
+                                bytes[1] = 0;
+                                bytes[2] = 255;
+                                bytes[3] = 0;
+                            }
+                        })
+                });
         }
     }
 }

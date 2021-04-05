@@ -12,24 +12,24 @@ pub struct TextureContent<'a> {
     pub size: wgpu::Extent3d,
 }
 
-impl<'a> Default for TextureContent<'a> {
-    fn default() -> Self {
-        let size = wgpu::Extent3d {
-            width: 256,
-            height: 256,
+impl<'a> TextureContent<'a> {
+    pub fn checkerd(size: u32) -> Self {
+        let img_size = wgpu::Extent3d {
+            width: size,
+            height: size,
             depth: 1,
         };
         // construct checkered content
-        let mut bytes: Vec<u8> = vec![0; 256 * 256 * 4];
+        let mut bytes: Vec<u8> = vec![0; (size * size) as usize * 4];
         bytes
-            .par_chunks_exact_mut(256 * 4)
+            .par_chunks_exact_mut(size as usize * 4)
             .enumerate()
             .for_each(|(y, chunk)| {
                 chunk
                     .chunks_exact_mut(4)
                     .enumerate()
                     .for_each(|(x, texel)| {
-                        if (x/ 3 + y / 3) % 2 == 0 {
+                        if (x / 3 + y / 3) % 2 == 0 {
                             texel[0] = 128;
                             texel[1] = 128;
                             texel[2] = 128;
@@ -47,7 +47,22 @@ impl<'a> Default for TextureContent<'a> {
             format: wgpu::TextureFormat::Rgba8Unorm,
             bytes: Cow::Owned(bytes),
             stride: 4,
-            size,
+            size: img_size,
+        }
+    }
+
+    pub fn black(size: u32) -> Self {
+        let img_size = wgpu::Extent3d {
+            width: size,
+            height: size,
+            depth: 1,
+        };
+        TextureContent {
+            label: Some("Checkered default texture"),
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            bytes: Cow::Owned(vec![0; (size * size) as usize * 4]),
+            stride: 4,
+            size: img_size,
         }
     }
 }

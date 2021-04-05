@@ -120,7 +120,7 @@ impl<'a> HeightMap<'a> {
             stride: 1,
             size: texture_size,
         };
-        HeightMap::from_textures(device, queue, size, texture, None, transform)
+        HeightMap::from_textures(device, queue, size, texture, TextureContent::default(), transform)
     }
 
     pub fn from_textures(
@@ -128,7 +128,7 @@ impl<'a> HeightMap<'a> {
         queue: &wgpu::Queue,
         size: u32,
         displacement_texture: TextureContent<'a>,
-        color_texture: Option<TextureContent<'a>>,
+        color_texture: TextureContent<'a>,
         transform: Transform,
     ) -> HeightMap<'a> {
         let (vertecies, indicies) = create_vertecies(size);
@@ -144,10 +144,6 @@ impl<'a> HeightMap<'a> {
             &[InstanceData::new(transform.get_model_matrix())],
         );
         let displacement_map = allocate_simple_texture(device, queue, &displacement_texture, false);
-        let color_texture = color_texture.unwrap_or_else(|| TextureContent {
-            label: Some("Heightmap default color texture"),
-            ..displacement_texture.clone()
-        });
         let color = allocate_simple_texture(device, queue, &color_texture, false);
 
         let displacement_view =
@@ -226,6 +222,10 @@ impl<'a> HeightMap<'a> {
     pub fn get_color_buffer_mut(&mut self) -> &mut [u8] {
         self.needs_update = true;
         self.color_texture.bytes.to_mut()
+    }
+
+    pub fn get_color_texture_stride(&self) -> u32 {
+        self.color_texture.stride
     }
 
     pub fn get_or_create_layout(device: &wgpu::Device) -> &'static wgpu::BindGroupLayout {

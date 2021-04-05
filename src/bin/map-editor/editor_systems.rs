@@ -75,8 +75,16 @@ pub fn editor_ui(
                         "Edit mode",
                         format!("{:?}", editor_settings.hm_settings.mode),
                         |ui| {
-                            ui.selectable_value(&mut editor_settings.hm_settings.mode, HmEditorMode::DisplacementMap, "Displacement Map");
-                            ui.selectable_value(&mut editor_settings.hm_settings.mode, HmEditorMode::ColorTexture, "Color Texture");
+                            ui.selectable_value(
+                                &mut editor_settings.hm_settings.mode,
+                                HmEditorMode::DisplacementMap,
+                                "Displacement Map",
+                            );
+                            ui.selectable_value(
+                                &mut editor_settings.hm_settings.mode,
+                                HmEditorMode::ColorTexture,
+                                "Color Texture",
+                            );
                         },
                     );
                 });
@@ -170,30 +178,45 @@ pub fn height_map_modification(
                             });
                     }
                     HmEditorMode::ColorTexture => {
+                        let stride = height_map.get_color_texture_stride();
                         height_map
                             .get_color_buffer_mut()
-                            .par_chunks_exact_mut(editor_settings.hm_settings.map_size as usize)
+                            .par_chunks_exact_mut(
+                                (editor_settings.hm_settings.map_size * stride) as usize,
+                            )
                             .enumerate()
                             .for_each(|(y, chunk)| {
-                                chunk.iter_mut().enumerate().for_each(|(x, byte)| {
-                                    let distance = Vec2::new(x as f32, y as f32).distance(center);
-                                    if distance < radius {
-                                        let raise = strenght * (radius - distance) / radius;
-                                        if editor_settings.hm_settings.inverted {
-                                            *byte = std::cmp::max(
-                                                0,
-                                                (*byte as f32 - raise as f32).round() as u32,
-                                            )
-                                                as u8;
-                                        } else {
-                                            *byte = std::cmp::min(
-                                                255,
-                                                (*byte as f32 + raise as f32).round() as u32,
-                                            )
-                                                as u8;
-                                        };
-                                    }
-                                })
+                                chunk
+                                    .chunks_exact_mut(stride as usize)
+                                    .enumerate()
+                                    .for_each(|(x, bytes)| {
+                                        let distance =
+                                            Vec2::new(x as f32, y as f32).distance(center);
+                                        if distance < radius {
+                                            let raise = strenght * (radius - distance) / radius;
+                                            if editor_settings.hm_settings.inverted {
+                                                let val = std::cmp::max(
+                                                    0,
+                                                    (bytes[0] as f32 - raise as f32).round() as u32,
+                                                )
+                                                    as u8;
+                                                bytes[0] = val;
+                                                bytes[1] = 0;
+                                                bytes[2] = 0;
+                                                bytes[3] = 0;
+                                            } else {
+                                                let val = std::cmp::min(
+                                                    255,
+                                                    (bytes[0] as f32 + raise as f32).round() as u32,
+                                                )
+                                                    as u8;
+                                                bytes[0] = val;
+                                                bytes[1] = 0;
+                                                bytes[2] = 0;
+                                                bytes[3] = 0;
+                                            };
+                                        }
+                                    })
                             });
                     }
                 }

@@ -15,13 +15,12 @@ use unnamed_rts::{
         lights::{self, LightUniformBuffer},
         model_pass, selection_pass,
     },
-    resources::{DebugRenderSettings,  WindowSize},
+    resources::{DebugRenderSettings, WindowSize},
     states::{State, StateTransition},
 };
 use wgpu::{Device, Queue};
 
 use crate::editor_systems::{self, EditorSettings, HeightMapModificationState, HmEditorSettings};
-
 
 #[derive(Debug)]
 pub struct EditState {}
@@ -67,7 +66,7 @@ impl State for EditState {
         let mut transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
         transform.scale = Vec3::splat(0.1);
         transform.rotation = Quat::from_rotation_x(PI / 2.0);
-        let map_size =  256;
+        let map_size = 256;
         let height_map = HeightMap::new(&device, &queue, map_size, transform);
 
         // render resources
@@ -132,9 +131,11 @@ impl State for EditState {
             .add_system(lights::update_system())
             .add_system(model_pass::draw_system())
             .add_system(selection_pass::draw_system())
-            .add_system(editor_systems::height_map_modification_system(HeightMapModificationState {
-                last_update: std::time::Instant::now()
-            }))
+            .add_system(editor_systems::height_map_modification_system(
+                HeightMapModificationState {
+                    last_update: std::time::Instant::now(),
+                },
+            ))
             .add_system(heightmap_pass::update_system())
             .add_system(heightmap_pass::draw_system())
             .add_system(grid_pass::draw_system())

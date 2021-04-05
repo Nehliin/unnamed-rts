@@ -13,7 +13,7 @@ Current goals:
 - [ ] Animations
 - [ ] RTS game mechanics
 - [ ] Map editor
-  - [x] Terrain editor (currently proof of concept)
+  - [x] Terrain editor (Coloring with custom textures not yet implemented)  
 -  Basic Online multiplayer support is in progress using laminar. Ambition and quality of this goal depends amount of time I spend on this project. 
    - [x] Server owns the player state and updates client at ~30hz
    - [x] Client(s) send actions which are handled by the server (like move command) 
@@ -23,6 +23,7 @@ Current goals:
    - [ ] New unit creation  
    - ...and a lot more obviously 
 
-### Screenshot 
-Not much to look at currently but feels like all graphical repos should have at least a one screenshot
-![Alt text](rts.png?raw=true "A screenshot")
+### Screenshots
+All graphical repos should have at least a one screenshot
+![Alt text](rts.png?raw=true "PBR gltf model with normal mapping")
+![Alt text](map-editor.png?raw=true "Terrain editor")

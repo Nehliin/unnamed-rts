@@ -2,12 +2,12 @@
 extern crate log;
 use edit_state::EditState;
 use futures::executor::block_on;
+use unnamed_rts::{engine::Engine, states::State};
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
-use unnamed_rts::{engine::Engine, states::State};
 
 mod edit_state;
 mod editor_systems;

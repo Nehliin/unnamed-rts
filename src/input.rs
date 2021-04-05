@@ -1,6 +1,6 @@
 use crossbeam_channel::{Receiver, Sender};
-use legion::*;
 use fxhash::FxHashSet;
+use legion::*;
 use winit::{
     dpi::PhysicalPosition,
     event::{ModifiersState, MouseButton, MouseScrollDelta, *},

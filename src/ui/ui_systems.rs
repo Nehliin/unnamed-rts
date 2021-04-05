@@ -73,9 +73,27 @@ pub fn update_ui(
     }
     // Handle mouse input
     // TODO: This will cause the ui to not capture mouse clicks, they will still be registered by systems "behind" the ui which is undesirable
-    handle_mouse_input(mouse_input, &MouseButton::Left, egui::PointerButton::Primary, current_cursor_pos, ui_ctx);
-    handle_mouse_input(mouse_input, &MouseButton::Right, egui::PointerButton::Secondary, current_cursor_pos, ui_ctx);
-    handle_mouse_input(mouse_input, &MouseButton::Middle, egui::PointerButton::Middle, current_cursor_pos, ui_ctx);
+    handle_mouse_input(
+        mouse_input,
+        &MouseButton::Left,
+        egui::PointerButton::Primary,
+        current_cursor_pos,
+        ui_ctx,
+    );
+    handle_mouse_input(
+        mouse_input,
+        &MouseButton::Right,
+        egui::PointerButton::Secondary,
+        current_cursor_pos,
+        ui_ctx,
+    );
+    handle_mouse_input(
+        mouse_input,
+        &MouseButton::Middle,
+        egui::PointerButton::Middle,
+        current_cursor_pos,
+        ui_ctx,
+    );
 
     for scroll_delta in mouse_scroll.events() {
         match scroll_delta {

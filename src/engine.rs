@@ -29,8 +29,8 @@ pub struct Renderer {
 impl Renderer {
     pub async fn init(window: &Window, resourcs: &mut Resources) -> Renderer {
         let size = window.inner_size();
-         #[cfg(target_os = "macos")]
-        let instance =  Instance::new(BackendBit::METAL);
+        #[cfg(target_os = "macos")]
+        let instance = Instance::new(BackendBit::METAL);
         // DX12 have poor performance and crashes for whatever reason
         #[cfg(not(target_os = "macos"))]
         let instance = Instance::new(BackendBit::VULKAN);

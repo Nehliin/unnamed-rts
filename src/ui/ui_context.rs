@@ -1,5 +1,5 @@
 use crate::resources::WindowSize;
-use egui::{paint::ClippedShape, vec2, CtxRef, RawInput};
+use egui::{ vec2, CtxRef, RawInput};
 use winit::event::ModifiersState;
 
 pub struct CursorPosition {
@@ -11,7 +11,7 @@ pub struct UiContext {
     pub context: CtxRef,
     pub raw_input: RawInput,
     pub cursor_pos: CursorPosition,
-    pub modifier_state: ModifiersState, // not needed??
+    pub modifier_state: ModifiersState, 
 }
 
 impl UiContext {
@@ -35,17 +35,5 @@ impl UiContext {
             cursor_pos: CursorPosition { x: 0.0, y: 0.0 },
             modifier_state: ModifiersState::empty(),
         }
-    }
-
-    pub fn update_time(&mut self, elapsed_seconds: f64) {
-        self.raw_input.time = Some(elapsed_seconds);
-    }
-
-    pub fn begin_frame(&mut self) {
-        self.context.begin_frame(self.raw_input.take());
-    }
-
-    pub fn end_frame(&mut self) -> (egui::Output, Vec<ClippedShape>) {
-        self.context.end_frame()
     }
 }

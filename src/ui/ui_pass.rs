@@ -185,7 +185,7 @@ impl UiPass {
             command_sender,
         }
     }
-    pub fn execute(
+    pub fn draw(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         color_attachment: &wgpu::TextureView,
@@ -291,8 +291,7 @@ impl UiPass {
             return;
         }
         // we need to convert the texture into rgba format
-        let mut pixels = Vec::new();
-        pixels.reserve(4 * pixels.len());
+        let mut pixels = Vec::with_capacity(4 * egui_texture.pixels.len());
         for &alpha in egui_texture.pixels.iter() {
             pixels.extend(egui::Color32::from_white_alpha(alpha).to_array().iter());
         }

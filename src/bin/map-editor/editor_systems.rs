@@ -56,25 +56,23 @@ pub fn editor_ui(
             if editor_settings.edit_heightmap {
                 ui.collapsing("Heightmap settings", |ui| {
                     ui.add(
-                        egui::Slider::f32(
+                        egui::Slider::new(
                             &mut editor_settings.hm_settings.tool_radius,
                             1.0..=300.0,
                         )
                         .text("Radius"),
                     );
                     ui.add(
-                        egui::Slider::f32(
+                        egui::Slider::new(
                             &mut editor_settings.hm_settings.tool_strenght,
                             1.0..=10.0,
                         )
                         .text("Strenght"),
                     );
                     ui.checkbox(&mut editor_settings.hm_settings.inverted, "Invert");
-                    egui::combo_box_with_label(
-                        ui,
-                        "Edit mode",
-                        format!("{:?}", editor_settings.hm_settings.mode),
-                        |ui| {
+                    egui::ComboBox::from_label("Edit mode")
+                        .selected_text(format!("{:?}", editor_settings.hm_settings.mode))
+                        .show_ui(ui, |ui| {
                             ui.selectable_value(
                                 &mut editor_settings.hm_settings.mode,
                                 HmEditorMode::DisplacementMap,
@@ -85,8 +83,7 @@ pub fn editor_ui(
                                 HmEditorMode::ColorTexture,
                                 "Color Texture",
                             );
-                        },
-                    );
+                        });
                 });
             }
         });

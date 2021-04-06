@@ -75,6 +75,28 @@ fn to_srgb(format: wgpu::TextureFormat) -> wgpu::TextureFormat {
     }
 }
 
+impl<'a> From<&'a egui::Texture> for TextureContent<'a> {
+    fn from(egui_texture: &'a egui::Texture) -> Self {
+        let size = wgpu::Extent3d {
+            width: egui_texture.width as u32,
+            height: egui_texture.height as u32,
+            depth: 1,
+        };
+        let bytes: Vec<u8> = egui_texture
+            .srgba_pixels()
+            .map(|px| std::array::IntoIter::new([px.r(), px.g(), px.b(), px.a()]))
+            .flatten()
+            .collect();
+        TextureContent {
+            label: Some("egui_texture"),
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            bytes: Cow::Owned(bytes),
+            stride: 4,
+            size,
+        }
+    }
+}
+
 impl<'a> From<&'a gltf::image::Data> for TextureContent<'a> {
     fn from(image_data: &'a gltf::image::Data) -> Self {
         let size = wgpu::Extent3d {
@@ -216,7 +238,7 @@ pub fn allocate_simple_texture(
     let texture_data_layout = wgpu::TextureDataLayout {
         offset: 0,
         bytes_per_row: stride * size.width,
-        rows_per_image: 0,
+        rows_per_image: size.height,
     };
     queue.write_texture(texutre_copy_view, &bytes, texture_data_layout, *size);
     texture

@@ -1,4 +1,4 @@
-use crate::resources::WindowSize;
+use crate::{graphics::texture::*, resources::WindowSize};
 use bytemuck::{Pod, Zeroable};
 use crossbeam_channel::Sender;
 use wgpu::{
@@ -226,10 +226,10 @@ impl UiPass {
             let clip_max_y = scale_factor * clip_rect.max.y;
 
             // Make sure clip rect can fit within an `u32`.
-            let clip_min_x = egui::clamp(clip_min_x, 0.0..=physical_width as f32);
-            let clip_min_y = egui::clamp(clip_min_y, 0.0..=physical_height as f32);
-            let clip_max_x = egui::clamp(clip_max_x, clip_min_x..=physical_width as f32);
-            let clip_max_y = egui::clamp(clip_max_y, clip_min_y..=physical_height as f32);
+            let clip_min_x = clip_min_x.clamp(0.0, physical_width as f32);
+            let clip_min_y = clip_min_y.clamp(0.0, physical_height as f32);
+            let clip_max_x = clip_max_x.clamp(clip_min_x, physical_width as f32);
+            let clip_max_y = clip_max_y.clamp(clip_min_y, physical_height as f32);
 
             let clip_min_x = clip_min_x.round() as u32;
             let clip_min_y = clip_min_y.round() as u32;
@@ -290,18 +290,8 @@ impl UiPass {
         if self.texture_version == Some(egui_texture.version) {
             return;
         }
-        // we need to convert the texture into rgba format
-        let mut pixels = Vec::with_capacity(4 * egui_texture.pixels.len());
-        for &alpha in egui_texture.pixels.iter() {
-            pixels.extend(egui::Color32::from_white_alpha(alpha).to_array().iter());
-        }
-        let egui_texture = egui::Texture {
-            version: egui_texture.version,
-            width: egui_texture.width,
-            height: egui_texture.height,
-            pixels,
-        };
-        let bind_group = self.egui_texture_to_wgpu(device, queue, &egui_texture, "egui");
+        let content = TextureContent::from(egui_texture);
+        let bind_group = self.create_texture_bindgroup(device, queue, &content, "egui");
 
         self.texture_version = Some(egui_texture.version);
         self.texture_bind_group = Some(bind_group);
@@ -310,54 +300,25 @@ impl UiPass {
     /// Updates the user textures that the app allocated. Should be called before `execute()`.
     pub fn update_user_textures(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
         let pending_user_textures = std::mem::take(&mut self.pending_user_textures);
-        for (id, texture) in pending_user_textures {
-            let bind_group = self.egui_texture_to_wgpu(
+        for (id, texture_content) in pending_user_textures {
+            /*let bind_group = self.create_texture_bindgroup(
                 device,
                 queue,
-                &texture,
+                &texture_content,
                 format!("user_texture{}", id).as_str(),
             );
-            self.user_textures.push(Some(bind_group));
+            self.user_textures.push(Some(bind_group));*/
         }
     }
 
-    fn egui_texture_to_wgpu(
+    fn create_texture_bindgroup<'a>(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        egui_texture: &egui::Texture,
+        egui_texture: &TextureContent<'a>,
         label: &str,
     ) -> wgpu::BindGroup {
-        let size = wgpu::Extent3d {
-            width: egui_texture.width as u32,
-            height: egui_texture.height as u32,
-            depth: 1,
-        };
-
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some(format!("{}_texture", label).as_str()),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
-        });
-
-        queue.write_texture(
-            wgpu::TextureCopyView {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-            },
-            egui_texture.pixels.as_slice(),
-            wgpu::TextureDataLayout {
-                offset: 0,
-                bytes_per_row: (egui_texture.pixels.len() / egui_texture.height) as u32,
-                rows_per_image: egui_texture.height as u32,
-            },
-            size,
-        );
+        let texture = allocate_simple_texture(&device, &queue, &egui_texture, true);
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some(format!("{}_texture_bind_group", label).as_str()),

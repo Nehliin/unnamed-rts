@@ -3,12 +3,7 @@ use std::time::Instant;
 use glam::{Vec2, Vec3A, Vec4, Vec4Swizzles};
 use legion::*;
 use rayon::prelude::*;
-use unnamed_rts::{
-    graphics::{camera::Camera, heightmap_pass::HeightMap},
-    input::{CursorPosition, MouseButtonState},
-    resources::{Time, WindowSize},
-    ui::ui_context::UiContext,
-};
+use unnamed_rts::{assets::Handle, graphics::{camera::Camera, heightmap_pass::HeightMap}, input::{CursorPosition, MouseButtonState}, resources::{Time, WindowSize}, ui::ui_resources::{UiContext, UiTexture}};
 use winit::event::MouseButton;
 #[derive(Debug, Default)]
 pub struct EditorSettings {
@@ -45,8 +40,13 @@ impl Default for HmEditorSettings {
     }
 }
 
+pub struct Images<'a> {
+    pub img: Handle<UiTexture<'a>>,
+}
+
 #[system]
 pub fn editor_ui(
+    #[state] state: &mut Images<'static>, 
     #[resource] ui_context: &UiContext,
     #[resource] editor_settings: &mut EditorSettings,
 ) {
@@ -84,6 +84,9 @@ pub fn editor_ui(
                                 "Color Texture",
                             );
                         });
+                       // test user textures
+                       let handle = state.img.clone().into();
+                       ui.image(handle, [50.0, 50.0]);
                 });
             }
         });

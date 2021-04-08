@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use crate::{
+    assets::Assets,
     input::MouseMotion,
     resources::{Time, WindowSize},
 };
@@ -12,7 +13,10 @@ use winit::event::{ModifiersState, MouseButton, MouseScrollDelta};
 
 use crate::input::{self, EventReader};
 
-use super::{ui_context::{ UiContext}, ui_pass::UiPass};
+use super::{
+    ui_pass::UiPass,
+    ui_resources::{UiContext, UiTexture},
+};
 
 fn handle_mouse_input(
     mouse_input: &input::MouseButtonState,
@@ -176,6 +180,7 @@ pub fn end_ui_frame(
     #[resource] device: &Device,
     #[resource] queue: &Queue,
     #[resource] current_frame: &SwapChainTexture,
+    #[resource] ui_textures: &Assets<UiTexture>,
     #[resource] window_size: &WindowSize,
 ) {
     let (_output, commands) = ui_context.context.end_frame();
@@ -185,10 +190,15 @@ pub fn end_ui_frame(
         label: Some("Ui command encoder"),
     });
     pass.update_texture(&device, &queue, &context.texture());
-    pass.update_user_textures(&device, &queue);
     pass.update_buffers(&device, &queue, &paint_jobs, &window_size);
     // Record all render passes.
-    pass.draw(&mut encoder, &current_frame.view, &paint_jobs, &window_size);
+    pass.draw(
+        &mut encoder,
+        &current_frame.view,
+        &paint_jobs,
+        ui_textures,
+        &window_size,
+    );
     pass.command_sender
         .send(encoder.finish())
         .expect("Failed to send ui_render commands");

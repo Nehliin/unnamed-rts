@@ -9,7 +9,7 @@ use unnamed_rts::{
     assets::{Assets, Handle},
     graphics::{camera::Camera, gltf::GltfModel, heightmap_pass::HeightMap},
     input::{CursorPosition, MouseButtonState},
-    ui::ui_context::UiContext,
+    ui::ui_resources::UiContext,
 };
 use unnamed_rts::{components::Selectable, resources::Time};
 use winit::event::MouseButton;

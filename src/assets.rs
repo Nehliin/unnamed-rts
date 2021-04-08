@@ -17,6 +17,21 @@ pub struct Handle<T: AssetLoader> {
     _marker: PhantomData<T>,
 }
 
+impl<T: AssetLoader> Handle<T> {
+    pub fn get_id(&self) -> u32 {
+        self.id
+    }
+    // Unsafe because this may not be backed by anything in the asset storage.
+    // It doesn't actually risk any memory issues but might break semantics in a bad way
+    // Might be misue of unsafe keyword but sue me, I know it's hacky
+    pub(crate) unsafe fn new_raw_handle(id: u32) -> Self {
+        Handle {
+            id,
+            _marker: PhantomData::default(),
+        }
+    }
+}
+
 /*
  These needs to be manually implemented to avoid
  adding the requirement that T implement these

@@ -23,7 +23,7 @@ fn main() {
         .build(&event_loop)
         .expect("Failed to create window");
     let mut app = block_on(Engine::new(&window));
-    app.push_state(Box::new(EditState {}) as Box<dyn State>);
+    app.push_state(Box::new(EditState::default()) as Box<dyn State>);
     event_loop.run(move |event, _, control_flow| {
         if !app.event_handler(&event, &window.id()) {
             match event {

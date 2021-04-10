@@ -57,6 +57,8 @@ impl<T: AssetLoader> Clone for Handle<T> {
     }
 }
 
+impl<T: AssetLoader> Copy for Handle<T> {}
+
 impl<T: AssetLoader> Eq for Handle<T> {}
 
 static mut CURRENT_ID: AtomicU32 = AtomicU32::new(0);
@@ -101,7 +103,7 @@ impl<T: AssetLoader> Assets<T> {
             id: unsafe { CURRENT_ID.fetch_add(1, Ordering::AcqRel) },
             _marker: PhantomData::default(),
         };
-        self.gpu_load_queue.push_back((handle.clone(), pathbuf));
+        self.gpu_load_queue.push_back((handle, pathbuf));
         Ok(handle)
     }
 
@@ -115,7 +117,7 @@ impl<T: AssetLoader> Assets<T> {
         for (handle, path_buf) in load_queue.iter() {
             info!("Loading: {:?}", path_buf.as_os_str());
             let asset = T::load(path_buf, device, queue)?;
-            storage.insert(handle.clone(), asset);
+            storage.insert(*handle, asset);
         }
         Ok(())
     }

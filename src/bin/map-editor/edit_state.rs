@@ -49,7 +49,7 @@ impl State for EditState {
         command_receivers.push(debug_rc);
         command_receivers.push(lines_rc);
         let mut tex_assets = Assets::<UiTexture>::default();
-        let handle = tex_assets.load("rts.png").unwrap();
+        let handle = tex_assets.load("moon.png").unwrap();
         self.test_img = Some(handle);
         resources.insert(Assets::<GltfModel>::default());
         resources.insert(tex_assets);
@@ -152,7 +152,7 @@ impl State for EditState {
             .add_system(debug_lines_pass::update_bounding_boxes_system())
             .add_system(debug_lines_pass::draw_system())
             .add_system(editor_systems::editor_ui_system(Images {
-                img: self.test_img.clone().unwrap(),
+                img: self.test_img.unwrap(),
             }))
             .build()
     }

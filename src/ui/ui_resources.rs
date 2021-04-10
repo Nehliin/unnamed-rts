@@ -3,8 +3,8 @@ use crate::{
     graphics::texture::{allocate_simple_texture, TextureContent},
     resources::WindowSize,
 };
-use anyhow::Result;
 use anyhow::anyhow;
+use anyhow::Result;
 use egui::{vec2, CtxRef, RawInput};
 use image::{GenericImageView, ImageFormat};
 use once_cell::sync::OnceCell;
@@ -53,7 +53,32 @@ pub struct UiTexture<'a> {
     pub bind_group: wgpu::BindGroup,
 }
 
-impl UiTexture<'_> {
+impl<'a> UiTexture<'a> {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        label: &str,
+        content: TextureContent<'a>,
+    ) -> Self {
+        let texture = allocate_simple_texture(&device, &queue, &content, true);
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(format!("{}_texture_bind_group", label).as_str()),
+            layout: UiTexture::get_or_create_layout(device),
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(
+                    &texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                ),
+            }],
+        });
+
+        UiTexture {
+            content,
+            bind_group,
+        }
+    }
+
     pub fn get_or_create_layout(device: &wgpu::Device) -> &'static wgpu::BindGroupLayout {
         static LAYOUT: OnceCell<wgpu::BindGroupLayout> = OnceCell::new();
         LAYOUT.get_or_init(move || {
@@ -80,7 +105,7 @@ impl From<Handle<UiTexture<'_>>> for egui::TextureId {
     }
 }
 
-// bit of a hack  
+// bit of a hack
 impl TryFrom<egui::TextureId> for Handle<UiTexture<'_>> {
     type Error = anyhow::Error;
     fn try_from(texture_id: egui::TextureId) -> Result<Self> {
@@ -112,22 +137,7 @@ impl AssetLoader for UiTexture<'_> {
                 depth: 1,
             },
         };
-        let texture = allocate_simple_texture(device, queue, &content, true);
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("ui_user_texture_bind_group"),
-            layout: UiTexture::get_or_create_layout(device),
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(
-                    &texture.create_view(&wgpu::TextureViewDescriptor::default()),
-                ),
-            }],
-        });
-
-        Ok(UiTexture {
-            content,
-            bind_group,
-        })
+        Ok(UiTexture::new(device, queue, "custom_ui", content))
     }
 
     fn extensions() -> &'static [&'static str] {

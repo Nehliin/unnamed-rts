@@ -34,7 +34,6 @@ pub struct UiPass {
     vertex_buffers: Vec<SizedBuffer>,
     uniform_buffer: SizedBuffer,
     uniform_bind_group: wgpu::BindGroup,
-    texture_bind_group_layout: wgpu::BindGroupLayout,
     texture_bind_group: Option<wgpu::BindGroup>,
     texture_version: Option<u64>,
     pub command_sender: Sender<CommandBuffer>,
@@ -110,25 +109,13 @@ impl UiPass {
                 },
             ],
         });
-        // Todo change this
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("egui_texture_bind_group_layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                    },
-                    count: None,
-                }],
-            });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("egui_pipeline_layout"),
-            bind_group_layouts: &[&uniform_bind_group_layout, &texture_bind_group_layout],
+            bind_group_layouts: &[
+                &uniform_bind_group_layout,
+                UiTexture::get_or_create_layout(device),
+            ],
             push_constant_ranges: &[],
         });
 
@@ -176,7 +163,6 @@ impl UiPass {
             index_buffers: Vec::with_capacity(64),
             uniform_buffer,
             uniform_bind_group,
-            texture_bind_group_layout,
             texture_version: None,
             texture_bind_group: None,
             command_sender,
@@ -300,33 +286,9 @@ impl UiPass {
             return;
         }
         let content = TextureContent::from(egui_texture);
-        let bind_group = self.create_texture_bindgroup(device, queue, &content, "egui");
-
+        let ui_texture = UiTexture::new(device, queue, "egui", content);
         self.texture_version = Some(egui_texture.version);
-        self.texture_bind_group = Some(bind_group);
-    }
-
-    fn create_texture_bindgroup<'a>(
-        &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        egui_texture: &TextureContent<'a>,
-        label: &str,
-    ) -> wgpu::BindGroup {
-        let texture = allocate_simple_texture(&device, &queue, &egui_texture, true);
-
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(format!("{}_texture_bind_group", label).as_str()),
-            layout: &self.texture_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(
-                    &texture.create_view(&wgpu::TextureViewDescriptor::default()),
-                ),
-            }],
-        });
-
-        bind_group
+        self.texture_bind_group = Some(ui_texture.bind_group);
     }
 
     pub fn update_buffers(

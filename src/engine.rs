@@ -3,7 +3,7 @@ use crate::{
     resources::{Time, WindowSize},
     states::State,
     states::{StateStack, StateTransition},
-    ui::{ui_context::UiContext, ui_pass, ui_systems},
+    ui::{ui_pass, ui_resources::UiContext, ui_systems},
 };
 use crossbeam_channel::Receiver;
 use legion::{systems::Step, *};

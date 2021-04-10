@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use crate::{
+    assets::Assets,
     input::MouseMotion,
     resources::{Time, WindowSize},
 };
@@ -12,7 +13,10 @@ use winit::event::{ModifiersState, MouseButton, MouseScrollDelta};
 
 use crate::input::{self, EventReader};
 
-use super::{ui_context::UiContext, ui_pass::UiPass};
+use super::{
+    ui_pass::UiPass,
+    ui_resources::{UiContext, UiTexture},
+};
 
 fn handle_mouse_input(
     mouse_input: &input::MouseButtonState,
@@ -107,6 +111,11 @@ pub fn update_ui(
         }
     }
 
+    if let Some(modifier_state) = modifiers_changed.last_event() {
+        ui_ctx.modifier_state = *modifier_state;
+    }
+    ui_ctx.raw_input.modifiers = input::winit_to_egui_modifiers(ui_ctx.modifier_state);
+
     for text in text_input.events() {
         if is_printable(text.codepoint)
             && !ui_ctx.modifier_state.ctrl()
@@ -119,18 +128,12 @@ pub fn update_ui(
         }
     }
 
-    let modifiers = if let Some(modifier_state) = modifiers_changed.last_event() {
-        input::winit_to_egui_modifiers(*modifier_state)
-    } else {
-        ui_ctx.raw_input.modifiers
-    };
-
     for key in key_input.all_pressed_current_frame() {
         if let Some(key) = input::winit_to_egui_key_code(key) {
             ui_ctx.raw_input.events.push(egui::Event::Key {
                 key,
                 pressed: true,
-                modifiers,
+                modifiers: ui_ctx.raw_input.modifiers,
             })
         }
     }
@@ -140,7 +143,7 @@ pub fn update_ui(
             ui_ctx.raw_input.events.push(egui::Event::Key {
                 key,
                 pressed: false,
-                modifiers,
+                modifiers: ui_ctx.raw_input.modifiers,
             })
         }
     }
@@ -162,9 +165,9 @@ pub fn begin_ui_frame(
     #[resource] time: &Time,
     #[resource] ui_context: &mut UiContext,
 ) {
-    ui_context.update_time(time_since_start.elapsed().as_secs_f64());
+    ui_context.raw_input.time = Some(time_since_start.elapsed().as_secs_f64());
     ui_context.raw_input.predicted_dt = time.delta_time;
-    ui_context.begin_frame();
+    ui_context.context.begin_frame(ui_context.raw_input.take());
 }
 
 // TODO: handle user textures here
@@ -177,19 +180,25 @@ pub fn end_ui_frame(
     #[resource] device: &Device,
     #[resource] queue: &Queue,
     #[resource] current_frame: &SwapChainTexture,
+    #[resource] ui_textures: &Assets<UiTexture>,
     #[resource] window_size: &WindowSize,
 ) {
-    let (_output, commands) = ui_context.end_frame();
+    let (_output, commands) = ui_context.context.end_frame();
     let context = &ui_context.context;
     let paint_jobs = context.tessellate(commands);
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
         label: Some("Ui command encoder"),
     });
     pass.update_texture(&device, &queue, &context.texture());
-    pass.update_user_textures(&device, &queue);
     pass.update_buffers(&device, &queue, &paint_jobs, &window_size);
     // Record all render passes.
-    pass.execute(&mut encoder, &current_frame.view, &paint_jobs, &window_size);
+    pass.draw(
+        &mut encoder,
+        &current_frame.view,
+        &paint_jobs,
+        ui_textures,
+        &window_size,
+    );
     pass.command_sender
         .send(encoder.finish())
         .expect("Failed to send ui_render commands");

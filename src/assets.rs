@@ -17,6 +17,21 @@ pub struct Handle<T: AssetLoader> {
     _marker: PhantomData<T>,
 }
 
+impl<T: AssetLoader> Handle<T> {
+    pub fn get_id(&self) -> u32 {
+        self.id
+    }
+    // Unsafe because this may not be backed by anything in the asset storage.
+    // It doesn't actually risk any memory issues but might break semantics in a bad way
+    // Might be misue of unsafe keyword but sue me, I know it's hacky
+    pub(crate) unsafe fn new_raw_handle(id: u32) -> Self {
+        Handle {
+            id,
+            _marker: PhantomData::default(),
+        }
+    }
+}
+
 /*
  These needs to be manually implemented to avoid
  adding the requirement that T implement these
@@ -41,6 +56,8 @@ impl<T: AssetLoader> Clone for Handle<T> {
         }
     }
 }
+
+impl<T: AssetLoader> Copy for Handle<T> {}
 
 impl<T: AssetLoader> Eq for Handle<T> {}
 
@@ -86,7 +103,7 @@ impl<T: AssetLoader> Assets<T> {
             id: unsafe { CURRENT_ID.fetch_add(1, Ordering::AcqRel) },
             _marker: PhantomData::default(),
         };
-        self.gpu_load_queue.push_back((handle.clone(), pathbuf));
+        self.gpu_load_queue.push_back((handle, pathbuf));
         Ok(handle)
     }
 
@@ -100,7 +117,7 @@ impl<T: AssetLoader> Assets<T> {
         for (handle, path_buf) in load_queue.iter() {
             info!("Loading: {:?}", path_buf.as_os_str());
             let asset = T::load(path_buf, device, queue)?;
-            storage.insert(handle.clone(), asset);
+            storage.insert(*handle, asset);
         }
         Ok(())
     }

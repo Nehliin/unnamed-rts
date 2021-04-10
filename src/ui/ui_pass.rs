@@ -1,11 +1,14 @@
-use crate::resources::WindowSize;
+use crate::{assets::Assets, graphics::texture::*, resources::WindowSize};
 use bytemuck::{Pod, Zeroable};
 use crossbeam_channel::Sender;
+use std::convert::TryInto;
 use wgpu::{
     include_spirv,
     util::{BufferInitDescriptor, DeviceExt},
     CommandBuffer, Device,
 };
+
+use super::ui_resources::UiTexture;
 
 #[derive(Debug)]
 enum BufferType {
@@ -31,12 +34,8 @@ pub struct UiPass {
     vertex_buffers: Vec<SizedBuffer>,
     uniform_buffer: SizedBuffer,
     uniform_bind_group: wgpu::BindGroup,
-    texture_bind_group_layout: wgpu::BindGroupLayout,
     texture_bind_group: Option<wgpu::BindGroup>,
     texture_version: Option<u64>,
-    _next_user_texture_id: u64,
-    pending_user_textures: Vec<(u64, egui::Texture)>,
-    user_textures: Vec<Option<wgpu::BindGroup>>,
     pub command_sender: Sender<CommandBuffer>,
 }
 
@@ -111,24 +110,12 @@ impl UiPass {
             ],
         });
 
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("egui_texture_bind_group_layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                    },
-                    count: None,
-                }],
-            });
-
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("egui_pipeline_layout"),
-            bind_group_layouts: &[&uniform_bind_group_layout, &texture_bind_group_layout],
+            bind_group_layouts: &[
+                &uniform_bind_group_layout,
+                UiTexture::get_or_create_layout(device),
+            ],
             push_constant_ranges: &[],
         });
 
@@ -176,20 +163,17 @@ impl UiPass {
             index_buffers: Vec::with_capacity(64),
             uniform_buffer,
             uniform_bind_group,
-            texture_bind_group_layout,
             texture_version: None,
             texture_bind_group: None,
-            _next_user_texture_id: 0,
-            pending_user_textures: Vec::new(),
-            user_textures: Vec::new(),
             command_sender,
         }
     }
-    pub fn execute(
+    pub fn draw(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         color_attachment: &wgpu::TextureView,
         paint_jobs: &[egui::paint::ClippedMesh],
+        ui_textures: &Assets<UiTexture>,
         screen_descriptor: &WindowSize,
     ) {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -226,10 +210,10 @@ impl UiPass {
             let clip_max_y = scale_factor * clip_rect.max.y;
 
             // Make sure clip rect can fit within an `u32`.
-            let clip_min_x = egui::clamp(clip_min_x, 0.0..=physical_width as f32);
-            let clip_min_y = egui::clamp(clip_min_y, 0.0..=physical_height as f32);
-            let clip_max_x = egui::clamp(clip_max_x, clip_min_x..=physical_width as f32);
-            let clip_max_y = egui::clamp(clip_max_y, clip_min_y..=physical_height as f32);
+            let clip_min_x = clip_min_x.clamp(0.0, physical_width as f32);
+            let clip_min_y = clip_min_y.clamp(0.0, physical_height as f32);
+            let clip_max_x = clip_max_x.clamp(clip_min_x, physical_width as f32);
+            let clip_max_y = clip_max_y.clamp(clip_min_y, physical_height as f32);
 
             let clip_min_x = clip_min_x.round() as u32;
             let clip_min_y = clip_min_y.round() as u32;
@@ -252,7 +236,11 @@ impl UiPass {
 
             pass.set_scissor_rect(x, y, width, height);
 
-            pass.set_bind_group(1, self.get_texture_bind_group(mesh.texture_id), &[]);
+            pass.set_bind_group(
+                1,
+                self.get_texture_bind_group(mesh.texture_id, ui_textures),
+                &[],
+            );
 
             pass.set_index_buffer(index_buffer.buffer.slice(..), wgpu::IndexFormat::Uint32);
             pass.set_vertex_buffer(0, vertex_buffer.buffer.slice(..));
@@ -262,19 +250,26 @@ impl UiPass {
         pass.pop_debug_group();
     }
 
-    fn get_texture_bind_group(&self, texture_id: egui::TextureId) -> &wgpu::BindGroup {
+    fn get_texture_bind_group<'a>(
+        &'a self,
+        texture_id: egui::TextureId,
+        ui_textures: &'a Assets<UiTexture<'a>>,
+    ) -> &'a wgpu::BindGroup {
         match texture_id {
             egui::TextureId::Egui => self
                 .texture_bind_group
                 .as_ref()
                 .expect("egui texture was not set before the first draw"),
-            egui::TextureId::User(id) => {
-                let id = id as usize;
-                self.user_textures
-                    .get(id)
-                    .unwrap_or_else(|| panic!("user texture {} not found", id))
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("user texture {} freed", id))
+            egui::TextureId::User(_) => {
+                let handle = texture_id
+                    .try_into()
+                    .expect("Failed to convert ui texture to asset handle");
+                ui_textures
+                    .get(&handle)
+                    .map(|tex| &tex.bind_group)
+                    .unwrap_or_else(|| {
+                        panic!("user texture {} not found in assets", handle.get_id())
+                    })
             }
         }
     }
@@ -290,91 +285,12 @@ impl UiPass {
         if self.texture_version == Some(egui_texture.version) {
             return;
         }
-        // we need to convert the texture into rgba format
-        let mut pixels = Vec::new();
-        pixels.reserve(4 * pixels.len());
-        for &alpha in egui_texture.pixels.iter() {
-            pixels.extend(egui::Color32::from_white_alpha(alpha).to_array().iter());
-        }
-        let egui_texture = egui::Texture {
-            version: egui_texture.version,
-            width: egui_texture.width,
-            height: egui_texture.height,
-            pixels,
-        };
-        let bind_group = self.egui_texture_to_wgpu(device, queue, &egui_texture, "egui");
-
+        let content = TextureContent::from(egui_texture);
+        let ui_texture = UiTexture::new(device, queue, "egui", content);
         self.texture_version = Some(egui_texture.version);
-        self.texture_bind_group = Some(bind_group);
+        self.texture_bind_group = Some(ui_texture.bind_group);
     }
 
-    /// Updates the user textures that the app allocated. Should be called before `execute()`.
-    pub fn update_user_textures(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        let pending_user_textures = std::mem::take(&mut self.pending_user_textures);
-        for (id, texture) in pending_user_textures {
-            let bind_group = self.egui_texture_to_wgpu(
-                device,
-                queue,
-                &texture,
-                format!("user_texture{}", id).as_str(),
-            );
-            self.user_textures.push(Some(bind_group));
-        }
-    }
-
-    fn egui_texture_to_wgpu(
-        &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        egui_texture: &egui::Texture,
-        label: &str,
-    ) -> wgpu::BindGroup {
-        let size = wgpu::Extent3d {
-            width: egui_texture.width as u32,
-            height: egui_texture.height as u32,
-            depth: 1,
-        };
-
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some(format!("{}_texture", label).as_str()),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
-        });
-
-        queue.write_texture(
-            wgpu::TextureCopyView {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-            },
-            egui_texture.pixels.as_slice(),
-            wgpu::TextureDataLayout {
-                offset: 0,
-                bytes_per_row: (egui_texture.pixels.len() / egui_texture.height) as u32,
-                rows_per_image: egui_texture.height as u32,
-            },
-            size,
-        );
-
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(format!("{}_texture_bind_group", label).as_str()),
-            layout: &self.texture_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(
-                    &texture.create_view(&wgpu::TextureViewDescriptor::default()),
-                ),
-            }],
-        });
-
-        bind_group
-    }
-
-    /// Uploads the uniform, vertex and index data used by the render pass. Should be called before `execute()`.
     pub fn update_buffers(
         &mut self,
         device: &wgpu::Device,
@@ -431,7 +347,7 @@ impl UiPass {
         }
     }
 
-    /// Updates the buffers used by egui. Will properly re-size the buffers if needed.
+    // Updates the buffers used by egui. Will properly re-size the buffers if needed.
     fn update_buffer(
         &mut self,
         device: &wgpu::Device,

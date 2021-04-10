@@ -4,10 +4,11 @@ use glam::{Vec2, Vec3A, Vec4, Vec4Swizzles};
 use legion::*;
 use rayon::prelude::*;
 use unnamed_rts::{
+    assets::Handle,
     graphics::{camera::Camera, heightmap_pass::HeightMap},
     input::{CursorPosition, MouseButtonState},
     resources::{Time, WindowSize},
-    ui::ui_context::UiContext,
+    ui::ui_resources::{UiContext, UiTexture},
 };
 use winit::event::MouseButton;
 #[derive(Debug, Default)]
@@ -45,8 +46,13 @@ impl Default for HmEditorSettings {
     }
 }
 
+pub struct Images<'a> {
+    pub img: Handle<UiTexture<'a>>,
+}
+
 #[system]
 pub fn editor_ui(
+    #[state] state: &mut Images<'static>,
     #[resource] ui_context: &UiContext,
     #[resource] editor_settings: &mut EditorSettings,
 ) {
@@ -56,25 +62,23 @@ pub fn editor_ui(
             if editor_settings.edit_heightmap {
                 ui.collapsing("Heightmap settings", |ui| {
                     ui.add(
-                        egui::Slider::f32(
+                        egui::Slider::new(
                             &mut editor_settings.hm_settings.tool_radius,
                             1.0..=300.0,
                         )
                         .text("Radius"),
                     );
                     ui.add(
-                        egui::Slider::f32(
+                        egui::Slider::new(
                             &mut editor_settings.hm_settings.tool_strenght,
                             1.0..=10.0,
                         )
                         .text("Strenght"),
                     );
                     ui.checkbox(&mut editor_settings.hm_settings.inverted, "Invert");
-                    egui::combo_box_with_label(
-                        ui,
-                        "Edit mode",
-                        format!("{:?}", editor_settings.hm_settings.mode),
-                        |ui| {
+                    egui::ComboBox::from_label("Edit mode")
+                        .selected_text(format!("{:?}", editor_settings.hm_settings.mode))
+                        .show_ui(ui, |ui| {
                             ui.selectable_value(
                                 &mut editor_settings.hm_settings.mode,
                                 HmEditorMode::DisplacementMap,
@@ -85,8 +89,10 @@ pub fn editor_ui(
                                 HmEditorMode::ColorTexture,
                                 "Color Texture",
                             );
-                        },
-                    );
+                        });
+                    // test user textures
+                    let handle = state.img.into();
+                    ui.image(handle, [50.0, 50.0]);
                 });
             }
         });

@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 use glam::{Quat, Vec3};
 use legion::*;
 use unnamed_rts::{
-    assets::{self, Assets},
+    assets::{self, Assets, Handle},
     components::Transform,
     graphics::{
         camera::{self, Camera},
@@ -17,13 +17,18 @@ use unnamed_rts::{
     },
     resources::{DebugRenderSettings, WindowSize},
     states::{State, StateTransition},
+    ui::ui_resources::UiTexture,
 };
 use wgpu::{Device, Queue};
 
-use crate::editor_systems::{self, EditorSettings, HeightMapModificationState, HmEditorSettings};
+use crate::editor_systems::{
+    self, EditorSettings, HeightMapModificationState, HmEditorSettings, Images,
+};
 
-#[derive(Debug)]
-pub struct EditState {}
+#[derive(Debug, Default)]
+pub struct EditState {
+    test_img: Option<Handle<UiTexture<'static>>>,
+}
 
 // Very similar to game state atm
 impl State for EditState {
@@ -43,7 +48,11 @@ impl State for EditState {
         command_receivers.push(selectable_rc);
         command_receivers.push(debug_rc);
         command_receivers.push(lines_rc);
+        let mut tex_assets = Assets::<UiTexture>::default();
+        let handle = tex_assets.load("moon.png").unwrap();
+        self.test_img = Some(handle);
         resources.insert(Assets::<GltfModel>::default());
+        resources.insert(tex_assets);
 
         let device = resources.get::<Device>().expect("Device to be present");
         let grid_pass = grid_pass::GridPass::new(&device, debug_sender);
@@ -126,6 +135,7 @@ impl State for EditState {
     fn foreground_schedule(&self) -> legion::Schedule {
         Schedule::builder()
             .add_system(assets::asset_load_system::<GltfModel>())
+            .add_system(assets::asset_load_system::<UiTexture>())
             .add_system(camera::free_flying_camera_system())
             .add_system(model_pass::update_system())
             .add_system(lights::update_system())
@@ -141,7 +151,9 @@ impl State for EditState {
             .add_system(grid_pass::draw_system())
             .add_system(debug_lines_pass::update_bounding_boxes_system())
             .add_system(debug_lines_pass::draw_system())
-            .add_system(editor_systems::editor_ui_system())
+            .add_system(editor_systems::editor_ui_system(Images {
+                img: self.test_img.unwrap(),
+            }))
             .build()
     }
 }

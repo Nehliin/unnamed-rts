@@ -39,7 +39,7 @@ pub fn update_bounding_boxes(
             if !bounding_box_map.vertex_info_map.contains_key(&model_handle) {
                 let buffer = calc_buffer(&model.min_vertex, &model.max_vertex);
                 bounding_box_map.vertex_info_map.insert(
-                    model_handle.clone(),
+                    *model_handle,
                     VertexBuffer::allocate_immutable_buffer(&device, &buffer),
                 );
             }

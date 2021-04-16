@@ -75,7 +75,7 @@ impl State for EditState {
         let mut transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
         transform.scale = Vec3::splat(0.1);
         transform.rotation = Quat::from_rotation_x(PI / 2.0);
-        let map_size = 256;
+        let map_size = 512;
         let height_map = HeightMap::new(&device, &queue, map_size, transform);
 
         // render resources

@@ -263,7 +263,6 @@ fn draw_square_decal(stride: u32, center: Vec2, buffer: &mut [u8], hm_settings: 
                     let within_outer =
                         pos.cmpge(center - scaled_size_vec) & pos.cmple(center + scaled_size_vec);
                     let within_inner = pos.cmpge(center - size_vec) & pos.cmple(center + size_vec);
-                    //let in_between = within_outer & !within_inner;
                     if within_outer.all() && !within_inner.all() {
                         bytes[0] = 0;
                         bytes[1] = 255;
@@ -359,7 +358,7 @@ fn update_height_map_square(
     let size_vec = Vec2::splat(size);
     let scaled_size_vec = Vec2::splat(scaled_size);
     let strength = hm_settings.tool_strenght;
-    
+
     let proportional_change = |byte: &mut u8, proportion: f32| {
         if hm_settings.inverted {
             *byte = std::cmp::max(0, (*byte as f32 - strength * proportion).round() as u32) as u8;
@@ -382,21 +381,21 @@ fn update_height_map_square(
                 .for_each(|(y, chunk)| {
                     chunk.par_iter_mut().enumerate().for_each(|(x, byte)| {
                         let pos = vec2(x as f32, y as f32);
-                        let witin_inner =
+                        let within_inner =
                             pos.cmpge(center - size_vec) & pos.cmple(center + size_vec);
-                        let witin_outer = pos.cmpge(center - scaled_size_vec)
+                        let within_outer = pos.cmpge(center - scaled_size_vec)
                             & pos.cmple(center + scaled_size_vec);
-                        if witin_inner.all() {
+                        if within_inner.all() {
                             proportional_change(byte, 1.0);
-                        } else if witin_outer.all() {
+                        } else if within_outer.all() {
                             // bitmask is used to check individual boolean values of the vec
-                            if witin_inner.bitmask() & 1 != 0 {
+                            if within_inner.bitmask() & 1 != 0 {
                                 // // area
                                 let sign = (pos.y - center.y).signum();
                                 let d = pos.distance(Vec2::new(pos.x, center.y + size * sign));
                                 let max = scaled_size_vec.x;
                                 proportional_change(byte, (max - d) / max);
-                            } else if witin_inner.bitmask() & (1 << 1) != 0 {
+                            } else if within_inner.bitmask() & (1 << 1) != 0 {
                                 // xx area
                                 let sign = (pos.x - center.x).signum();
                                 let d = pos.distance(Vec2::new(center.x + size * sign, pos.y));

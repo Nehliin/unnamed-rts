@@ -25,6 +25,8 @@ pub enum HmEditorMode {
     ColorTexture,
 }
 
+// TODO: The actual buffer modification part of this should
+// probably live in a HeightMapTool trait
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum HmEditorTool {
     Square,
@@ -402,7 +404,6 @@ fn update_height_map_square(
                                 proportional_change(byte, (scaled_size - d) / scaled_size);
                             } else {
                                 // oo area
-                                // doesn't work?
                                 let dist_to_center = pos.distance(center);
                                 let d = dist_to_center - dist_center_to_corner;
                                 // god knows why this relation to the scalefactor holds true but it works?

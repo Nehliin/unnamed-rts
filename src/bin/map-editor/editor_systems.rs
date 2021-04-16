@@ -358,9 +358,8 @@ fn update_height_map_square(
     let scaled_size = size * scale_factor;
     let size_vec = Vec2::splat(size);
     let scaled_size_vec = Vec2::splat(scaled_size);
-    //let outer_size_factor = 2.5;
     let strength = hm_settings.tool_strenght;
-    // extract out?
+    
     let proportional_change = |byte: &mut u8, proportion: f32| {
         if hm_settings.inverted {
             *byte = std::cmp::max(0, (*byte as f32 - strength * proportion).round() as u32) as u8;

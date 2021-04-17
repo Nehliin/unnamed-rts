@@ -107,6 +107,19 @@ impl<T: AssetLoader> Assets<T> {
         Ok(handle)
     }
 
+    pub fn load_immediate(&mut self, path: impl AsRef<Path>, device: &Device, queue: &Queue) -> Result<T> {
+        let mut pathbuf = PathBuf::from("assets");
+        pathbuf.push(path.as_ref());
+
+        assert!(
+            T::extensions()
+                .iter()
+                .any(|ext| *ext == pathbuf.extension().unwrap()),
+            "Unexpected file extension"
+        );
+        T::load(&pathbuf, device, queue)
+    }
+
     #[inline]
     fn clear_load_queue_impl(
         load_queue: &VecDeque<(Handle<T>, PathBuf)>,

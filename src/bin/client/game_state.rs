@@ -130,8 +130,6 @@ impl State for GameState {
             .add_system(lights::update_system())
             .add_system(model_pass::draw_system())
             .add_system(selection_pass::draw_system())
-            .add_system(client_systems::height_map_modification_system())
-            .add_system(heightmap_pass::update_system())
             .add_system(heightmap_pass::draw_system())
             .add_system(client_systems::selection_system())
             .add_system(grid_pass::draw_system())

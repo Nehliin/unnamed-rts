@@ -166,11 +166,6 @@ impl<'a> HeightMap<'a> {
             height: size,
             depth: 1,
         };
-        println!(
-            "Color size: {}, dm size: {}",
-            color_buffer.len(),
-            displacement_buffer.len()
-        );
         let displacement_content = TextureContent {
             label: Some("Displacement map"),
             format: wgpu::TextureFormat::R8Unorm,
@@ -310,6 +305,28 @@ impl<'a> HeightMap<'a> {
         }
     }
 
+    pub fn update_heightmap_data(&mut self, queue: &wgpu::Queue) {
+        if self.needs_color_displacement_update {
+            update_texture_data(
+                &self.displacement_content,
+                &self.displacement_texture,
+                queue,
+            );
+            update_texture_data(&self.color_content, &self.color_texture, queue);
+            self.needs_color_displacement_update = false;
+        }
+
+        if self.needs_decal_update {
+            update_texture_data(
+                &self.decal_layer_content,
+                &self.decal_layer_texture,
+                queue,
+            );
+
+            self.needs_decal_update = false;
+        }
+    }
+
     pub fn get_name(&self) -> &str {
         &self.name
     }
@@ -426,7 +443,7 @@ impl AssetLoader for HeightMap<'_> {
     }
 
     fn extensions() -> &'static [&'static str] {
-       &["map"] 
+        &["map"]
     }
 }
 
@@ -492,25 +509,7 @@ impl HeightMapPass {
 
 #[system]
 pub fn update(#[resource] queue: &wgpu::Queue, #[resource] height_map: &mut HeightMap) {
-    if height_map.needs_color_displacement_update {
-        update_texture_data(
-            &height_map.displacement_content,
-            &height_map.displacement_texture,
-            queue,
-        );
-        update_texture_data(&height_map.color_content, &height_map.color_texture, queue);
-        height_map.needs_color_displacement_update = false;
-    }
-
-    if height_map.needs_decal_update {
-        update_texture_data(
-            &height_map.decal_layer_content,
-            &height_map.decal_layer_texture,
-            queue,
-        );
-
-        height_map.needs_decal_update = false;
-    }
+   height_map.update_heightmap_data(queue);
 }
 
 #[system]

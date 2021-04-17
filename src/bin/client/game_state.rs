@@ -5,10 +5,9 @@ use crate::{
 };
 use core::fmt::Debug;
 use crossbeam_channel::Receiver;
-use glam::{Quat, Vec3};
-use image::GenericImageView;
+use glam::Vec3;
 use legion::*;
-use std::{borrow::Cow, f32::consts::PI};
+use unnamed_rts::resources::{NetworkSerialization, WindowSize};
 use unnamed_rts::{
     assets::{self, Assets},
     graphics::{
@@ -20,14 +19,10 @@ use unnamed_rts::{
         heightmap_pass::{self, HeightMap},
         lights::{self, LightUniformBuffer},
         model_pass, selection_pass,
-        texture::TextureContent,
     },
     resources::DebugRenderSettings,
     states::{State, StateTransition},
-};
-use unnamed_rts::{
-    components::Transform,
-    resources::{NetworkSerialization, WindowSize},
+    ui::ui_resources::UiTexture,
 };
 use wgpu::{CommandBuffer, Device, Queue};
 
@@ -51,7 +46,6 @@ impl State for GameState {
         command_receivers.push(selectable_rc);
         command_receivers.push(debug_rc);
         command_receivers.push(lines_rc);
-        resources.insert(Assets::<GltfModel>::default());
         let device = resources.get::<Device>().expect("Device to be present");
         let grid_pass = grid_pass::GridPass::new(&device, debug_sender);
         let model_pass = model_pass::ModelPass::new(&device, model_sender);
@@ -62,9 +56,7 @@ impl State for GameState {
         let size = resources
             .get::<WindowSize>()
             .expect("Window size to be present");
-        let mut assets = resources
-            .get_mut::<Assets<GltfModel>>()
-            .expect("GltfAsset storage to be present");
+
         let queue = resources.get::<Queue>().expect("Queue to be present");
         let camera = Camera::new(
             &device,
@@ -74,41 +66,18 @@ impl State for GameState {
             size.physical_height,
         );
         let light_uniform = LightUniformBuffer::new(&device);
-        let img = image::io::Reader::open("assets/HeightMapExample.jpg")
-            .unwrap()
-            .decode()
-            .unwrap();
-        //TODO: use R16Float instead
-        let texture = TextureContent {
-            label: Some("Displacement map"),
-            format: wgpu::TextureFormat::R8Unorm,
-            bytes: Cow::Owned(img.as_luma8().expect("Grayscale displacement map").to_vec()),
-            stride: 1,
-            size: wgpu::Extent3d {
-                width: img.width(),
-                height: img.height(),
-                depth: 1,
-            },
-        };
-        let mut transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
-        transform.scale = Vec3::splat(0.1);
-        transform.rotation = Quat::from_rotation_x(PI / 2.0);
-
-        // Set up network and connect to server
-        let suit = assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
-        let height_map = HeightMap::from_textures(
-            &device,
-            &queue,
-            256,
-            texture,
-            TextureContent::checkerd(256),
-            transform,
-        );
+        let mut height_map_assets = Assets::<HeightMap>::default();
+        let height_map = height_map_assets.load_immediate("mymap.map", &device, &queue).unwrap();
+        let mut model_assets = Assets::<GltfModel>::default();
+        let suit = model_assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
         let depth_texture = DepthTexture::new(&device, size.physical_width, size.physical_height);
         drop(device);
-        drop(assets);
         drop(size);
         drop(queue);
+        resources.insert(Assets::<UiTexture>::default());
+        //resources.insert(height_map_assets);
+        resources.insert(model_assets);
+        resources.insert(height_map);
         resources.insert(model_pass);
         resources.insert(grid_pass);
         resources.insert(selection_pass);
@@ -116,11 +85,12 @@ impl State for GameState {
         resources.insert(debug_lines_pass);
         resources.insert(BoundingBoxMap::default());
         resources.insert(NetworkSerialization::default());
+
+        // Set up network and connect to server
         connect_to_server(world, resources);
         add_client_components(world, resources, &suit);
 
         resources.insert(depth_texture);
-        resources.insert(height_map);
         resources.insert(DebugRenderSettings {
             show_grid: true,
             show_bounding_boxes: true,

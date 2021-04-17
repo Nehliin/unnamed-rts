@@ -41,7 +41,6 @@ pub struct HmEditorSettings {
     pub tool_size: f32,
     pub max_height: u8,
     pub inverted: bool,
-    pub map_size: u32,
     pub mode: HmEditorMode,
 }
 
@@ -54,7 +53,6 @@ impl Default for HmEditorSettings {
             max_height: 255,
             inverted: false,
             mode: HmEditorMode::DisplacementMap,
-            map_size: 256,
         }
     }
 }
@@ -128,12 +126,19 @@ pub fn editor_ui(
                                     buffer.fill(0);
                                 }
                                 HmEditorMode::ColorTexture => {
+                                    let map_size = height_map.get_size();
                                     let (_, buffer) = height_map.get_color_buffer_mut();
                                    // TODO: unecessary allocation here but not as important within the editor
-                                    let checkerd = TextureContent::checkerd(settings.map_size);
+                                    let checkerd = TextureContent::checkerd(map_size);
                                     buffer.copy_from_slice(&checkerd.bytes);
                                 }
                             }
+                        }
+                        if ui.button("Save map").clicked() {
+                            use std::io::prelude::*;
+                            let serialized = height_map.to_serializable();
+                            let mut file = std::fs::File::create("mymap.map").unwrap();
+                            file.write_all(&bincode::serialize(&serialized).unwrap()).unwrap();
                         }
                         // test user textures
                         let handle = state.img.into();
@@ -146,8 +151,9 @@ pub fn editor_ui(
         ui.horizontal(|ui| {
             ui.columns(3, |columns| {
                 columns[1].label(format!(
-                    "Map editor: <name>, size: {}",
-                    editor_settings.hm_settings.map_size
+                    "Map editor: {}, size: {}",
+                    height_map.get_name(),
+                    height_map.get_size()
                 ));
             })
         });
@@ -208,6 +214,7 @@ pub fn height_map_modification(
                     }
                 }
             }
+            let map_size = height_map.get_size();
             // TODO: only do this if the intersection is within bounds
             let (stride, buffer) = height_map.get_decal_buffer_mut();
             // clear previous decal value, this is innefficient and should be changed to only clear previous
@@ -215,20 +222,20 @@ pub fn height_map_modification(
             buffer.fill(0);
             match hm_settings.tool {
                 HmEditorTool::Square => {
-                    draw_square_decal(stride, center, buffer, hm_settings);
+                    draw_square_decal(stride, center, buffer, hm_settings, map_size);
                 }
                 HmEditorTool::Circle => {
-                    draw_circle_decal(stride, center, buffer, hm_settings);
+                    draw_circle_decal(stride, center, buffer, hm_settings,  map_size);
                 }
             }
         }
     }
 }
 
-fn draw_circle_decal(stride: u32, center: Vec2, buffer: &mut [u8], hm_settings: &HmEditorSettings) {
+fn draw_circle_decal(stride: u32, center: Vec2, buffer: &mut [u8], hm_settings: &HmEditorSettings, map_size: u32) {
     let radius = hm_settings.tool_size;
     buffer
-        .par_chunks_exact_mut((hm_settings.map_size * stride) as usize)
+        .par_chunks_exact_mut((map_size * stride) as usize)
         .enumerate()
         .for_each(|(y, chunk)| {
             chunk
@@ -246,13 +253,13 @@ fn draw_circle_decal(stride: u32, center: Vec2, buffer: &mut [u8], hm_settings: 
         });
 }
 
-fn draw_square_decal(stride: u32, center: Vec2, buffer: &mut [u8], hm_settings: &HmEditorSettings) {
+fn draw_square_decal(stride: u32, center: Vec2, buffer: &mut [u8], hm_settings: &HmEditorSettings, map_size: u32) {
     let size = hm_settings.tool_size;
     let size_vec = Vec2::splat(size);
     let scaled_size_vec = Vec2::splat(size + 2.0);
 
     buffer
-        .par_chunks_exact_mut((hm_settings.map_size * stride) as usize)
+        .par_chunks_exact_mut((map_size * stride) as usize)
         .enumerate()
         .for_each(|(y, chunk)| {
             chunk
@@ -284,9 +291,10 @@ fn update_height_map_circular(
     // TODO: Not very performance frendly
     match hm_settings.mode {
         HmEditorMode::DisplacementMap => {
+            let map_size = height_map.get_size();
             let (_, buffer) = height_map.get_displacement_buffer_mut();
             buffer
-                .par_chunks_exact_mut(hm_settings.map_size as usize)
+                .par_chunks_exact_mut(map_size as usize)
                 .enumerate()
                 .for_each(|(y, chunk)| {
                     chunk.par_iter_mut().enumerate().for_each(|(x, byte)| {
@@ -308,9 +316,10 @@ fn update_height_map_circular(
                 });
         }
         HmEditorMode::ColorTexture => {
+            let map_size = height_map.get_size();
             let (stride, buffer) = height_map.get_color_buffer_mut();
             buffer
-                .par_chunks_exact_mut((hm_settings.map_size * stride) as usize)
+                .par_chunks_exact_mut((map_size * stride) as usize)
                 .enumerate()
                 .for_each(|(y, chunk)| {
                     chunk
@@ -374,9 +383,10 @@ fn update_height_map_square(
     // TODO: Not very performance frendly
     match hm_settings.mode {
         HmEditorMode::DisplacementMap => {
+            let map_size = height_map.get_size();
             let (_, buffer) = height_map.get_displacement_buffer_mut();
             buffer
-                .par_chunks_exact_mut(hm_settings.map_size as usize)
+                .par_chunks_exact_mut(map_size as usize)
                 .enumerate()
                 .for_each(|(y, chunk)| {
                     chunk.par_iter_mut().enumerate().for_each(|(x, byte)| {

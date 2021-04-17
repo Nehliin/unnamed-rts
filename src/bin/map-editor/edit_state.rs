@@ -21,9 +21,7 @@ use unnamed_rts::{
 };
 use wgpu::{Device, Queue};
 
-use crate::editor_systems::{
-    self, EditorSettings, HeightMapModificationState, HmEditorSettings, Images,
-};
+use crate::editor_systems::{self, EditorSettings, HeightMapModificationState, Images};
 
 #[derive(Debug, Default)]
 pub struct EditState {
@@ -75,8 +73,7 @@ impl State for EditState {
         let mut transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
         transform.scale = Vec3::splat(0.1);
         transform.rotation = Quat::from_rotation_x(PI / 2.0);
-        let map_size = 512;
-        let height_map = HeightMap::new(&device, &queue, map_size, transform);
+        let height_map = HeightMap::new(&device, &queue, "MyMap".to_string(), 512, transform);
 
         // render resources
         let depth_texture = DepthTexture::new(&device, size.physical_width, size.physical_height);
@@ -95,13 +92,7 @@ impl State for EditState {
             show_grid: true,
             show_bounding_boxes: true,
         });
-        let editor_settings = EditorSettings {
-            hm_settings: HmEditorSettings {
-                map_size,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
+        let editor_settings = EditorSettings::default();
         resources.insert(editor_settings);
         resources.insert(depth_texture);
         resources.insert(height_map);

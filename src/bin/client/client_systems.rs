@@ -81,7 +81,6 @@ pub fn move_action(
     }
 }
 
-
 #[system]
 pub fn selection(
     world: &mut SubWorld,

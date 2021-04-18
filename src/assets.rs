@@ -107,7 +107,12 @@ impl<T: AssetLoader> Assets<T> {
         Ok(handle)
     }
 
-    pub fn load_immediate(&mut self, path: impl AsRef<Path>, device: &Device, queue: &Queue) -> Result<T> {
+    pub fn load_immediate(
+        &mut self,
+        path: impl AsRef<Path>,
+        device: &Device,
+        queue: &Queue,
+    ) -> Result<T> {
         let mut pathbuf = PathBuf::from("assets");
         pathbuf.push(path.as_ref());
 

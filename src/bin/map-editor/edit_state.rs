@@ -21,7 +21,7 @@ use unnamed_rts::{
 };
 use wgpu::{Device, Queue};
 
-use crate::editor_systems::{self, EditorSettings, HeightMapModificationState, Images};
+use crate::editor_systems::{self, EditorSettings, HeightMapModificationState, UiState};
 
 #[derive(Debug, Default)]
 pub struct EditState {
@@ -86,6 +86,7 @@ impl State for EditState {
         resources.insert(grid_pass);
         resources.insert(selection_pass);
         resources.insert(heightmap_pass);
+        resources.insert(Assets::<HeightMap>::default());
         resources.insert(debug_lines_pass);
         resources.insert(BoundingBoxMap::default());
         resources.insert(DebugRenderSettings {
@@ -142,8 +143,10 @@ impl State for EditState {
             .add_system(grid_pass::draw_system())
             .add_system(debug_lines_pass::update_bounding_boxes_system())
             .add_system(debug_lines_pass::draw_system())
-            .add_system(editor_systems::editor_ui_system(Images {
+            .add_system(editor_systems::editor_ui_system(UiState {
                 img: self.test_img.unwrap(),
+                show_load_popup: false,
+                load_error_label: None,
             }))
             .build()
     }

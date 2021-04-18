@@ -67,7 +67,9 @@ impl State for GameState {
         );
         let light_uniform = LightUniformBuffer::new(&device);
         let mut height_map_assets = Assets::<HeightMap>::default();
-        let height_map = height_map_assets.load_immediate("mymap.map", &device, &queue).unwrap();
+        let height_map = height_map_assets
+            .load_immediate("mymap.map", &device, &queue)
+            .unwrap();
         let mut model_assets = Assets::<GltfModel>::default();
         let suit = model_assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
         let depth_texture = DepthTexture::new(&device, size.physical_width, size.physical_height);

@@ -317,11 +317,7 @@ impl<'a> HeightMap<'a> {
         }
 
         if self.needs_decal_update {
-            update_texture_data(
-                &self.decal_layer_content,
-                &self.decal_layer_texture,
-                queue,
-            );
+            update_texture_data(&self.decal_layer_content, &self.decal_layer_texture, queue);
 
             self.needs_decal_update = false;
         }
@@ -509,7 +505,7 @@ impl HeightMapPass {
 
 #[system]
 pub fn update(#[resource] queue: &wgpu::Queue, #[resource] height_map: &mut HeightMap) {
-   height_map.update_heightmap_data(queue);
+    height_map.update_heightmap_data(queue);
 }
 
 #[system]

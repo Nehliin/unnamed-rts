@@ -318,7 +318,6 @@ impl<'a> HeightMap<'a> {
 
         if self.needs_decal_update {
             update_texture_data(&self.decal_layer_content, &self.decal_layer_texture, queue);
-
             self.needs_decal_update = false;
         }
     }

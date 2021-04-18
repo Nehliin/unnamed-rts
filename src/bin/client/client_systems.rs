@@ -2,12 +2,11 @@ use std::net::SocketAddr;
 
 use glam::*;
 use legion::{world::SubWorld, *};
-use rayon::prelude::*;
 use unnamed_rts::components::*;
 use unnamed_rts::resources::*;
 use unnamed_rts::{
     assets::{Assets, Handle},
-    graphics::{camera::Camera, gltf::GltfModel, heightmap_pass::HeightMap},
+    graphics::{camera::Camera, gltf::GltfModel},
     input::{CursorPosition, MouseButtonState},
     ui::ui_resources::UiContext,
 };

@@ -77,7 +77,6 @@ impl State for GameState {
         drop(size);
         drop(queue);
         resources.insert(Assets::<UiTexture>::default());
-        //resources.insert(height_map_assets);
         resources.insert(model_assets);
         resources.insert(height_map);
         resources.insert(model_pass);

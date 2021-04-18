@@ -7,9 +7,11 @@ use core::fmt::Debug;
 use crossbeam_channel::Receiver;
 use glam::Vec3;
 use legion::*;
-use unnamed_rts::resources::{NetworkSerialization, WindowSize};
+use navmesh::NavMesh;
+use navmesh_pass::DrawableNavMesh;
 use unnamed_rts::{
     assets::{self, Assets},
+    components::Transform,
     graphics::{
         camera::{self, Camera},
         common::DepthTexture,
@@ -23,6 +25,10 @@ use unnamed_rts::{
     resources::DebugRenderSettings,
     states::{State, StateTransition},
     ui::ui_resources::UiTexture,
+};
+use unnamed_rts::{
+    graphics::navmesh_pass,
+    resources::{NetworkSerialization, WindowSize},
 };
 use wgpu::{CommandBuffer, Device, Queue};
 
@@ -41,17 +47,20 @@ impl State for GameState {
         let (heightmap_sender, heightmap_rc) = crossbeam_channel::bounded(1);
         let (lines_sender, lines_rc) = crossbeam_channel::bounded(1);
         let (selectable_sender, selectable_rc) = crossbeam_channel::bounded(1);
+        let (navmesh_sender, navmesh_rc) = crossbeam_channel::bounded(1);
         command_receivers.push(model_rc);
         command_receivers.push(heightmap_rc);
         command_receivers.push(selectable_rc);
         command_receivers.push(debug_rc);
         command_receivers.push(lines_rc);
+        command_receivers.push(navmesh_rc);
         let device = resources.get::<Device>().expect("Device to be present");
         let grid_pass = grid_pass::GridPass::new(&device, debug_sender);
         let model_pass = model_pass::ModelPass::new(&device, model_sender);
         let selection_pass = selection_pass::SelectionPass::new(&device, selectable_sender);
         let heightmap_pass = heightmap_pass::HeightMapPass::new(&device, heightmap_sender);
         let debug_lines_pass = debug_lines_pass::DebugLinesPass::new(&device, lines_sender);
+        let navmesh_pass = navmesh_pass::NavMeshPass::new(&device, navmesh_sender);
 
         let size = resources
             .get::<WindowSize>()
@@ -73,6 +82,27 @@ impl State for GameState {
         let mut model_assets = Assets::<GltfModel>::default();
         let suit = model_assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
         let depth_texture = DepthTexture::new(&device, size.physical_width, size.physical_height);
+
+        let vertices = vec![
+            (0.0, 0.0, 0.0).into(), // 0
+            (1.0, 0.0, 0.0).into(), // 1
+            (2.0, 0.0, 1.0).into(), // 2
+            (0.0, 1.0, 0.0).into(), // 3
+            (1.0, 1.0, 0.0).into(), // 4
+            (2.0, 1.0, 1.0).into(), // 5
+        ];
+        let triangles = vec![
+            (0, 1, 4).into(), // 0
+            (4, 3, 0).into(), // 1
+            (1, 2, 5).into(), // 2
+            (5, 4, 1).into(), // 3
+        ];
+
+        let mesh = NavMesh::new(vertices, triangles).unwrap();
+        world.push((
+            DrawableNavMesh::new(&device, mesh),
+            Transform::from_position(Vec3::Y),
+        ));
         drop(device);
         drop(size);
         drop(queue);
@@ -84,6 +114,7 @@ impl State for GameState {
         resources.insert(selection_pass);
         resources.insert(heightmap_pass);
         resources.insert(debug_lines_pass);
+        resources.insert(navmesh_pass);
         resources.insert(BoundingBoxMap::default());
         resources.insert(NetworkSerialization::default());
 
@@ -136,6 +167,7 @@ impl State for GameState {
             .add_system(grid_pass::draw_system())
             .add_system(debug_lines_pass::update_bounding_boxes_system())
             .add_system(debug_lines_pass::draw_system())
+            .add_system(navmesh_pass::draw_system())
             .add_system(client_systems::draw_debug_ui_system())
             .add_system(client_systems::move_action_system())
             .add_system(client_network::server_update_system())

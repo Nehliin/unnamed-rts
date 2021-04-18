@@ -6,6 +6,7 @@ pub mod grid_pass;
 pub mod heightmap_pass;
 pub mod lights;
 pub mod model_pass;
+pub mod navmesh_pass;
 pub mod selection_pass;
 pub mod texture;
 pub mod vertex_buffers;

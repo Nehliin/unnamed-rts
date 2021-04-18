@@ -3,12 +3,14 @@ use super::{
     camera::Camera, common::DepthTexture, common::DEPTH_FORMAT, texture::update_texture_data,
 };
 use super::{gltf::InstanceData, vertex_buffers::ImmutableVertexData};
-use crate::components::Transform;
+use crate::{assets::AssetLoader, components::Transform};
+use anyhow::Context;
 use bytemuck::{Pod, Zeroable};
 use crossbeam_channel::Sender;
 use glam::Vec2;
 use legion::{self, *};
 use once_cell::sync::OnceCell;
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use wgpu::{
     include_spirv,
@@ -45,7 +47,18 @@ impl VertexBuffer for MapVertex {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SerilizableHeightMap {
+    size: u32,
+    name: String,
+    displacement_buffer: Vec<u8>,
+    color_buffer: Vec<u8>,
+    transform: Transform,
+}
+
+#[derive(Debug)]
 pub struct HeightMap<'a> {
+    name: String,
     vertex_buffer: ImmutableVertexData<MapVertex>,
     index_buffer: wgpu::Buffer,
     num_indexes: u32,
@@ -108,6 +121,7 @@ impl<'a> HeightMap<'a> {
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        name: String,
         size: u32,
         transform: Transform,
     ) -> HeightMap<'a> {
@@ -127,6 +141,7 @@ impl<'a> HeightMap<'a> {
         HeightMap::from_textures(
             device,
             queue,
+            name,
             size,
             texture,
             TextureContent::checkerd(size),
@@ -134,9 +149,52 @@ impl<'a> HeightMap<'a> {
         )
     }
 
+    pub fn from_serialized(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        serialized_height_map: SerilizableHeightMap,
+    ) -> HeightMap<'a> {
+        let SerilizableHeightMap {
+            size,
+            name,
+            displacement_buffer,
+            color_buffer,
+            transform,
+        } = serialized_height_map;
+        let texture_size = wgpu::Extent3d {
+            width: size,
+            height: size,
+            depth: 1,
+        };
+        let displacement_content = TextureContent {
+            label: Some("Displacement map"),
+            format: wgpu::TextureFormat::R8Unorm,
+            bytes: Cow::Owned(displacement_buffer),
+            stride: 1,
+            size: texture_size,
+        };
+        let color_content = TextureContent {
+            label: Some("Color texture map"),
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            bytes: Cow::Owned(color_buffer),
+            stride: 4,
+            size: texture_size,
+        };
+        HeightMap::from_textures(
+            device,
+            queue,
+            name,
+            size,
+            displacement_content,
+            color_content,
+            transform,
+        )
+    }
+
     pub fn from_textures(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        name: String,
         size: u32,
         displacement_content: TextureContent<'a>,
         color_content: TextureContent<'a>,
@@ -163,8 +221,9 @@ impl<'a> HeightMap<'a> {
 
         let displacement_view =
             displacement_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let displacement_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("DisplacementMap texture sampler"),
+
+        let create_sampler = |label: &'static str| wgpu::SamplerDescriptor {
+            label: Some(label),
             address_mode_u: wgpu::AddressMode::Repeat,
             address_mode_v: wgpu::AddressMode::Repeat,
             address_mode_w: wgpu::AddressMode::Repeat,
@@ -174,33 +233,16 @@ impl<'a> HeightMap<'a> {
             lod_min_clamp: -100.0,
             lod_max_clamp: 100.0,
             ..Default::default()
-        });
+        };
+        let displacement_sampler =
+            device.create_sampler(&create_sampler("DisplacementMap texture sampler"));
         let color_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let color_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("Heightmap color texture sampler"),
-            address_mode_u: wgpu::AddressMode::Repeat,
-            address_mode_v: wgpu::AddressMode::Repeat,
-            address_mode_w: wgpu::AddressMode::Repeat,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            lod_min_clamp: -100.0,
-            lod_max_clamp: 100.0,
-            ..Default::default()
-        });
+        let color_sampler =
+            device.create_sampler(&create_sampler("Heightmap color texture sampler"));
         let decal_view = decal_layer_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let decal_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("Heightmap decal layer texture sampler"),
-            address_mode_u: wgpu::AddressMode::Repeat,
-            address_mode_v: wgpu::AddressMode::Repeat,
-            address_mode_w: wgpu::AddressMode::Repeat,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            lod_min_clamp: -100.0,
-            lod_max_clamp: 100.0,
-            ..Default::default()
-        });
+        let decal_sampler =
+            device.create_sampler(&create_sampler("Heightmap decal layer texture sampler"));
+
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &Self::get_or_create_layout(device),
             entries: &[
@@ -232,6 +274,7 @@ impl<'a> HeightMap<'a> {
             label: Some("HeightMap bindgroup"),
         });
         HeightMap {
+            name,
             vertex_buffer,
             index_buffer,
             instance_buffer,
@@ -250,6 +293,40 @@ impl<'a> HeightMap<'a> {
         }
     }
 
+    pub fn to_serializable(&self) -> SerilizableHeightMap {
+        let displacement_buffer = self.displacement_content.bytes.clone().into_owned();
+        let color_buffer = self.color_content.bytes.clone().into_owned();
+        SerilizableHeightMap {
+            size: self.size,
+            name: self.name.clone(),
+            displacement_buffer,
+            color_buffer,
+            transform: self.transform,
+        }
+    }
+
+    pub fn update_heightmap_data(&mut self, queue: &wgpu::Queue) {
+        if self.needs_color_displacement_update {
+            update_texture_data(
+                &self.displacement_content,
+                &self.displacement_texture,
+                queue,
+            );
+            update_texture_data(&self.color_content, &self.color_texture, queue);
+            self.needs_color_displacement_update = false;
+        }
+
+        if self.needs_decal_update {
+            update_texture_data(&self.decal_layer_content, &self.decal_layer_texture, queue);
+            self.needs_decal_update = false;
+        }
+    }
+
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
+    #[inline]
     pub fn get_size(&self) -> u32 {
         self.size
     }
@@ -348,6 +425,23 @@ impl<'a> HeightMap<'a> {
     }
 }
 
+impl AssetLoader for HeightMap<'_> {
+    fn load(
+        path: &std::path::Path,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> anyhow::Result<Self> {
+        let map_file = std::fs::File::open(path)?;
+        let seriliziable_map = bincode::deserialize_from(map_file)
+            .with_context(|| "HeightMap file is invalid or from older map editor version")?;
+        Ok(HeightMap::from_serialized(device, queue, seriliziable_map))
+    }
+
+    fn extensions() -> &'static [&'static str] {
+        &["map"]
+    }
+}
+
 pub struct HeightMapPass {
     render_pipeline: wgpu::RenderPipeline,
     command_sender: Sender<wgpu::CommandBuffer>,
@@ -410,25 +504,7 @@ impl HeightMapPass {
 
 #[system]
 pub fn update(#[resource] queue: &wgpu::Queue, #[resource] height_map: &mut HeightMap) {
-    if height_map.needs_color_displacement_update {
-        update_texture_data(
-            &height_map.displacement_content,
-            &height_map.displacement_texture,
-            queue,
-        );
-        update_texture_data(&height_map.color_content, &height_map.color_texture, queue);
-        height_map.needs_color_displacement_update = false;
-    }
-
-    if height_map.needs_decal_update {
-        update_texture_data(
-            &height_map.decal_layer_content,
-            &height_map.decal_layer_texture,
-            queue,
-        );
-
-        height_map.needs_decal_update = false;
-    }
+    height_map.update_heightmap_data(queue);
 }
 
 #[system]

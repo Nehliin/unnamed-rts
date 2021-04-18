@@ -2,12 +2,11 @@ use std::net::SocketAddr;
 
 use glam::*;
 use legion::{world::SubWorld, *};
-use rayon::prelude::*;
 use unnamed_rts::components::*;
 use unnamed_rts::resources::*;
 use unnamed_rts::{
     assets::{Assets, Handle},
-    graphics::{camera::Camera, gltf::GltfModel, heightmap_pass::HeightMap},
+    graphics::{camera::Camera, gltf::GltfModel},
     input::{CursorPosition, MouseButtonState},
     ui::ui_resources::UiContext,
 };
@@ -78,59 +77,6 @@ pub fn move_action(
                 }
             }
         });
-    }
-}
-
-// TODO: remove this from client, should only be part of map editor
-#[system]
-pub fn height_map_modification(
-    #[resource] camera: &Camera,
-    #[resource] mouse_button_state: &MouseButtonState,
-    #[resource] mouse_pos: &CursorPosition,
-    #[resource] window_size: &WindowSize,
-    #[resource] time: &Time,
-    #[resource] height_map: &mut HeightMap,
-) {
-    if mouse_button_state.is_pressed(&MouseButton::Left) {
-        let ray = camera.raycast(mouse_pos, window_size);
-        // check intersection with the heightmap
-        let normal = Vec3A::new(0.0, 1.0, 0.0);
-        let denominator = normal.dot(ray.direction);
-        if denominator.abs() > 0.0001 {
-            // it isn't parallel to the plane
-            // (camera can still theoretically be within the height_map but don't care about that)
-            let height_map_pos: Vec3A = height_map.get_transform().translation.into();
-            let t = (height_map_pos - ray.origin).dot(normal) / denominator;
-            if t >= 0.0 {
-                // there was an intersection
-                let target = (t * ray.direction) + ray.origin;
-                let local_coords = height_map.get_transform().get_model_matrix().inverse()
-                    * Vec4::new(target.x, target.y, target.z, 1.0);
-                let radius = 20.0;
-                let strenght = 350.0_f32;
-                let center = local_coords.xy();
-                // assuming row order
-                // TODO: Not very performance frendly
-                let size = height_map.get_size() as usize;
-                let (_, buffer) = height_map.get_displacement_buffer_mut();
-                buffer
-                    .par_chunks_exact_mut(size)
-                    .enumerate()
-                    .for_each(|(y, chunk)| {
-                        chunk.iter_mut().enumerate().for_each(|(x, byte)| {
-                            let distance = Vec2::new(x as f32, y as f32).distance(center);
-                            if distance < radius {
-                                let raise =
-                                    (strenght * (radius - distance) / radius) * time.delta_time;
-                                *byte = std::cmp::min(
-                                    255,
-                                    (*byte as f32 + raise as f32).round() as u32,
-                                ) as u8;
-                            }
-                        })
-                    });
-            }
-        }
     }
 }
 

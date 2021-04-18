@@ -1,6 +1,5 @@
 use rayon::prelude::*;
 use std::borrow::Cow;
-
 use wgpu::{Device, Queue};
 
 #[derive(Debug, Clone)]

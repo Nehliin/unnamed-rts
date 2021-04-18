@@ -1,8 +1,7 @@
 use super::{
     camera::Camera,
-    common::{DepthTexture, DEPTH_FORMAT},
+    common::{DepthTexture, InstanceData, DEPTH_FORMAT},
     gltf::GltfModel,
-    gltf::InstanceData,
     vertex_buffers::{ImmutableVertexData, VertexBuffer, VertexBufferData},
 };
 use crate::components::Transform;

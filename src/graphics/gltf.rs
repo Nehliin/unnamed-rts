@@ -1,4 +1,4 @@
-use super::texture::*;
+use super::{common::InstanceData, texture::*};
 use crate::assets::AssetLoader;
 use crate::graphics::vertex_buffers::*;
 use anyhow::Result;
@@ -75,49 +75,7 @@ impl VertexBuffer for MeshVertex {
         ]
     }
 }
-#[repr(C)]
-#[derive(Debug, Default, Clone, Copy, Pod, Zeroable)]
-//TODO: The perspective part isn't needed here
-pub struct InstanceData {
-    model_matrix: Mat4,
-}
 
-impl InstanceData {
-    pub fn new(model_matrix: Mat4) -> Self {
-        InstanceData { model_matrix }
-    }
-}
-
-const ROW_SIZE: BufferAddress = (std::mem::size_of::<f32>() * 4) as BufferAddress;
-
-impl VertexBuffer for InstanceData {
-    const STEP_MODE: wgpu::InputStepMode = wgpu::InputStepMode::Instance;
-
-    fn get_attributes<'a>() -> &'a [wgpu::VertexAttribute] {
-        &[
-            VertexAttribute {
-                offset: 0,
-                format: VertexFormat::Float4,
-                shader_location: 5,
-            },
-            VertexAttribute {
-                offset: ROW_SIZE,
-                format: VertexFormat::Float4,
-                shader_location: 6,
-            },
-            VertexAttribute {
-                offset: ROW_SIZE * 2,
-                format: VertexFormat::Float4,
-                shader_location: 7,
-            },
-            VertexAttribute {
-                offset: ROW_SIZE * 3,
-                format: VertexFormat::Float4,
-                shader_location: 8,
-            },
-        ]
-    }
-}
 #[derive(Debug)]
 struct PbrMaterialTexture {
     sampler: wgpu::Sampler,

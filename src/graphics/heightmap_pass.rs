@@ -1,8 +1,9 @@
 #![allow(dead_code)]
+use super::common::InstanceData;
+use super::vertex_buffers::ImmutableVertexData;
 use super::{
     camera::Camera, common::DepthTexture, common::DEPTH_FORMAT, texture::update_texture_data,
 };
-use super::{gltf::InstanceData, vertex_buffers::ImmutableVertexData};
 use crate::{assets::AssetLoader, components::Transform};
 use anyhow::Context;
 use bytemuck::{Pod, Zeroable};

@@ -6,10 +6,11 @@ use wgpu::include_spirv;
 
 use super::{
     camera::Camera,
-    common::{DepthTexture, DEPTH_FORMAT},
+    common::{DepthTexture, InstanceData, DEPTH_FORMAT},
     gltf::GltfModel,
+    gltf::MeshVertex,
     gltf::PbrMaterial,
-    gltf::{InstanceData, MeshVertex},
+    gltf::INSTANCE_BUFFER_LEN,
     lights::LightUniformBuffer,
     vertex_buffers::VertexBuffer,
 };
@@ -89,6 +90,7 @@ pub fn draw(
         let (transforms, models) = chunk.get_components();
         if let Some(model) = models.get(0) {
             let model = asset_storage.get(model).unwrap();
+            debug_assert!(transforms.len() < INSTANCE_BUFFER_LEN);
             model.draw_instanced(&mut render_pass, 0..transforms.len() as u32);
         }
     });

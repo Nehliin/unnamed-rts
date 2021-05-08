@@ -70,7 +70,7 @@ impl State for EditState {
             size.physical_width,
             size.physical_height,
         );
-        let mut transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
+        let mut transform = Transform::from_position(Vec3::ZERO);
         transform.scale = Vec3::splat(0.1);
         transform.rotation = Quat::from_rotation_x(PI / 2.0);
         let height_map = HeightMap::new(&device, &queue, "MyMap".to_string(), 512, transform);

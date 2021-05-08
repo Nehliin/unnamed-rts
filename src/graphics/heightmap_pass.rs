@@ -25,8 +25,8 @@ use super::{
 #[repr(C)]
 #[derive(Debug, Pod, Zeroable, Clone, Copy)]
 pub struct MapVertex {
-    position: Vec2,
-    tex_coords: Vec2,
+    pub position: Vec2,
+    pub tex_coords: Vec2,
 }
 
 impl VertexBuffer for MapVertex {
@@ -78,7 +78,7 @@ pub struct HeightMap<'a> {
     size: u32,
 }
 
-fn create_vertecies(size: u32) -> (Vec<MapVertex>, Vec<u32>) {
+pub fn create_quads(size: u32) -> (Vec<MapVertex>, Vec<u32>) {
     let mut vertecies = Vec::with_capacity((size * size) as usize);
     let mut indicies: Vec<u32> = Vec::with_capacity((size * size) as usize);
     for i in 0..size {
@@ -201,7 +201,7 @@ impl<'a> HeightMap<'a> {
         color_content: TextureContent<'a>,
         transform: Transform,
     ) -> HeightMap<'a> {
-        let (vertecies, indicies) = create_vertecies(size);
+        let (vertecies, indicies) = create_quads(size);
         let num_indexes = indicies.len() as u32;
         let vertex_buffer = MapVertex::allocate_immutable_buffer(device, &vertecies);
         let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -341,6 +341,13 @@ impl<'a> HeightMap<'a> {
         (
             self.displacement_content.stride,
             self.displacement_content.bytes.to_mut(),
+        )
+    }
+
+    pub fn get_displacement_buffer(&self) -> (u32, &[u8]) {
+        (
+            self.displacement_content.stride,
+            self.displacement_content.bytes.as_ref(),
         )
     }
 

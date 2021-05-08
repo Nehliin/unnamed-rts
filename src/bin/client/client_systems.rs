@@ -2,7 +2,6 @@ use std::net::SocketAddr;
 
 use glam::*;
 use legion::{world::SubWorld, *};
-use unnamed_rts::components::*;
 use unnamed_rts::resources::*;
 use unnamed_rts::{
     assets::{Assets, Handle},
@@ -11,6 +10,7 @@ use unnamed_rts::{
     ui::ui_resources::UiContext,
 };
 use unnamed_rts::{components::Selectable, resources::Time};
+use unnamed_rts::{components::*, graphics::navmesh_pass::DrawableNavMesh};
 use winit::event::MouseButton;
 
 #[system]
@@ -46,10 +46,12 @@ pub fn move_action(
     #[resource] network: &NetworkSocket,
     #[resource] net_serilization: &NetworkSerialization,
     #[resource] window_size: &WindowSize,
-    query: &mut Query<(Entity, &Selectable)>,
+    query: &mut Query<(Entity, &Selectable, &Transform)>,
+    mesh_query: &mut Query<(&Transform, &DrawableNavMesh)>,
 ) {
     if mouse_button_state.pressed_current_frame(&MouseButton::Right) {
-        query.par_for_each(world, |(entity, selectable)| {
+        let (_, nav_mesh) = mesh_query.iter(world).next().unwrap();
+        query.par_for_each(world, |(entity, selectable, transfrom)| {
             if selectable.is_selected {
                 let ray = camera.raycast(mouse_pos, window_size);
                 // check intersection with the regular ground plan
@@ -62,17 +64,30 @@ pub fn move_action(
                     if t >= 0.0 {
                         // there was an intersection
                         let target = (t * ray.direction) + ray.origin;
-                        let payload =
-                            net_serilization.serialize_client_update(&ClientUpdate::Move {
-                                entity: *entity,
-                                target,
-                            });
+                        let from: [f32; 3] = transfrom.translation.into();
+                        // let to = (target.x, 0.0, target.z);
+                        let to: [f32; 3] = target.into();
+                        println!("From {:#?}, to: {:#?}", from, to);
+                        if let Some(path) = nav_mesh.mesh.find_path(
+                            from.into(),
+                            to.into(),
+                            navmesh::NavQuery::Accuracy,
+                            navmesh::NavPathMode::MidPoints,
+                        ) {
+                            dbg!(&path);
+                            let last = path.last().unwrap();
+                            let payload =
+                                net_serilization.serialize_client_update(&ClientUpdate::Move {
+                                    entity: *entity,
+                                    target: Vec3A::new(last.x, last.y, last.z),
+                                });
 
-                        let packet = laminar::Packet::reliable_unordered(
-                            SocketAddr::new(SERVER_ADDR.into(), SERVER_PORT),
-                            payload,
-                        );
-                        network.sender.send(packet).unwrap();
+                            let packet = laminar::Packet::reliable_unordered(
+                                SocketAddr::new(SERVER_ADDR.into(), SERVER_PORT),
+                                payload,
+                            );
+                            network.sender.send(packet).unwrap();
+                        }
                     }
                 }
             }
@@ -120,3 +135,13 @@ fn intesercts(origin: Vec3A, dirfrac: Vec3A, aabb_min: Vec3A, aabb_max: Vec3A) -
 
     !(tmax < 0.0 || tmax < tmin)
 }
+
+/* #[system]
+pub fn path_finding(world: &mut SubWorld,
+    #[resource] camera: &Camera,
+    #[resource] mouse_button_state: &MouseButtonState,
+    #[resource] mouse_pos: &CursorPosition,
+    #[resource] asset_storage: &Assets<GltfModel>,
+    #[resource] window_size: &WindowSize,
+    query: &mut Query<(&Transform, &Handle<GltfModel>, &mut Selectable)>) {}
+ */

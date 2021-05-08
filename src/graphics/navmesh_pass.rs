@@ -15,7 +15,7 @@ use wgpu::{
 };
 
 pub struct DrawableNavMesh {
-    _mesh: NavMesh,
+    pub mesh: NavMesh,
     index_buffer: wgpu::Buffer,
     vertex_buffer: ImmutableVertexData<NavMeshVert>,
     num_indexes: u32,
@@ -50,7 +50,7 @@ impl DrawableNavMesh {
             num_indexes,
             vertex_buffer,
             index_buffer,
-            _mesh: mesh,
+            mesh: mesh,
         }
     }
 }
@@ -167,6 +167,7 @@ impl NavMeshPass {
             }),
             primitive: wgpu::PrimitiveState {
                 cull_mode: wgpu::CullMode::None,
+                polygon_mode: wgpu::PolygonMode::Line,
                 ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {

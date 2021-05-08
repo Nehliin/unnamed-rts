@@ -5,10 +5,15 @@ use crate::{
 };
 use core::fmt::Debug;
 use crossbeam_channel::Receiver;
-use glam::Vec3;
+use glam::{Quat, Vec3};
 use legion::*;
-use navmesh::NavMesh;
+use navmesh::{NavMesh, NavTriangle, NavVec3};
 use navmesh_pass::DrawableNavMesh;
+use rayon::{
+    iter::{IndexedParallelIterator, ParallelIterator},
+    slice::ParallelSlice,
+};
+use std::f32::consts::PI;
 use unnamed_rts::{
     assets::{self, Assets},
     components::Transform,
@@ -18,7 +23,7 @@ use unnamed_rts::{
         debug_lines_pass::{self, BoundingBoxMap},
         gltf::GltfModel,
         grid_pass,
-        heightmap_pass::{self, HeightMap},
+        heightmap_pass::{self, create_quads, HeightMap},
         lights::{self, LightUniformBuffer},
         model_pass, selection_pass,
     },
@@ -97,12 +102,16 @@ impl State for GameState {
             (1, 2, 5).into(), // 2
             (5, 4, 1).into(), // 3
         ];
-
+        let transform = Transform::new(
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::ONE,
+            //Vec3::new(0.1, 0.1, 0.1),
+            Quat::IDENTITY,
+           // Quat::from_rotation_ypr(-PI / 2.0, -PI / 2.0, 0.0),
+        );
         let mesh = NavMesh::new(vertices, triangles).unwrap();
-        world.push((
-            DrawableNavMesh::new(&device, mesh),
-            Transform::from_position(Vec3::Y),
-        ));
+        //let mesh = create_nav_mesh(&height_map);
+        world.push((DrawableNavMesh::new(&device, mesh), transform));
         drop(device);
         drop(size);
         drop(queue);
@@ -173,4 +182,33 @@ impl State for GameState {
             .add_system(client_network::server_update_system())
             .build()
     }
+}
+// temp hack to test scalability
+fn create_nav_mesh(height_map: &HeightMap) -> NavMesh {
+    let size = height_map.get_size() as usize;
+    let (m_vert, indicies) = create_quads(size as u32);
+    let mut final_verts = Vec::with_capacity(m_vert.len());
+    let (_, buffer) = height_map.get_displacement_buffer();
+    for (y, chunk) in buffer.chunks_exact(size).enumerate() {
+        for (x, byte) in chunk.iter().enumerate() {
+            //x,y describes what quad, each quad is built of 4 verts and 4 indicies creating 2 triangles
+            // indexes starts at x * 6 * y, 0,0 = 0 0,1 = 6 1,1 = size * 6 + 6  = ( ( y * size ) + x ) *  4
+            // 2,3 = 2 * size * 6 + 3 * 6
+            let i_start = ((y * size) + x) * 4_usize; // the following 4 Indicies are part of the quad
+            let a = m_vert[i_start].position;
+            let b = m_vert[i_start + 1].position;
+            let c = m_vert[i_start + 2].position;
+            let d = m_vert[i_start + 3].position;
+            let offset = (*byte as f32 / 255.0) * 5.0; //* 50 because scale is 0.1 and the constant in the hm shader is 5
+            final_verts.push(NavVec3::new(a.x, 0.0, a.y));
+            final_verts.push(NavVec3::new(b.x, 0.0, b.y));
+            final_verts.push(NavVec3::new(c.x, 0.0, c.y));
+            final_verts.push(NavVec3::new(d.x, 0.0, d.y));
+        }
+    }
+    let triangles = indicies
+        .chunks_exact(3)
+        .map(|chunk| NavTriangle::from((chunk[0], chunk[1], chunk[2])))
+        .collect::<Vec<_>>();
+    NavMesh::new(final_verts, triangles).unwrap()
 }

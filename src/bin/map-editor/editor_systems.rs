@@ -242,7 +242,7 @@ pub fn height_map_modification(
             // TODO: inbounds check here?
             let local_coords = height_map.get_transform().get_model_matrix().inverse()
                 * Vec4::new(target.x, target.y, target.z, 1.0);
-            let center = local_coords.xy();
+            let center = local_coords.xz();
             if (time.current_time - modification_state.last_update).as_secs_f32() <= MAX_UPDATE_FREQ
             {
                 return;

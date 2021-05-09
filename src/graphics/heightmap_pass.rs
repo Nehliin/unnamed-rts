@@ -8,7 +8,8 @@ use crate::{assets::AssetLoader, components::Transform};
 use anyhow::Context;
 use bytemuck::{Pod, Zeroable};
 use crossbeam_channel::Sender;
-use glam::Vec2;
+use fxhash::{FxBuildHasher, FxHashMap};
+use glam::{IVec2, Vec2};
 use legion::{self, *};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
@@ -79,40 +80,35 @@ pub struct HeightMap<'a> {
 }
 
 pub fn create_quads(size: u32) -> (Vec<MapVertex>, Vec<u32>) {
-    let mut vertecies = Vec::with_capacity((size * size) as usize);
-    let mut indicies: Vec<u32> = Vec::with_capacity((size * size) as usize);
-    for i in 0..size {
-        for j in 0..size {
-            let index = vertecies.len() as u32;
-            let a = MapVertex {
+    let num_verts = size * size * 4;
+    let mut vertecies = Vec::with_capacity(num_verts as usize);
+    let mut indicies: Vec<u32> = Vec::with_capacity(num_verts as usize);
+    let mut index_map =
+        FxHashMap::with_capacity_and_hasher(num_verts as usize, FxBuildHasher::default());
+    let mut index = 0;
+    for i in 0..(size * 2) {
+        for j in 0..(size * 2) {
+            let vert = IVec2::new(i as i32, j as i32);
+            vertecies.push(MapVertex {
                 position: Vec2::new(i as f32, j as f32),
                 tex_coords: Vec2::new(i as f32 / size as f32, j as f32 / size as f32),
-            };
-            let b = MapVertex {
-                position: Vec2::new(1.0 + i as f32, j as f32),
-                tex_coords: Vec2::new((1.0 + i as f32) / size as f32, j as f32 / size as f32),
-            };
-            let c = MapVertex {
-                position: Vec2::new(1.0 + i as f32, 1.0 + j as f32),
-                tex_coords: Vec2::new(
-                    (1.0 + i as f32) / size as f32,
-                    (1.0 + j as f32) / size as f32,
-                ),
-            };
-            let d = MapVertex {
-                position: Vec2::new(i as f32, 1.0 + j as f32),
-                tex_coords: Vec2::new(i as f32 / size as f32, (1.0 + j as f32) / size as f32),
-            };
-            vertecies.push(a);
-            vertecies.push(b);
-            vertecies.push(c);
-            vertecies.push(d);
-            indicies.push(index);
-            indicies.push(index + 1);
-            indicies.push(index + 2);
-            indicies.push(index);
-            indicies.push(index + 2);
-            indicies.push(index + 3);
+            });
+            index_map.insert(vert, index);
+            index += 1;
+        }
+    }
+    for i in 0..size {
+        for j in 0..size {
+            let a = index_map[&IVec2::new(i as i32, j as i32)];
+            let b = index_map[&IVec2::new(1 + i as i32, j as i32)];
+            let c = index_map[&IVec2::new(1 + i as i32, 1 + j as i32)];
+            let d = index_map[&IVec2::new(i as i32, 1 + j as i32)];
+            indicies.push(a);
+            indicies.push(b);
+            indicies.push(c);
+            indicies.push(a);
+            indicies.push(c);
+            indicies.push(d);
         }
     }
     (vertecies, indicies)

@@ -1,4 +1,6 @@
 #![allow(unused)]
+use std::sync::atomic::AtomicU16;
+
 use glam::*;
 use serde::{Deserialize, Serialize};
 
@@ -12,9 +14,10 @@ pub struct Velocity {
     pub velocity: Vec3,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MoveTarget {
-    pub target: Vec3,
+    pub path: Vec<Vec3>,
+    pub index: u16,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -41,11 +44,7 @@ impl Transform {
     }
 
     pub fn new(translation: Vec3, scale: Vec3, rotation: Quat) -> Self {
-        Transform {
-            rotation,
-            translation,
-            scale,
-        }
+        Transform { rotation, scale, translation }
     }
 
     pub fn get_model_matrix(&self) -> Mat4 {

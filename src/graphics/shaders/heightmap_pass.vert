@@ -24,7 +24,7 @@ uniform CameraUniforms {
 void main() {
     mat4 model = mat4(m0, m1, m2, m3);
     float height = texture(sampler2D(dis_texture, dis_sampler), tex_coords).r;
-    vec3 fragment_position = vec3(model * vec4(position.x, position.y, 0.0, 1.0));
+    vec3 fragment_position = vec3(model * vec4(position.x, 0.0, position.y, 1.0));
     out_tex_coords = tex_coords;
     // TODO: make the 5.0 configurable
     fragment_position = vec3(fragment_position.x, fragment_position.y + height * 5.0, fragment_position.z);

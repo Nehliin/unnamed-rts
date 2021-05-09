@@ -4,7 +4,7 @@ use anyhow::Result;
 use bincode::de::Deserializer;
 use bincode::{DefaultOptions, Options};
 use crossbeam_channel::{Receiver, Sender};
-use glam::Vec3A;
+use glam::Vec3;
 use laminar::{Config, Packet, Socket, SocketEvent};
 use legion::{query::LayoutFilter, serialize::Canon, *};
 use serde::{de::DeserializeSeed, Deserialize, Serialize};
@@ -81,7 +81,7 @@ impl NetworkSocket {
 //Move this
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum ClientUpdate {
-    Move { entity: Entity, target: Vec3A },
+    Move { entity: Entity, path: Vec<Vec3> },
     StartGame { ip: [u8; 4], port: u16 },
 }
 

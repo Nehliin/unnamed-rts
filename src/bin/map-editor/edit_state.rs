@@ -72,8 +72,8 @@ impl State for EditState {
         );
         let mut transform = Transform::from_position(Vec3::ZERO);
         transform.scale = Vec3::splat(0.1);
-        transform.rotation = Quat::from_rotation_x(PI / 2.0);
-        let height_map = HeightMap::new(&device, &queue, "MyMap".to_string(), 512, transform);
+        //transform.rotation = Quat::from_rotation_x(PI / 2.0);
+        let height_map = HeightMap::new(&device, &queue, "MyMap".to_string(), 256, transform);
 
         // render resources
         let depth_texture = DepthTexture::new(&device, size.physical_width, size.physical_height);

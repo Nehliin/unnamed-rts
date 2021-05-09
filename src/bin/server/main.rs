@@ -26,7 +26,7 @@ fn setup_world(world: &mut World, net_serilization: &NetworkSerialization) -> Ve
     world.extend(vec![
         (
             EntityType::BasicUnit,
-            Transform::new(Vec3::ZERO, Vec3::ONE, Quat::IDENTITY),
+            Transform::new(Vec3::new(0.0, 0.0, 0.0), Vec3::ONE, Quat::IDENTITY),
             Velocity {
                 velocity: Vec3::splat(0.0),
             },
@@ -163,12 +163,13 @@ fn client_input(
         match event {
             SocketEvent::Packet(packet) => {
                 match net_serilization.deserialize_client_update(&packet.payload()) {
-                    ClientUpdate::Move { entity, target } => {
+                    ClientUpdate::Move { entity, path } => {
                         info!("Successfully deserialized packet!");
                         command_buffer.add_component(
                             entity,
                             MoveTarget {
-                                target: target.into(),
+                                path,
+                                index: 0
                             },
                         );
                     }

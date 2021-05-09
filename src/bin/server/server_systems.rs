@@ -9,18 +9,22 @@ pub fn movement(
     world: &mut SubWorld,
     command_buffer: &mut CommandBuffer,
     #[resource] time: &Time,
-    query: &mut Query<(Entity, &MoveTarget, &mut Velocity, &mut Transform)>,
+    query: &mut Query<(Entity, &mut MoveTarget, &mut Velocity, &mut Transform)>,
 ) {
     query
         .iter_mut(world)
         .for_each(|(entity, move_target, velocity, transform)| {
-            if !transform.translation.abs_diff_eq(move_target.target, 0.01) {
+            let current_target = move_target.path[move_target.index as usize];
+            if !transform.translation.abs_diff_eq(current_target, 0.01) {
                 // very temporary fix here
-                velocity.velocity = (move_target.target - transform.translation).normalize() * 3.0;
+                velocity.velocity = (current_target - transform.translation).normalize() * 3.0;
                 transform.translation += velocity.velocity * time.delta_time;
             } else {
-                velocity.velocity = Vec3::splat(0.0);
-                command_buffer.remove_component::<MoveTarget>(*entity)
+                move_target.index += 1;
+                if move_target.path.len() <= move_target.index as usize {
+                    velocity.velocity = Vec3::splat(0.0);
+                    command_buffer.remove_component::<MoveTarget>(*entity)
+                }
             }
         });
 }

@@ -5,7 +5,8 @@ use crate::{
 };
 use core::fmt::Debug;
 use crossbeam_channel::Receiver;
-use glam::{Quat, Vec3};
+use fxhash::FxHashMap;
+use glam::{IVec3, Quat, Vec3};
 use legion::*;
 use navmesh::{NavMesh, NavTriangle, NavVec3};
 use navmesh_pass::DrawableNavMesh;
@@ -87,30 +88,14 @@ impl State for GameState {
         let mut model_assets = Assets::<GltfModel>::default();
         let suit = model_assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
         let depth_texture = DepthTexture::new(&device, size.physical_width, size.physical_height);
-
-        let vertices = vec![
-            (0.0, 0.0, 0.0).into(), // 0
-            (1.0, 0.0, 0.0).into(), // 1
-            (2.0, 0.0, 1.0).into(), // 2
-            (0.0, 1.0, 0.0).into(), // 3
-            (1.0, 1.0, 0.0).into(), // 4
-            (2.0, 1.0, 1.0).into(), // 5
-        ];
-        let triangles = vec![
-            (0, 1, 4).into(), // 0
-            (4, 3, 0).into(), // 1
-            (1, 2, 5).into(), // 2
-            (5, 4, 1).into(), // 3
-        ];
+        
         let transform = Transform::new(
             Vec3::new(0.0, 0.0, 0.0),
-            Vec3::ONE,
+            Vec3::ONE, // doesn't match the navmesh scale currently 
             //Vec3::new(0.1, 0.1, 0.1),
             Quat::IDENTITY,
-           // Quat::from_rotation_ypr(-PI / 2.0, -PI / 2.0, 0.0),
         );
-        let mesh = NavMesh::new(vertices, triangles).unwrap();
-        //let mesh = create_nav_mesh(&height_map);
+        let mesh = create_nav_mesh(&height_map);
         world.push((DrawableNavMesh::new(&device, mesh), transform));
         drop(device);
         drop(size);
@@ -199,16 +184,17 @@ fn create_nav_mesh(height_map: &HeightMap) -> NavMesh {
             let b = m_vert[i_start + 1].position;
             let c = m_vert[i_start + 2].position;
             let d = m_vert[i_start + 3].position;
-            let offset = (*byte as f32 / 255.0) * 5.0; //* 50 because scale is 0.1 and the constant in the hm shader is 5
-            final_verts.push(NavVec3::new(a.x, 0.0, a.y));
-            final_verts.push(NavVec3::new(b.x, 0.0, b.y));
-            final_verts.push(NavVec3::new(c.x, 0.0, c.y));
-            final_verts.push(NavVec3::new(d.x, 0.0, d.y));
+            let offset = (*byte as f32 / 255.0) * 50.0; //* 50 because scale is 0.1 and the constant in the hm shader is 5
+            final_verts.push(NavVec3::new(a.x, offset, a.y));
+            final_verts.push(NavVec3::new(b.x, offset, b.y));
+            final_verts.push(NavVec3::new(c.x, offset, c.y));
+            final_verts.push(NavVec3::new(d.x, offset, d.y));
         }
     }
     let triangles = indicies
         .chunks_exact(3)
         .map(|chunk| NavTriangle::from((chunk[0], chunk[1], chunk[2])))
         .collect::<Vec<_>>();
-    NavMesh::new(final_verts, triangles).unwrap()
+    let scale = NavVec3::new(height_map.get_transform().scale.x, height_map.get_transform().scale.y, height_map.get_transform().scale.z);
+    NavMesh::new(final_verts, triangles).unwrap().scale(scale, Some((0.0, 0.0, 0.0).into())).unwrap()
 }

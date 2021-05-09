@@ -72,14 +72,17 @@ pub fn move_action(
                             from.into(),
                             to.into(),
                             navmesh::NavQuery::Accuracy,
-                            navmesh::NavPathMode::MidPoints,
+                            navmesh::NavPathMode::Accuracy,
                         ) {
                             dbg!(&path);
-                            let last = path.last().unwrap();
+                            let converted_path: Vec<Vec3> = path
+                                .iter()
+                                .map(|nvec| Vec3::new(nvec.x, nvec.y, nvec.z))
+                                .collect();
                             let payload =
                                 net_serilization.serialize_client_update(&ClientUpdate::Move {
                                     entity: *entity,
-                                    target: Vec3A::new(last.x, last.y, last.z),
+                                    path: converted_path,
                                 });
 
                             let packet = laminar::Packet::reliable_unordered(
@@ -135,13 +138,3 @@ fn intesercts(origin: Vec3A, dirfrac: Vec3A, aabb_min: Vec3A, aabb_max: Vec3A) -
 
     !(tmax < 0.0 || tmax < tmin)
 }
-
-/* #[system]
-pub fn path_finding(world: &mut SubWorld,
-    #[resource] camera: &Camera,
-    #[resource] mouse_button_state: &MouseButtonState,
-    #[resource] mouse_pos: &CursorPosition,
-    #[resource] asset_storage: &Assets<GltfModel>,
-    #[resource] window_size: &WindowSize,
-    query: &mut Query<(&Transform, &Handle<GltfModel>, &mut Selectable)>) {}
- */

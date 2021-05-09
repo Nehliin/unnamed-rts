@@ -35,12 +35,12 @@ impl VertexBuffer for MapVertex {
         &[
             wgpu::VertexAttribute {
                 offset: 0,
-                format: wgpu::VertexFormat::Float2,
+                format: wgpu::VertexFormat::Float32x2,
                 shader_location: 0,
             },
             wgpu::VertexAttribute {
                 offset: std::mem::size_of::<Vec2>() as u64,
-                format: wgpu::VertexFormat::Float2,
+                format: wgpu::VertexFormat::Float32x2,
                 shader_location: 1,
             },
         ]
@@ -128,7 +128,7 @@ impl<'a> HeightMap<'a> {
         let texture_size = wgpu::Extent3d {
             width: size,
             height: size,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         let texels = vec![0; (size * size) as usize];
         let texture = TextureContent {
@@ -164,7 +164,7 @@ impl<'a> HeightMap<'a> {
         let texture_size = wgpu::Extent3d {
             width: size,
             height: size,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         let displacement_content = TextureContent {
             label: Some("Displacement map"),
@@ -481,7 +481,7 @@ impl HeightMapPass {
                 targets: &[wgpu::TextureFormat::Bgra8UnormSrgb.into()],
             }),
             primitive: wgpu::PrimitiveState {
-                cull_mode: wgpu::CullMode::None,
+                cull_mode: None,
                 ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {
@@ -490,7 +490,6 @@ impl HeightMapPass {
                 depth_compare: wgpu::CompareFunction::Less,
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
-                clamp_depth: false,
             }),
             multisample: wgpu::MultisampleState::default(),
         });
@@ -521,16 +520,16 @@ pub fn draw(
     });
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("HeightMap render pass"),
-        color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-            attachment: &current_frame.view,
+        color_attachments: &[wgpu::RenderPassColorAttachment {
+            view: &current_frame.view,
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Load,
                 store: true,
             },
         }],
-        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-            attachment: &depth_texture.view,
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: &depth_texture.view,
             depth_ops: Some(wgpu::Operations {
                 load: wgpu::LoadOp::Load,
                 store: true,

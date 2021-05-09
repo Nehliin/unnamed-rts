@@ -112,11 +112,11 @@ impl Camera {
             layout: &Self::get_or_create_layout(device),
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer {
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                     buffer: &gpu_buffer,
                     offset: 0,
                     size: None,
-                },
+                }),
             }],
         });
         Camera {

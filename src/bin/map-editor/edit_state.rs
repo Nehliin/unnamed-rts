@@ -53,7 +53,7 @@ impl State for EditState {
         resources.insert(tex_assets);
 
         let device = resources.get::<Device>().expect("Device to be present");
-        let grid_pass = grid_pass::GridPass::new(&device, debug_sender);
+       // let grid_pass = grid_pass::GridPass::new(&device, debug_sender);
         let model_pass = model_pass::ModelPass::new(&device, model_sender);
         let selection_pass = selection_pass::SelectionPass::new(&device, selectable_sender);
         let heightmap_pass = heightmap_pass::HeightMapPass::new(&device, heightmap_sender);
@@ -83,7 +83,7 @@ impl State for EditState {
         drop(queue);
 
         resources.insert(model_pass);
-        resources.insert(grid_pass);
+        //resources.insert(grid_pass);
         resources.insert(selection_pass);
         resources.insert(heightmap_pass);
         resources.insert(Assets::<HeightMap>::default());
@@ -140,7 +140,7 @@ impl State for EditState {
             ))
             .add_system(heightmap_pass::update_system())
             .add_system(heightmap_pass::draw_system())
-            .add_system(grid_pass::draw_system())
+           // .add_system(grid_pass::draw_system())
             .add_system(debug_lines_pass::update_bounding_boxes_system())
             .add_system(debug_lines_pass::draw_system())
             .add_system(editor_systems::editor_ui_system(UiState {

@@ -56,8 +56,8 @@ pub fn draw(
     });
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Model render pass"),
-        color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-            attachment: &current_frame.view,
+        color_attachments: &[wgpu::RenderPassColorAttachment {
+            view: &current_frame.view,
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -69,8 +69,8 @@ pub fn draw(
                 store: true,
             },
         }],
-        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-            attachment: &depth_texture.view,
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: &depth_texture.view,
             depth_ops: Some(wgpu::Operations {
                 load: wgpu::LoadOp::Clear(1.0),
                 store: true,
@@ -132,7 +132,7 @@ impl ModelPass {
                 targets: &[wgpu::TextureFormat::Bgra8UnormSrgb.into()],
             }),
             primitive: wgpu::PrimitiveState {
-                cull_mode: wgpu::CullMode::Back,
+                cull_mode: Some(wgpu::Face::Back),
                 ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {
@@ -156,7 +156,6 @@ impl ModelPass {
                     write_mask: 0xFF,
                 },
                 bias: wgpu::DepthBiasState::default(),
-                clamp_depth: false,
             }),
             multisample: wgpu::MultisampleState::default(),
         });

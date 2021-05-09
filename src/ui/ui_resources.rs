@@ -134,7 +134,7 @@ impl AssetLoader for UiTexture<'_> {
             size: wgpu::Extent3d {
                 width,
                 height,
-                depth: 1,
+                depth_or_array_layers: 1,
             },
         };
         Ok(UiTexture::new(device, queue, "custom_ui", content))

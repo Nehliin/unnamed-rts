@@ -48,28 +48,28 @@ impl VertexBuffer for MeshVertex {
         &[
             VertexAttribute {
                 offset: 0,
-                format: VertexFormat::Float3,
+                format: VertexFormat::Float32x3,
                 shader_location: 0,
             },
             VertexAttribute {
                 offset: std::mem::size_of::<[f32; 3]>() as BufferAddress,
-                format: VertexFormat::Float3,
+                format: VertexFormat::Float32x3,
                 shader_location: 1,
             },
             VertexAttribute {
                 offset: (std::mem::size_of::<[f32; 3]>() * 2) as BufferAddress,
-                format: VertexFormat::Float3,
+                format: VertexFormat::Float32x3,
                 shader_location: 2,
             },
             VertexAttribute {
                 offset: (std::mem::size_of::<[f32; 3]>() * 3) as BufferAddress,
-                format: VertexFormat::Float,
+                format: VertexFormat::Float32,
                 shader_location: 3,
             },
             VertexAttribute {
                 offset: (std::mem::size_of::<[f32; 3]>() * 3 + std::mem::size_of::<f32>())
                     as BufferAddress,
-                format: VertexFormat::Float2,
+                format: VertexFormat::Float32x2,
                 shader_location: 4,
             },
         ]
@@ -97,22 +97,22 @@ impl VertexBuffer for InstanceData {
         &[
             VertexAttribute {
                 offset: 0,
-                format: VertexFormat::Float4,
+                format: VertexFormat::Float32x4,
                 shader_location: 5,
             },
             VertexAttribute {
                 offset: ROW_SIZE,
-                format: VertexFormat::Float4,
+                format: VertexFormat::Float32x4,
                 shader_location: 6,
             },
             VertexAttribute {
                 offset: ROW_SIZE * 2,
-                format: VertexFormat::Float4,
+                format: VertexFormat::Float32x4,
                 shader_location: 7,
             },
             VertexAttribute {
                 offset: ROW_SIZE * 3,
-                format: VertexFormat::Float4,
+                format: VertexFormat::Float32x4,
                 shader_location: 8,
             },
         ]
@@ -332,11 +332,11 @@ impl PbrMaterial {
                 },
                 wgpu::BindGroupEntry {
                     binding: 8,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: &factor_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
             ],
             label: Some("PbrMaterial bindgroup"),
@@ -463,7 +463,7 @@ fn get_white_placeholder_texture(
         let size = wgpu::Extent3d {
             width: 1,
             height: 1,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         let content = TextureContent {
             label: Some("White placeholder texture"),
@@ -504,7 +504,7 @@ fn get_normal_placeholder_texture(
         let size = wgpu::Extent3d {
             width: 1,
             height: 1,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         let content = TextureContent {
             label: Some("Normal map placeholder texture"),

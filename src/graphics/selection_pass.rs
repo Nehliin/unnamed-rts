@@ -47,16 +47,16 @@ pub fn draw(
     });
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Selection render pass"),
-        color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-            attachment: &current_frame.view,
+        color_attachments: &[wgpu::RenderPassColorAttachment {
+            view: &current_frame.view,
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Load,
                 store: true,
             },
         }],
-        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-            attachment: &depth_texture.view,
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: &depth_texture.view,
             depth_ops: Some(wgpu::Operations {
                 load: wgpu::LoadOp::Load,
                 store: true,
@@ -127,7 +127,7 @@ impl SelectionPass {
                 targets: &[wgpu::TextureFormat::Bgra8UnormSrgb.into()],
             }),
             primitive: wgpu::PrimitiveState {
-                cull_mode: wgpu::CullMode::None,
+                cull_mode: None,
                 ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {
@@ -151,7 +151,6 @@ impl SelectionPass {
                     write_mask: 0x00, // Disable stencil buffer writes
                 },
                 bias: wgpu::DepthBiasState::default(),
-                clamp_depth: false,
             }),
             multisample: wgpu::MultisampleState::default(),
         });

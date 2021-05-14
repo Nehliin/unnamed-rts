@@ -79,16 +79,25 @@ impl VertexBuffer for MeshVertex {
 #[derive(Debug, Default, Clone, Copy, Pod, Zeroable)]
 //TODO: The perspective part isn't needed here
 pub struct InstanceData {
-    model_matrix: Mat4,
+    model: Mat4,
+    normal_matrix: Mat3,
+    _pad: Vec3 
 }
 
 impl InstanceData {
-    pub fn new(model_matrix: Mat4) -> Self {
-        InstanceData { model_matrix }
+    pub fn new(model: Mat4) -> Self {
+        let sub_mat: Mat3 = model.into();
+        let normal_matrix = sub_mat.inverse().transpose();
+        InstanceData {
+            model,
+            normal_matrix,
+            _pad: Vec3::ZERO,
+        }
     }
 }
 
-const ROW_SIZE: BufferAddress = (std::mem::size_of::<f32>() * 4) as BufferAddress;
+const SIZE_VEC4: BufferAddress = (std::mem::size_of::<Vec4>()) as BufferAddress;
+const SIZE_VEC3: BufferAddress = (std::mem::size_of::<Vec3>()) as BufferAddress;
 
 impl VertexBuffer for InstanceData {
     const STEP_MODE: wgpu::InputStepMode = wgpu::InputStepMode::Instance;
@@ -101,19 +110,34 @@ impl VertexBuffer for InstanceData {
                 shader_location: 5,
             },
             VertexAttribute {
-                offset: ROW_SIZE,
+                offset: SIZE_VEC4,
                 format: VertexFormat::Float32x4,
                 shader_location: 6,
             },
             VertexAttribute {
-                offset: ROW_SIZE * 2,
+                offset: SIZE_VEC4 * 2,
                 format: VertexFormat::Float32x4,
                 shader_location: 7,
             },
             VertexAttribute {
-                offset: ROW_SIZE * 3,
+                offset: SIZE_VEC4 * 3,
                 format: VertexFormat::Float32x4,
                 shader_location: 8,
+            },
+            VertexAttribute {
+                offset: SIZE_VEC4 * 4,
+                format: VertexFormat::Float32x4,
+                shader_location: 9,
+            },
+            VertexAttribute {
+                offset: SIZE_VEC4 * 4 + SIZE_VEC3,
+                format: VertexFormat::Float32x4,
+                shader_location: 10,
+            },
+            VertexAttribute {
+                offset: SIZE_VEC4 * 4 + SIZE_VEC3 * 2,
+                format: VertexFormat::Float32x4,
+                shader_location: 11,
             },
         ]
     }

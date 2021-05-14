@@ -2,10 +2,12 @@
 #extension GL_EXT_scalar_block_layout: require
 
 layout(set=0, binding=0, std430)
-uniform CameraUniforms {
+uniform CameraUniform {
     mat4 view;
     mat4 projection;
     vec3 view_pos;
+    mat4 viewInv;
+    mat4 projInv;
 };
 
 layout(location = 1) out vec3 nearPoint;
@@ -21,8 +23,6 @@ const vec3 gridPlane[6] = vec3[](
 
 // This gets the world coordinates of a point
 vec3 get_world_cords(float x, float y, float z, mat4 view, mat4 projection) {
-    mat4 viewInv = inverse(view);
-    mat4 projInv = inverse(projection);
     // Reversed matrix multiplication order since it's the inverses we have to 
     // undo the last applied first
     vec4 unprojected_point = viewInv * projInv * vec4(x, y, z, 1.0); 

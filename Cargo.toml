@@ -3,6 +3,7 @@ name = "unnamed-rts"
 version = "0.1.0"
 authors = ["Nehliin <oskar.d.nehlin@gmail.com>"]
 edition = "2018"
+resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -21,6 +22,13 @@ debug-assertions = true
 [profile.dev.build-override]
 opt-level = 3
 codegen-units = 1
+debug-assertions = true
+
+[profile.release.build-override]
+opt-level = 3
+codegen-units = 1
+debug-assertions = false 
+
 
 [dependencies]
 winit = "0.24" 
@@ -58,7 +66,7 @@ name = "intersection_bench"
 harness = false
 
 [build-dependencies]
-shaderc = "0.7"
+naga = {git = "https://github.com/gfx-rs/naga", tag = "gfx-25", features = ["wgsl-in", "spv-out"]} 
 glob = "0.3"
 rayon = "1"
 anyhow = "1"

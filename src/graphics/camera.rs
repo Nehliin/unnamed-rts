@@ -24,6 +24,8 @@ struct CameraUniform {
     pub view_matrix: mint::ColumnMatrix4<f32>,
     pub projection: mint::ColumnMatrix4<f32>,
     pub view_pos: mint::Vector3<f32>,
+    pub view_inverse: mint::ColumnMatrix4<f32>,
+    pub projection_inverse: mint::ColumnMatrix4<f32>,
 }
 
 impl From<&Camera> for CameraUniform {
@@ -32,6 +34,8 @@ impl From<&Camera> for CameraUniform {
             view_matrix: camera.view_matrix.into(),
             projection: camera.proj_matrix.into(),
             view_pos: camera.get_position().into(),
+            view_inverse: camera.view_matrix.inverse().into(),
+            projection_inverse: camera.proj_matrix.inverse().into(),
         }
     }
 }

@@ -253,15 +253,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cmake"
-version = "0.1.45"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb6210b637171dfba4cda12e579ac6dc73f5165ad56133e5d72ef3131f320855"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "cocoa"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -928,7 +919,7 @@ dependencies = [
  "khronos-egl",
  "libloading 0.7.0",
  "log",
- "naga",
+ "naga 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "parking_lot",
  "raw-window-handle",
  "wasm-bindgen",
@@ -951,7 +942,7 @@ dependencies = [
  "gfx-hal",
  "log",
  "metal",
- "naga",
+ "naga 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "objc",
  "parking_lot",
  "profiling",
@@ -973,7 +964,7 @@ dependencies = [
  "gfx-hal",
  "inplace_it",
  "log",
- "naga",
+ "naga 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "objc",
  "parking_lot",
  "raw-window-handle",
@@ -988,7 +979,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d285bfd566f6b9134af908446ca350c0a1047495dfb9bbd826e701e8ee1d259"
 dependencies = [
  "bitflags",
- "naga",
+ "naga 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "raw-window-handle",
  "thiserror",
 ]
@@ -1520,6 +1511,21 @@ dependencies = [
  "log",
  "num-traits",
  "petgraph",
+ "spirv_headers",
+ "thiserror",
+]
+
+[[package]]
+name = "naga"
+version = "0.4.0"
+source = "git+https://github.com/gfx-rs/naga?tag=gfx-25#057d03ad86f18e3bb3866b20901d8d4e892dd3d6"
+dependencies = [
+ "bit-set",
+ "bitflags",
+ "codespan-reporting",
+ "fxhash",
+ "log",
+ "num-traits",
  "spirv_headers",
  "thiserror",
 ]
@@ -2132,26 +2138,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shaderc"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93896fc153a0977666b9ee0e6b3ffcebb172682e80bccb3b28a1c823e47825d0"
-dependencies = [
- "libc",
- "shaderc-sys",
-]
-
-[[package]]
-name = "shaderc-sys"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ca380428494e9f5780e90ffd5516328aa980864f9bce36d6a636a28be07c8bd"
-dependencies = [
- "cmake",
- "libc",
-]
-
-[[package]]
 name = "slab"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2358,11 +2344,11 @@ dependencies = [
  "legion",
  "log",
  "mint",
+ "naga 0.4.0 (git+https://github.com/gfx-rs/naga?tag=gfx-25)",
  "once_cell",
  "paste",
  "rayon",
  "serde",
- "shaderc",
  "wgpu",
  "winit",
 ]
@@ -2564,7 +2550,7 @@ dependencies = [
  "arrayvec",
  "js-sys",
  "log",
- "naga",
+ "naga 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "parking_lot",
  "raw-window-handle",
  "smallvec",
@@ -2596,7 +2582,7 @@ dependencies = [
  "gpu-alloc",
  "gpu-descriptor",
  "log",
- "naga",
+ "naga 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "parking_lot",
  "profiling",
  "raw-window-handle",

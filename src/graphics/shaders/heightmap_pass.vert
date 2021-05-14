@@ -15,10 +15,12 @@ layout(set=0, binding=0) uniform texture2D dis_texture;
 layout(set=0, binding=1) uniform sampler dis_sampler;
 
 layout(set=1, binding=0, std430)
-uniform CameraUniforms {
+uniform CameraUniform {
     mat4 view;
     mat4 projection;
     vec3 view_pos;
+    mat4 viewInv;
+    mat4 projInv;
 };
 
 void main() {

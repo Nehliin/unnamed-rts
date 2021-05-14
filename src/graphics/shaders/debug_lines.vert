@@ -10,10 +10,12 @@ layout(location = 8) in vec4 m3;
 layout(location = 0) out vec3 fragment_position;
 
 layout(set=0, binding=0, std430)
-uniform CameraUniforms {
+uniform CameraUniform {
     mat4 view;
     mat4 projection;
     vec3 view_pos;
+    mat4 viewInv;
+    mat4 projInv;
 };
 
 

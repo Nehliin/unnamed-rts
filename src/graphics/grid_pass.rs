@@ -61,8 +61,7 @@ pub struct GridPass {
 
 impl GridPass {
     pub fn new(device: &wgpu::Device, command_sender: Sender<wgpu::CommandBuffer>) -> GridPass {
-        let vs_module = device.create_shader_module(&include_spirv!("shaders/grid.vert.spv"));
-        let fs_module = device.create_shader_module(&include_spirv!("shaders/grid.frag.spv"));
+        let shader_module = device.create_shader_module(&include_spirv!("shaders/grid.spv"));
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -75,13 +74,13 @@ impl GridPass {
             label: Some("Grid pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &vs_module,
-                entry_point: "main",
+                module: &shader_module,
+                entry_point: "vs_main",
                 buffers: &[],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &fs_module,
-                entry_point: "main",
+                module: &shader_module,
+                entry_point: "fs_main",
                 targets: &[wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     blend: Some(wgpu::BlendState {

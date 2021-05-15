@@ -32,6 +32,9 @@
 		{
 			"type": "cargo",
 			"command": "run",
+			"env": {
+				"RUST_LOG": "wgpu_core=warn"
+			},
 			"args": [
 				"--bin",
 				"map-editor"

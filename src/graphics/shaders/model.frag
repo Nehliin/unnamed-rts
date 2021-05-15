@@ -4,7 +4,9 @@
 layout(location=0) in vec2 v_tex_coords;
 layout(location=2) in vec3 fragment_position;
 layout(location=3) in vec3 view_pos;
-layout(location=4) in mat3 tbn;
+layout(location=4) in vec3 tbn0;
+layout(location=5) in vec3 tbn1;
+layout(location=6) in vec3 tbn2;
 
 layout(location=0) out vec4 f_color;
 
@@ -79,6 +81,7 @@ float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
 }
 
 void main() {
+    mat3 tbn = mat3(tbn0, tbn1, tbn2);
     vec4 base_tex_color = texture(sampler2D(base_texture, base_sampler), v_tex_coords);
     vec2 metal_tex_color = texture(sampler2D(metallic_texture, metallic_sampler), v_tex_coords).bg;
     vec3 albedo = pow(base_tex_color.rgb * base_color_factor.rgb, vec3(2.2));

@@ -16,14 +16,8 @@ struct ShaderData {
 
 impl ShaderData {
     pub fn load(src_path: PathBuf) -> Result<Self> {
-        let extension = src_path
-            .extension()
-            .context("File has no extension")?
-            .to_str()
-            .context("Extension cannot be converted to &str")?;
-        
         let src = read_to_string(src_path.clone())?;
-        let spv_path = src_path.with_extension(format!("{}.spv", extension));
+        let spv_path = src_path.with_extension("spv");
 
         Ok(ShaderData {
             src,
@@ -44,7 +38,10 @@ fn main() -> Result<()> {
         .collect::<Result<Vec<_>>>()?;
 
     for shader in shaders {
-        let module = wgsl::parse_str(&shader.src)?;
+        let module = match wgsl::parse_str(&shader.src) {
+            Ok(module) => module, 
+            Err(err) => panic!("Failed to parse shader: {}", err.emit_to_string(&shader.src))
+        };
         let info = Validator::new(ValidationFlags::all(), Capabilities::all()).validate(&module)?;
         let mut flags = WriterFlags::empty();
         // This matches what's currently used in wgpu core

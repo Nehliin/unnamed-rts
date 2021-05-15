@@ -104,8 +104,8 @@ pub struct ModelPass {
 
 impl ModelPass {
     pub fn new(device: &wgpu::Device, command_sender: Sender<wgpu::CommandBuffer>) -> ModelPass {
-        let vs_module = device.create_shader_module(&include_spirv!("shaders/model.vert.spv"));
-        let fs_module = device.create_shader_module(&include_spirv!("shaders/model.frag.spv"));
+        let vs_module = device.create_shader_module(&include_spirv!("shaders/model.spv"));
+     //   let fs_module = device.create_shader_module(&include_spirv!("shaders/model.frag.spv"));
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -123,12 +123,12 @@ impl ModelPass {
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &vs_module,
-                entry_point: "main",
+                entry_point: "vs_main",
                 buffers: &[MeshVertex::get_descriptor(), InstanceData::get_descriptor()],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &fs_module,
-                entry_point: "main",
+                module: &vs_module,
+                entry_point: "fs_main",
                 targets: &[wgpu::TextureFormat::Bgra8UnormSrgb.into()],
             }),
             primitive: wgpu::PrimitiveState {

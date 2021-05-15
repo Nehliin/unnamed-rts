@@ -1,4 +1,4 @@
-use crate::{assets::Assets, graphics::texture::*, resources::WindowSize};
+use crate::{assets::Assets, rendering::texture::*, resources::WindowSize};
 use bytemuck::{Pod, Zeroable};
 use crossbeam_channel::Sender;
 use std::{borrow::Cow, convert::TryInto};
@@ -42,9 +42,7 @@ impl UiPass {
     pub fn new(device: &Device, command_sender: Sender<CommandBuffer>) -> UiPass {
         let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("Ui shader"),
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
-                "../graphics/shaders/ui.wgsl"
-            ))),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("../shaders/ui.wgsl"))),
             flags: wgpu::ShaderFlags::VALIDATION,
         });
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {

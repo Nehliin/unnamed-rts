@@ -1,9 +1,9 @@
 use crate::{
     input::{self, InputHandler},
+    rendering::ui::{ui_pass, ui_resources::UiContext, ui_systems},
     resources::{Time, WindowSize},
     states::State,
     states::{StateStack, StateTransition},
-    ui::{ui_pass, ui_resources::UiContext, ui_systems},
 };
 use crossbeam_channel::Receiver;
 use legion::{systems::Step, *};

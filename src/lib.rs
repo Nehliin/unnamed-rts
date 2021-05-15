@@ -3,10 +3,13 @@ extern crate log;
 
 pub mod components;
 pub mod resources;
-// if def on server client?
+#[cfg(feature = "graphics")]
 pub mod assets;
+#[cfg(feature = "graphics")]
 pub mod engine;
-pub mod graphics;
+#[cfg(feature = "graphics")]
 pub mod input;
+#[cfg(feature = "graphics")]
+pub mod rendering;
+#[cfg(feature = "graphics")]
 pub mod states;
-pub mod ui;

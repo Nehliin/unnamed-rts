@@ -10,7 +10,7 @@ use legion::*;
 use unnamed_rts::resources::{NetworkSerialization, WindowSize};
 use unnamed_rts::{
     assets::{self, Assets},
-    graphics::{
+    rendering::{
         camera::{self, Camera},
         common::DepthTexture,
         debug_lines_pass::{self, BoundingBoxMap},
@@ -19,10 +19,10 @@ use unnamed_rts::{
         heightmap_pass::{self, HeightMap},
         lights::{self, LightUniformBuffer},
         model_pass, selection_pass,
+        ui::ui_resources::UiTexture,
     },
     resources::DebugRenderSettings,
     states::{State, StateTransition},
-    ui::ui_resources::UiTexture,
 };
 use wgpu::{CommandBuffer, Device, Queue};
 

@@ -1,6 +1,6 @@
 use super::texture::*;
 use crate::assets::AssetLoader;
-use crate::graphics::vertex_buffers::*;
+use crate::rendering::vertex_buffers::*;
 use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
 use crevice::std430::AsStd430;

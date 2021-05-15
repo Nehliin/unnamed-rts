@@ -1,6 +1,6 @@
 use crate::{
     assets::{AssetLoader, Handle},
-    graphics::texture::{allocate_simple_texture, TextureContent},
+    rendering::texture::{allocate_simple_texture, TextureContent},
     resources::WindowSize,
 };
 use anyhow::anyhow;

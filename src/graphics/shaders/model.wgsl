@@ -28,11 +28,11 @@ struct VertexInput {
 struct VertexOutput {
  [[builtin(position)]] position: vec4<f32>;
  [[location(0)]] tex_coords: vec2<f32>;
- [[location(2)]] frag_position: vec3<f32>; // why not 1?
- [[location(3)]] view_pos: vec3<f32>;
- [[location(4)]] tbn0: vec3<f32>;
- [[location(5)]] tbn1: vec3<f32>;
- [[location(6)]] tbn2: vec3<f32>;
+ [[location(1)]] frag_position: vec3<f32>;
+ [[location(2)]] view_pos: vec3<f32>;
+ [[location(3)]] tbn0: vec3<f32>;
+ [[location(4)]] tbn1: vec3<f32>;
+ [[location(5)]] tbn2: vec3<f32>;
 };
 
 [[stage(vertex)]]
@@ -88,6 +88,7 @@ struct PointLight {
      position: vec3<f32>; 
 };
 
+// merge this with the light count block
 [[block]]
 struct PointLights {
     inner: array<PointLight, MAX_LIGHTS>;
@@ -105,7 +106,8 @@ var<uniform> point_lights: PointLights;
 var<uniform> point_light_count: PointLightCount;
 
 fn fresnelSchlick(cosTheta: f32, F0: vec3<f32>) -> vec3<f32> {
-    return F0 + (1.0 - F0) * pow(max(1.0 - cosTheta, 0.0), 5.0);
+    let cos_theta = min(1.0, cosTheta);
+    return F0 + (1.0 - F0) * pow(max(1.0 - cos_theta, 0.0), 5.0);
 }
 
 fn distributionGGX(N: vec3<f32>, H: vec3<f32>, roughness: f32) -> f32 {
@@ -145,8 +147,8 @@ fn geometrySmith(N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, roughness: f32) -> f3
 fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
    let tbn = mat3x3<f32>(in.tbn0, in.tbn1, in.tbn2);
    let base_tex_color = textureSample(base_texture, base_sampler, in.tex_coords);
-   let metal_tex_color = textureSample(metallic_texture, metallic_sampler, in.tex_coords).bg; //.xy
-   let albedo = pow(base_tex_color.rbg * material_factors.base_color_factor.rgb, vec3<f32>(2.2));
+   let metal_tex_color = textureSample(metallic_texture, metallic_sampler, in.tex_coords).bg;
+   let albedo = pow(base_tex_color.rgb * material_factors.base_color_factor.rgb, vec3<f32>(2.2));
    let metallic = metal_tex_color.x * material_factors.metallic_factor;
    let roughness = metal_tex_color.y * material_factors.roughness_factor;
    let ao = textureSample(occulusion_texture, occulusion_sampler, in.tex_coords).r * material_factors.occulusion_strength;
@@ -162,10 +164,7 @@ fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
    // Irradiance
    var Lo: vec3<f32> = vec3<f32>(0.0);
    var i: i32 = 0;
-   loop {
-       if (i >= point_light_count.count) {
-           break;
-       }
+   for(var i: i32 = 0; i < point_light_count.count; i = i + 1) {
        let L = normalize(point_lights.inner[i].position - in.frag_position);
        let H = normalize(V + L);
        let dist = length(point_lights.inner[i].position - in.frag_position);
@@ -178,7 +177,7 @@ fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
 
        let numerator = ndf * G * F;
        let denominator = 4.0 * max(dot(N,V), 0.0) * max(dot(N,L), 0.0);
-       let specular = numerator / max(denominator, 0.001);
+       let specular = numerator / max(denominator, 0.00000001);
 
        let kS = F;
        let pre_kD = vec3<f32>(1.0) - kS;
@@ -186,7 +185,6 @@ fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
        let kD = pre_kD * (1.0 - metallic);
        let NdotL = max(dot(N,L), 0.0);
        Lo = Lo + (kD * albedo / PI + specular) * radiance * NdotL;
-       i = i + 1;
    }
    let ambient = vec3<f32>(0.01) * albedo * ao;
    var color: vec3<f32> = ambient + Lo;
@@ -194,4 +192,9 @@ fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
    color = color / (color + vec3<f32>(1.0));
    color = pow(color, vec3<f32>(1.0/2.2));  
    return vec4<f32>(color, 1.0);
+}
+
+[[stage(fragment)]]
+fn flat_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+    return vec4<f32>(1.0, 1.0, 0.0, 1.0);
 }

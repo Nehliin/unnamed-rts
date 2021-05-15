@@ -95,9 +95,9 @@ impl LightUniformBuffer {
             ],
         });
         LightUniformBuffer {
+            bind_group,
             light_buffer,
             light_count_buffer,
-            bind_group,
         }
     }
 }

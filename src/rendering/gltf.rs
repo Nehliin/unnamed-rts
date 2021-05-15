@@ -370,8 +370,8 @@ impl PbrMaterial {
             base_color_texture,
             metallic_roughness_texture,
             factors,
-            bind_group,
             factor_buffer,
+            bind_group,
         }
     }
 
@@ -483,7 +483,7 @@ fn get_white_placeholder_texture(
     queue: &wgpu::Queue,
 ) -> &'static PbrMaterialTexture {
     static PLACEHOLDER_TEXTURE: OnceCell<PbrMaterialTexture> = OnceCell::new();
-    PLACEHOLDER_TEXTURE.get_or_init(|| {
+    PLACEHOLDER_TEXTURE.get_or_init(|| -> PbrMaterialTexture {
         let size = wgpu::Extent3d {
             width: 1,
             height: 1,
@@ -512,8 +512,8 @@ fn get_white_placeholder_texture(
             ..Default::default()
         });
         PbrMaterialTexture {
-            view,
             sampler,
+            view,
             texture,
         }
     })

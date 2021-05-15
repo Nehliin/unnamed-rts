@@ -43,8 +43,8 @@ impl Transform {
     pub fn new(translation: Vec3, scale: Vec3, rotation: Quat) -> Self {
         Transform {
             rotation,
-            translation,
             scale,
+            translation,
         }
     }
 

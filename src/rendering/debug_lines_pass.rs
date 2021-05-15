@@ -234,8 +234,8 @@ impl DebugLinesPass {
             multisample: wgpu::MultisampleState::default(),
         });
         DebugLinesPass {
-            command_sender,
             render_pipeline,
+            command_sender,
         }
     }
 }

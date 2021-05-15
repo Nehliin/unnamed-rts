@@ -595,7 +595,7 @@ impl GltfModel {
                 let (position, rotation, scaled) = node.transform().decomposed();
                 let local_transform = Mat4::from_scale_rotation_translation(
                     scaled.into(),
-                    rotation.into(),
+                    Quat::from_vec4(rotation.into()),
                     position.into(),
                 );
                 let mesh = node.mesh().unwrap();

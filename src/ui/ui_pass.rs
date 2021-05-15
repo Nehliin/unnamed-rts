@@ -41,11 +41,8 @@ pub struct UiPass {
 
 impl UiPass {
     pub fn new(device: &Device, command_sender: Sender<CommandBuffer>) -> UiPass {
-        let vs_module =
-            device.create_shader_module(&include_spirv!("../graphics/shaders/ui.vert.spv"));
-        let fs_module =
-            device.create_shader_module(&include_spirv!("../graphics/shaders/ui.frag.spv"));
-
+        let shader_module =
+            device.create_shader_module(&include_spirv!("../graphics/shaders/ui.spv"));
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("ui_uniform_buffer"),
             contents: bytemuck::cast_slice(&[UniformBuffer {
@@ -123,8 +120,8 @@ impl UiPass {
             label: Some("egui_pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &vs_module,
-                entry_point: "main",
+                module: &shader_module,
+                entry_point: "vs_main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: 5 * 4,
                     step_mode: wgpu::InputStepMode::Vertex,
@@ -135,8 +132,8 @@ impl UiPass {
                 }],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &fs_module,
-                entry_point: "main",
+                module: &shader_module,
+                entry_point: "fs_main",
                 targets: &[wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     blend: Some(wgpu::BlendState {

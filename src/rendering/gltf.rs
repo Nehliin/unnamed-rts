@@ -126,17 +126,17 @@ impl VertexBuffer for InstanceData {
             },
             VertexAttribute {
                 offset: SIZE_VEC4 * 4,
-                format: VertexFormat::Float32x4,
+                format: VertexFormat::Float32x3,
                 shader_location: 9,
             },
             VertexAttribute {
                 offset: SIZE_VEC4 * 4 + SIZE_VEC3,
-                format: VertexFormat::Float32x4,
+                format: VertexFormat::Float32x3,
                 shader_location: 10,
             },
             VertexAttribute {
                 offset: SIZE_VEC4 * 4 + SIZE_VEC3 * 2,
-                format: VertexFormat::Float32x4,
+                format: VertexFormat::Float32x3,
                 shader_location: 11,
             },
         ]

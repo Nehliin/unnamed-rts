@@ -19,17 +19,6 @@ debug = true
 debug-assertions = true
 
 
-[profile.dev.build-override]
-opt-level = 3
-codegen-units = 1
-debug-assertions = true
-
-[profile.release.build-override]
-opt-level = 3
-codegen-units = 1
-debug-assertions = false 
-
-
 [dependencies]
 winit = "0.24" 
 futures = "0.3"
@@ -60,9 +49,3 @@ paste = "1"
 [[bench]]
 name = "intersection_bench"
 harness = false
-
-[build-dependencies]
-naga = {git = "https://github.com/gfx-rs/naga", tag = "gfx-25", features = ["wgsl-in", "spv-out"]} 
-glob = "0.3"
-rayon = "1"
-anyhow = "1"

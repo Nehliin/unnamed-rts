@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::resources::DebugRenderSettings;
 
 use super::{
@@ -6,7 +8,6 @@ use super::{
 };
 use crossbeam_channel::Sender;
 use legion::*;
-use wgpu::include_spirv;
 
 #[system]
 pub fn draw(
@@ -23,7 +24,7 @@ pub fn draw(
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Grid pass"),
         color_attachments: &[wgpu::RenderPassColorAttachment {
-           view: &current_frame.view,
+            view: &current_frame.view,
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Load,
@@ -61,7 +62,11 @@ pub struct GridPass {
 
 impl GridPass {
     pub fn new(device: &wgpu::Device, command_sender: Sender<wgpu::CommandBuffer>) -> GridPass {
-        let shader_module = device.create_shader_module(&include_spirv!("shaders/grid.spv"));
+        let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Grid shader"),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/grid.wgsl"))),
+            flags: wgpu::ShaderFlags::VALIDATION,
+        });
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {

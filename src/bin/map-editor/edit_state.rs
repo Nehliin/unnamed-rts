@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, time::Instant};
 
 use glam::{Quat, Vec3};
 use legion::*;
@@ -53,11 +53,13 @@ impl State for EditState {
         resources.insert(tex_assets);
 
         let device = resources.get::<Device>().expect("Device to be present");
+        let start = Instant::now();
         let grid_pass = grid_pass::GridPass::new(&device, debug_sender);
         let model_pass = model_pass::ModelPass::new(&device, model_sender);
         let selection_pass = selection_pass::SelectionPass::new(&device, selectable_sender);
         let heightmap_pass = heightmap_pass::HeightMapPass::new(&device, heightmap_sender);
         let debug_lines_pass = debug_lines_pass::DebugLinesPass::new(&device, lines_sender);
+        info!("Pipeline setup time: {}ms", start.elapsed().as_millis());
 
         let size = resources
             .get::<WindowSize>()

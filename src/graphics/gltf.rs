@@ -81,7 +81,7 @@ impl VertexBuffer for MeshVertex {
 pub struct InstanceData {
     model: Mat4,
     normal_matrix: Mat3,
-    _pad: Vec3 
+    _pad: Vec3,
 }
 
 impl InstanceData {

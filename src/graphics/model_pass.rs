@@ -1,8 +1,9 @@
+use std::borrow::Cow;
+
 use crate::assets::{Assets, Handle};
 use crate::components::Transform;
 use crossbeam_channel::Sender;
 use legion::{world::SubWorld, *};
-use wgpu::include_spirv;
 
 use super::{
     camera::Camera,
@@ -104,7 +105,11 @@ pub struct ModelPass {
 
 impl ModelPass {
     pub fn new(device: &wgpu::Device, command_sender: Sender<wgpu::CommandBuffer>) -> ModelPass {
-        let shader_module = device.create_shader_module(&include_spirv!("shaders/model.spv"));
+        let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Model shader"),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/model.wgsl"))),
+            flags: wgpu::ShaderFlags::VALIDATION,
+        });
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Model pipeline layout"),

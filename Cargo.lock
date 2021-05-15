@@ -921,7 +921,7 @@ dependencies = [
  "khronos-egl",
  "libloading 0.7.0",
  "log",
- "naga 0.4.1",
+ "naga",
  "parking_lot",
  "raw-window-handle",
  "wasm-bindgen",
@@ -944,7 +944,7 @@ dependencies = [
  "gfx-hal",
  "log",
  "metal",
- "naga 0.4.1",
+ "naga",
  "objc",
  "parking_lot",
  "profiling",
@@ -966,7 +966,7 @@ dependencies = [
  "gfx-hal",
  "inplace_it",
  "log",
- "naga 0.4.1",
+ "naga",
  "objc",
  "parking_lot",
  "raw-window-handle",
@@ -981,7 +981,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d285bfd566f6b9134af908446ca350c0a1047495dfb9bbd826e701e8ee1d259"
 dependencies = [
  "bitflags",
- "naga 0.4.1",
+ "naga",
  "raw-window-handle",
  "thiserror",
 ]
@@ -1006,12 +1006,6 @@ dependencies = [
  "mint",
  "serde",
 ]
-
-[[package]]
-name = "glob"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 
 [[package]]
 name = "glow"
@@ -1498,21 +1492,6 @@ dependencies = [
  "net2",
  "winapi 0.2.8",
  "ws2_32-sys",
-]
-
-[[package]]
-name = "naga"
-version = "0.4.0"
-source = "git+https://github.com/gfx-rs/naga?tag=gfx-25#057d03ad86f18e3bb3866b20901d8d4e892dd3d6"
-dependencies = [
- "bit-set",
- "bitflags",
- "codespan-reporting",
- "fxhash",
- "log",
- "num-traits",
- "spirv_headers",
- "thiserror",
 ]
 
 [[package]]
@@ -2329,14 +2308,12 @@ dependencies = [
  "futures",
  "fxhash",
  "glam",
- "glob",
  "gltf",
  "image",
  "laminar",
  "legion",
  "log",
  "mint",
- "naga 0.4.0",
  "once_cell",
  "paste",
  "rayon",
@@ -2542,7 +2519,7 @@ dependencies = [
  "arrayvec",
  "js-sys",
  "log",
- "naga 0.4.1",
+ "naga",
  "parking_lot",
  "raw-window-handle",
  "smallvec",
@@ -2574,7 +2551,7 @@ dependencies = [
  "gpu-alloc",
  "gpu-descriptor",
  "log",
- "naga 0.4.1",
+ "naga",
  "parking_lot",
  "profiling",
  "raw-window-handle",

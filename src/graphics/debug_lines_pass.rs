@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use super::{
     camera::Camera,
     common::{DepthTexture, DEPTH_FORMAT},
@@ -14,7 +16,7 @@ use crossbeam_channel::Sender;
 use fxhash::FxHashMap;
 use glam::Vec3;
 use legion::*;
-use wgpu::{include_spirv, SwapChainTexture};
+use wgpu::SwapChainTexture;
 use world::SubWorld;
 
 #[derive(Debug, Default)]
@@ -175,7 +177,13 @@ impl DebugLinesPass {
         device: &wgpu::Device,
         command_sender: Sender<wgpu::CommandBuffer>,
     ) -> DebugLinesPass {
-        let shader_module = device.create_shader_module(&include_spirv!("shaders/debug_lines.spv"));
+        let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Debug lines shader"),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
+                "shaders/debug_lines.wgsl"
+            ))),
+            flags: wgpu::ShaderFlags::VALIDATION,
+        });
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Debug lines pass pipeline layout"),

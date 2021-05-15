@@ -12,10 +12,7 @@ use legion::{self, *};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use wgpu::{
-    include_spirv,
-    util::{BufferInitDescriptor, DeviceExt},
-};
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 use super::{
     texture::{allocate_simple_texture, TextureContent},
@@ -420,7 +417,11 @@ impl HeightMapPass {
         device: &wgpu::Device,
         command_sender: Sender<wgpu::CommandBuffer>,
     ) -> HeightMapPass {
-        let shader_module = device.create_shader_module(&include_spirv!("shaders/heightmap.spv"));
+        let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Heightmap shader"),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/heightmap.wgsl"))),
+            flags: wgpu::ShaderFlags::VALIDATION,
+        });
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("HeightMap pipeline layout"),

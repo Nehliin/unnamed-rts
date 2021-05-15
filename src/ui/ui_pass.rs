@@ -1,9 +1,8 @@
 use crate::{assets::Assets, graphics::texture::*, resources::WindowSize};
 use bytemuck::{Pod, Zeroable};
 use crossbeam_channel::Sender;
-use std::convert::TryInto;
+use std::{borrow::Cow, convert::TryInto};
 use wgpu::{
-    include_spirv,
     util::{BufferInitDescriptor, DeviceExt},
     CommandBuffer, Device,
 };
@@ -41,8 +40,13 @@ pub struct UiPass {
 
 impl UiPass {
     pub fn new(device: &Device, command_sender: Sender<CommandBuffer>) -> UiPass {
-        let shader_module =
-            device.create_shader_module(&include_spirv!("../graphics/shaders/ui.spv"));
+        let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Ui shader"),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
+                "../graphics/shaders/ui.wgsl"
+            ))),
+            flags: wgpu::ShaderFlags::VALIDATION,
+        });
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("ui_uniform_buffer"),
             contents: bytemuck::cast_slice(&[UniformBuffer {

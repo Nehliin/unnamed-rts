@@ -39,14 +39,14 @@ struct VertexOutput {
 fn vs_main(in: VertexInput) -> VertexOutput {
     let model = mat4x4<f32>(in.m0, in.m1, in.m2, in.m3);
     let normal_matrix = mat3x3<f32>(in.n0, in.n1, in.n2);
-    let f_position = model * vec4<f32>(in.position, 1.0);
+    let world_pos = model * vec4<f32>(in.position, 1.0);
     let normal = normalize(normal_matrix * in.normal);
     let pre_tangent = normalize(normal_matrix * in.tangent);
     let tangent = normalize(pre_tangent - dot(pre_tangent, normal) * normal);
     let bi_tan = cross(normal, tangent) * in.tanget_handedness;
     var out: VertexOutput;
-    out.position = camera.projection * camera.view * f_position;  
-    out.frag_position = vec3<f32>(f_position.x, f_position.y, f_position.z); 
+    out.position = camera.projection * camera.view * world_pos;  
+    out.frag_position = vec3<f32>(world_pos.x, world_pos.y, world_pos.z); 
     out.view_pos = camera.view_pos;
     out.tbn0 = tangent;
     out.tbn1 = bi_tan;
@@ -61,7 +61,6 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 let MAX_LIGHTS: i32 = 5;
 let PI: f32 = 3.14159265359;
 
-// TODO: reuse the sampler!
 [[group(1), binding(0)]] var base_texture: texture_2d<f32>;
 [[group(1), binding(1)]] var base_sampler: sampler;
 [[group(1), binding(2)]] var metallic_texture: texture_2d<f32>;

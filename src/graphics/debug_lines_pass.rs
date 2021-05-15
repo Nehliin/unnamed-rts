@@ -175,11 +175,7 @@ impl DebugLinesPass {
         device: &wgpu::Device,
         command_sender: Sender<wgpu::CommandBuffer>,
     ) -> DebugLinesPass {
-        let vs_module =
-            device.create_shader_module(&include_spirv!("shaders/debug_lines.vert.spv"));
-        let fs_module =
-            device.create_shader_module(&include_spirv!("shaders/debug_lines.frag.spv"));
-
+        let shader_module = device.create_shader_module(&include_spirv!("shaders/debug_lines.spv"));
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Debug lines pass pipeline layout"),
@@ -190,13 +186,13 @@ impl DebugLinesPass {
             label: Some("Debuglines pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &vs_module,
-                entry_point: "main",
+                module: &shader_module,
+                entry_point: "vs_main",
                 buffers: &[InstanceData::get_descriptor(), BoxVert::get_descriptor()],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &fs_module,
-                entry_point: "main",
+                module: &shader_module,
+                entry_point: "fs_main",
                 targets: &[wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     blend: Some(wgpu::BlendState {

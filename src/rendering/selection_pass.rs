@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use super::{
     camera::Camera,
     common::DEPTH_FORMAT,
@@ -9,7 +11,6 @@ use crate::components::{Selectable, Transform};
 use crossbeam_channel::Sender;
 use glam::{Mat4, Vec3};
 use legion::{world::SubWorld, *};
-use wgpu::include_spirv;
 
 use super::common::DepthTexture;
 
@@ -47,16 +48,16 @@ pub fn draw(
     });
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Selection render pass"),
-        color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-            attachment: &current_frame.view,
+        color_attachments: &[wgpu::RenderPassColorAttachment {
+            view: &current_frame.view,
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Load,
                 store: true,
             },
         }],
-        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-            attachment: &depth_texture.view,
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: &depth_texture.view,
             depth_ops: Some(wgpu::Operations {
                 load: wgpu::LoadOp::Load,
                 store: true,
@@ -103,8 +104,12 @@ impl SelectionPass {
         device: &wgpu::Device,
         command_sender: Sender<wgpu::CommandBuffer>,
     ) -> SelectionPass {
-        let vs_module = device.create_shader_module(&include_spirv!("shaders/model.vert.spv"));
-        let fs_module = device.create_shader_module(&include_spirv!("shaders/flat_color.frag.spv"));
+        // TODO: Share this with the modle pass
+        let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Selection(model) shader"),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/model.wgsl"))),
+            flags: wgpu::ShaderFlags::VALIDATION,
+        });
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -117,17 +122,17 @@ impl SelectionPass {
             label: Some("Selection pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &vs_module,
-                entry_point: "main",
+                module: &shader_module,
+                entry_point: "vs_main",
                 buffers: &[MeshVertex::get_descriptor(), InstanceData::get_descriptor()],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &fs_module,
-                entry_point: "main",
+                module: &shader_module,
+                entry_point: "flat_main",
                 targets: &[wgpu::TextureFormat::Bgra8UnormSrgb.into()],
             }),
             primitive: wgpu::PrimitiveState {
-                cull_mode: wgpu::CullMode::None,
+                cull_mode: None,
                 ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {
@@ -151,7 +156,6 @@ impl SelectionPass {
                     write_mask: 0x00, // Disable stencil buffer writes
                 },
                 bias: wgpu::DepthBiasState::default(),
-                clamp_depth: false,
             }),
             multisample: wgpu::MultisampleState::default(),
         });
@@ -160,8 +164,8 @@ impl SelectionPass {
         let instance_buffer = VertexBuffer::allocate_mutable_buffer(device, &buffer_data);
         SelectionPass {
             render_pipeline,
-            command_sender,
             instance_buffer,
+            command_sender,
         }
     }
 }

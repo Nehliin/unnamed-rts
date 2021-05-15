@@ -1,5 +1,5 @@
 use rayon::prelude::*;
-use std::borrow::Cow;
+use std::{borrow::Cow, num::NonZeroU32};
 use wgpu::{Device, Queue};
 
 #[derive(Debug, Clone)]
@@ -16,7 +16,7 @@ impl<'a> TextureContent<'a> {
         let img_size = wgpu::Extent3d {
             width: size,
             height: size,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         // construct checkered content
         let mut bytes: Vec<u8> = vec![0; (size * size) as usize * 4];
@@ -54,7 +54,7 @@ impl<'a> TextureContent<'a> {
         let img_size = wgpu::Extent3d {
             width: size,
             height: size,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         TextureContent {
             label: Some("Checkered default texture"),
@@ -79,7 +79,7 @@ impl<'a> From<&'a egui::Texture> for TextureContent<'a> {
         let size = wgpu::Extent3d {
             width: egui_texture.width as u32,
             height: egui_texture.height as u32,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         let bytes: Vec<u8> = egui_texture
             .srgba_pixels()
@@ -101,7 +101,7 @@ impl<'a> From<&'a gltf::image::Data> for TextureContent<'a> {
         let size = wgpu::Extent3d {
             width: image_data.width,
             height: image_data.height,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         let label = Some("GltfTexture");
         match image_data.format {
@@ -229,15 +229,15 @@ pub fn allocate_simple_texture(
         format: if srgb { to_srgb(*format) } else { *format },
         usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
     });
-    let texutre_copy_view = wgpu::TextureCopyView {
+    let texutre_copy_view = wgpu::ImageCopyTexture {
         texture: &texture,
         mip_level: 0,
         origin: wgpu::Origin3d::ZERO,
     };
-    let texture_data_layout = wgpu::TextureDataLayout {
+    let texture_data_layout = wgpu::ImageDataLayout {
         offset: 0,
-        bytes_per_row: stride * size.width,
-        rows_per_image: size.height,
+        bytes_per_row: NonZeroU32::new(stride * size.width),
+        rows_per_image: NonZeroU32::new(size.height),
     };
     queue.write_texture(texutre_copy_view, &bytes, texture_data_layout, *size);
     texture
@@ -248,12 +248,12 @@ pub fn update_texture_data(
     allocated_texture: &wgpu::Texture,
     queue: &Queue,
 ) {
-    let texture_data_layout = wgpu::TextureDataLayout {
+    let texture_data_layout = wgpu::ImageDataLayout {
         offset: 0,
-        bytes_per_row: content.stride * content.size.width,
-        rows_per_image: 0,
+        bytes_per_row: NonZeroU32::new(content.stride * content.size.width),
+        rows_per_image: None,
     };
-    let texture_view = wgpu::TextureCopyView {
+    let texture_view = wgpu::ImageCopyTexture {
         texture: allocated_texture,
         mip_level: 0,
         origin: wgpu::Origin3d::ZERO,

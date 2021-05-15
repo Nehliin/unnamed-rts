@@ -6,10 +6,14 @@ use legion::*;
 use rayon::prelude::*;
 use unnamed_rts::{
     assets::{Assets, Handle},
-    graphics::{camera::Camera, heightmap_pass::HeightMap, texture::TextureContent},
     input::{CursorPosition, MouseButtonState},
+    rendering::{
+        camera::Camera,
+        heightmap_pass::HeightMap,
+        texture::TextureContent,
+        ui::ui_resources::{UiContext, UiTexture},
+    },
     resources::{Time, WindowSize},
-    ui::ui_resources::{UiContext, UiTexture},
 };
 use winit::event::MouseButton;
 #[derive(Debug, Default)]

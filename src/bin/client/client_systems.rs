@@ -6,9 +6,8 @@ use unnamed_rts::components::*;
 use unnamed_rts::resources::*;
 use unnamed_rts::{
     assets::{Assets, Handle},
-    graphics::{camera::Camera, gltf::GltfModel},
     input::{CursorPosition, MouseButtonState},
-    ui::ui_resources::UiContext,
+    rendering::{camera::Camera, gltf::GltfModel, ui::ui_resources::UiContext},
 };
 use unnamed_rts::{components::Selectable, resources::Time};
 use winit::event::MouseButton;

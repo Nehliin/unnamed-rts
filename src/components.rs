@@ -43,11 +43,13 @@ impl Transform {
     pub fn new(translation: Vec3, scale: Vec3, rotation: Quat) -> Self {
         Transform {
             rotation,
-            translation,
             scale,
+            translation,
         }
     }
 
+    // Maybe use affine matrix here but I dobut it will make a difference since everything
+    // happens gpu side anyways
     pub fn get_model_matrix(&self) -> Mat4 {
         Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.translation)
     }

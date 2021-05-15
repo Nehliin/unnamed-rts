@@ -13,7 +13,7 @@ use unnamed_rts::{
 
 use unnamed_rts::{
     assets::Handle,
-    graphics::{gltf::GltfModel, lights::PointLight},
+    rendering::{gltf::GltfModel, lights::PointLight},
 };
 
 pub fn connect_to_server(world: &mut World, resources: &mut Resources) {

@@ -1,12 +1,15 @@
 #[macro_use]
 extern crate log;
 
-pub mod components;
-pub mod resources;
-// if def on server client?
+#[cfg(feature = "graphics")]
 pub mod assets;
+pub mod components;
+#[cfg(feature = "graphics")]
 pub mod engine;
-pub mod graphics;
+#[cfg(feature = "graphics")]
 pub mod input;
+#[cfg(feature = "graphics")]
+pub mod rendering;
+pub mod resources;
+#[cfg(feature = "graphics")]
 pub mod states;
-pub mod ui;

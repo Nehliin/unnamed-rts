@@ -1,9 +1,8 @@
-use crate::{assets::Assets, graphics::texture::*, resources::WindowSize};
+use crate::{assets::Assets, rendering::texture::*, resources::WindowSize};
 use bytemuck::{Pod, Zeroable};
 use crossbeam_channel::Sender;
-use std::convert::TryInto;
+use std::{borrow::Cow, convert::TryInto};
 use wgpu::{
-    include_spirv,
     util::{BufferInitDescriptor, DeviceExt},
     CommandBuffer, Device,
 };
@@ -41,11 +40,11 @@ pub struct UiPass {
 
 impl UiPass {
     pub fn new(device: &Device, command_sender: Sender<CommandBuffer>) -> UiPass {
-        let vs_module =
-            device.create_shader_module(&include_spirv!("../graphics/shaders/ui.vert.spv"));
-        let fs_module =
-            device.create_shader_module(&include_spirv!("../graphics/shaders/ui.frag.spv"));
-
+        let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Ui shader"),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("../shaders/ui.wgsl"))),
+            flags: wgpu::ShaderFlags::VALIDATION,
+        });
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("ui_uniform_buffer"),
             contents: bytemuck::cast_slice(&[UniformBuffer {
@@ -97,11 +96,11 @@ impl UiPass {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: &uniform_buffer.buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -123,32 +122,34 @@ impl UiPass {
             label: Some("egui_pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &vs_module,
-                entry_point: "main",
+                module: &shader_module,
+                entry_point: "vs_main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: 5 * 4,
                     step_mode: wgpu::InputStepMode::Vertex,
                     // 0: vec2 position
                     // 1: vec2 texture coordinates
                     // 2: uint color
-                    attributes: &wgpu::vertex_attr_array![0 => Float2, 1 => Float2, 2 => Uint],
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Uint32],
                 }],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &fs_module,
-                entry_point: "main",
+                module: &shader_module,
+                entry_point: "fs_main",
                 targets: &[wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                    color_blend: wgpu::BlendState {
-                        src_factor: wgpu::BlendFactor::One,
-                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                        operation: wgpu::BlendOperation::Add,
-                    },
-                    alpha_blend: wgpu::BlendState {
-                        src_factor: wgpu::BlendFactor::OneMinusDstAlpha,
-                        dst_factor: wgpu::BlendFactor::One,
-                        operation: wgpu::BlendOperation::Add,
-                    },
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::SrcAlpha,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        alpha: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::Zero,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                    }),
                     write_mask: wgpu::ColorWrite::ALL,
                 }],
             }),
@@ -178,8 +179,8 @@ impl UiPass {
     ) {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("ui_render_pass"),
-            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: color_attachment,
+            color_attachments: &[wgpu::RenderPassColorAttachment {
+                view: color_attachment,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,

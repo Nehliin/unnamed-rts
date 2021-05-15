@@ -12,10 +12,7 @@ use legion::{self, *};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use wgpu::{
-    include_spirv,
-    util::{BufferInitDescriptor, DeviceExt},
-};
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 use super::{
     texture::{allocate_simple_texture, TextureContent},
@@ -35,12 +32,12 @@ impl VertexBuffer for MapVertex {
         &[
             wgpu::VertexAttribute {
                 offset: 0,
-                format: wgpu::VertexFormat::Float2,
+                format: wgpu::VertexFormat::Float32x2,
                 shader_location: 0,
             },
             wgpu::VertexAttribute {
                 offset: std::mem::size_of::<Vec2>() as u64,
-                format: wgpu::VertexFormat::Float2,
+                format: wgpu::VertexFormat::Float32x2,
                 shader_location: 1,
             },
         ]
@@ -128,7 +125,7 @@ impl<'a> HeightMap<'a> {
         let texture_size = wgpu::Extent3d {
             width: size,
             height: size,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         let texels = vec![0; (size * size) as usize];
         let texture = TextureContent {
@@ -164,7 +161,7 @@ impl<'a> HeightMap<'a> {
         let texture_size = wgpu::Extent3d {
             width: size,
             height: size,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         let displacement_content = TextureContent {
             label: Some("Displacement map"),
@@ -222,8 +219,9 @@ impl<'a> HeightMap<'a> {
         let displacement_view =
             displacement_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        let create_sampler = |label: &'static str| wgpu::SamplerDescriptor {
-            label: Some(label),
+        let color_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let color_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Heightmap color texture sampler"),
             address_mode_u: wgpu::AddressMode::Repeat,
             address_mode_v: wgpu::AddressMode::Repeat,
             address_mode_w: wgpu::AddressMode::Repeat,
@@ -233,15 +231,8 @@ impl<'a> HeightMap<'a> {
             lod_min_clamp: -100.0,
             lod_max_clamp: 100.0,
             ..Default::default()
-        };
-        let displacement_sampler =
-            device.create_sampler(&create_sampler("DisplacementMap texture sampler"));
-        let color_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let color_sampler =
-            device.create_sampler(&create_sampler("Heightmap color texture sampler"));
+        });
         let decal_view = decal_layer_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let decal_sampler =
-            device.create_sampler(&create_sampler("Heightmap decal layer texture sampler"));
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &Self::get_or_create_layout(device),
@@ -252,23 +243,15 @@ impl<'a> HeightMap<'a> {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&displacement_sampler),
+                    resource: wgpu::BindingResource::TextureView(&color_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&color_view),
+                    resource: wgpu::BindingResource::TextureView(&decal_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
                     resource: wgpu::BindingResource::Sampler(&color_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::TextureView(&decal_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: wgpu::BindingResource::Sampler(&decal_sampler),
                 },
             ],
             label: Some("HeightMap bindgroup"),
@@ -373,10 +356,11 @@ impl<'a> HeightMap<'a> {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStage::VERTEX,
-                        ty: wgpu::BindingType::Sampler {
-                            comparison: false,
-                            filtering: true,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            multisampled: false,
                         },
                         count: None,
                     },
@@ -392,25 +376,6 @@ impl<'a> HeightMap<'a> {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 3,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler {
-                            comparison: false,
-                            filtering: true,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 4,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 5,
                         visibility: wgpu::ShaderStage::FRAGMENT,
                         ty: wgpu::BindingType::Sampler {
                             comparison: false,
@@ -452,11 +417,11 @@ impl HeightMapPass {
         device: &wgpu::Device,
         command_sender: Sender<wgpu::CommandBuffer>,
     ) -> HeightMapPass {
-        let vs_module =
-            device.create_shader_module(&include_spirv!("shaders/heightmap_pass.vert.spv"));
-        let fs_module =
-            device.create_shader_module(&include_spirv!("shaders/heightmap_pass.frag.spv"));
-
+        let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Heightmap shader"),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/heightmap.wgsl"))),
+            flags: wgpu::ShaderFlags::VALIDATION,
+        });
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("HeightMap pipeline layout"),
@@ -471,17 +436,17 @@ impl HeightMapPass {
             label: Some("Heightmap pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &vs_module,
-                entry_point: "main",
+                module: &shader_module,
+                entry_point: "vs_main",
                 buffers: &[MapVertex::get_descriptor(), InstanceData::get_descriptor()],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &fs_module,
-                entry_point: "main",
+                module: &shader_module,
+                entry_point: "fs_main",
                 targets: &[wgpu::TextureFormat::Bgra8UnormSrgb.into()],
             }),
             primitive: wgpu::PrimitiveState {
-                cull_mode: wgpu::CullMode::None,
+                cull_mode: None,
                 ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {
@@ -490,7 +455,6 @@ impl HeightMapPass {
                 depth_compare: wgpu::CompareFunction::Less,
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
-                clamp_depth: false,
             }),
             multisample: wgpu::MultisampleState::default(),
         });
@@ -521,16 +485,16 @@ pub fn draw(
     });
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("HeightMap render pass"),
-        color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-            attachment: &current_frame.view,
+        color_attachments: &[wgpu::RenderPassColorAttachment {
+            view: &current_frame.view,
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Load,
                 store: true,
             },
         }],
-        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-            attachment: &depth_texture.view,
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: &depth_texture.view,
             depth_ops: Some(wgpu::Operations {
                 load: wgpu::LoadOp::Load,
                 store: true,

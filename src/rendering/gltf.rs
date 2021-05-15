@@ -1,6 +1,6 @@
 use super::texture::*;
 use crate::assets::AssetLoader;
-use crate::graphics::vertex_buffers::*;
+use crate::rendering::vertex_buffers::*;
 use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
 use crevice::std430::AsStd430;
@@ -48,28 +48,28 @@ impl VertexBuffer for MeshVertex {
         &[
             VertexAttribute {
                 offset: 0,
-                format: VertexFormat::Float3,
+                format: VertexFormat::Float32x3,
                 shader_location: 0,
             },
             VertexAttribute {
                 offset: std::mem::size_of::<[f32; 3]>() as BufferAddress,
-                format: VertexFormat::Float3,
+                format: VertexFormat::Float32x3,
                 shader_location: 1,
             },
             VertexAttribute {
                 offset: (std::mem::size_of::<[f32; 3]>() * 2) as BufferAddress,
-                format: VertexFormat::Float3,
+                format: VertexFormat::Float32x3,
                 shader_location: 2,
             },
             VertexAttribute {
                 offset: (std::mem::size_of::<[f32; 3]>() * 3) as BufferAddress,
-                format: VertexFormat::Float,
+                format: VertexFormat::Float32,
                 shader_location: 3,
             },
             VertexAttribute {
                 offset: (std::mem::size_of::<[f32; 3]>() * 3 + std::mem::size_of::<f32>())
                     as BufferAddress,
-                format: VertexFormat::Float2,
+                format: VertexFormat::Float32x2,
                 shader_location: 4,
             },
         ]
@@ -79,16 +79,25 @@ impl VertexBuffer for MeshVertex {
 #[derive(Debug, Default, Clone, Copy, Pod, Zeroable)]
 //TODO: The perspective part isn't needed here
 pub struct InstanceData {
-    model_matrix: Mat4,
+    model: Mat4,
+    normal_matrix: Mat3,
+    _pad: Vec3,
 }
 
 impl InstanceData {
-    pub fn new(model_matrix: Mat4) -> Self {
-        InstanceData { model_matrix }
+    pub fn new(model: Mat4) -> Self {
+        let sub_mat: Mat3 = model.into();
+        let normal_matrix = sub_mat.inverse().transpose();
+        InstanceData {
+            model,
+            normal_matrix,
+            _pad: Vec3::ZERO,
+        }
     }
 }
 
-const ROW_SIZE: BufferAddress = (std::mem::size_of::<f32>() * 4) as BufferAddress;
+const SIZE_VEC4: BufferAddress = (std::mem::size_of::<Vec4>()) as BufferAddress;
+const SIZE_VEC3: BufferAddress = (std::mem::size_of::<Vec3>()) as BufferAddress;
 
 impl VertexBuffer for InstanceData {
     const STEP_MODE: wgpu::InputStepMode = wgpu::InputStepMode::Instance;
@@ -97,23 +106,38 @@ impl VertexBuffer for InstanceData {
         &[
             VertexAttribute {
                 offset: 0,
-                format: VertexFormat::Float4,
+                format: VertexFormat::Float32x4,
                 shader_location: 5,
             },
             VertexAttribute {
-                offset: ROW_SIZE,
-                format: VertexFormat::Float4,
+                offset: SIZE_VEC4,
+                format: VertexFormat::Float32x4,
                 shader_location: 6,
             },
             VertexAttribute {
-                offset: ROW_SIZE * 2,
-                format: VertexFormat::Float4,
+                offset: SIZE_VEC4 * 2,
+                format: VertexFormat::Float32x4,
                 shader_location: 7,
             },
             VertexAttribute {
-                offset: ROW_SIZE * 3,
-                format: VertexFormat::Float4,
+                offset: SIZE_VEC4 * 3,
+                format: VertexFormat::Float32x4,
                 shader_location: 8,
+            },
+            VertexAttribute {
+                offset: SIZE_VEC4 * 4,
+                format: VertexFormat::Float32x3,
+                shader_location: 9,
+            },
+            VertexAttribute {
+                offset: SIZE_VEC4 * 4 + SIZE_VEC3,
+                format: VertexFormat::Float32x3,
+                shader_location: 10,
+            },
+            VertexAttribute {
+                offset: SIZE_VEC4 * 4 + SIZE_VEC3 * 2,
+                format: VertexFormat::Float32x3,
+                shader_location: 11,
             },
         ]
     }
@@ -332,11 +356,11 @@ impl PbrMaterial {
                 },
                 wgpu::BindGroupEntry {
                     binding: 8,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: &factor_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
             ],
             label: Some("PbrMaterial bindgroup"),
@@ -346,8 +370,8 @@ impl PbrMaterial {
             base_color_texture,
             metallic_roughness_texture,
             factors,
-            bind_group,
             factor_buffer,
+            bind_group,
         }
     }
 
@@ -459,11 +483,11 @@ fn get_white_placeholder_texture(
     queue: &wgpu::Queue,
 ) -> &'static PbrMaterialTexture {
     static PLACEHOLDER_TEXTURE: OnceCell<PbrMaterialTexture> = OnceCell::new();
-    PLACEHOLDER_TEXTURE.get_or_init(|| {
+    PLACEHOLDER_TEXTURE.get_or_init(|| -> PbrMaterialTexture {
         let size = wgpu::Extent3d {
             width: 1,
             height: 1,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         let content = TextureContent {
             label: Some("White placeholder texture"),
@@ -488,8 +512,8 @@ fn get_white_placeholder_texture(
             ..Default::default()
         });
         PbrMaterialTexture {
-            view,
             sampler,
+            view,
             texture,
         }
     })
@@ -504,7 +528,7 @@ fn get_normal_placeholder_texture(
         let size = wgpu::Extent3d {
             width: 1,
             height: 1,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         let content = TextureContent {
             label: Some("Normal map placeholder texture"),
@@ -571,7 +595,7 @@ impl GltfModel {
                 let (position, rotation, scaled) = node.transform().decomposed();
                 let local_transform = Mat4::from_scale_rotation_translation(
                     scaled.into(),
-                    rotation.into(),
+                    Quat::from_vec4(rotation.into()),
                     position.into(),
                 );
                 let mesh = node.mesh().unwrap();

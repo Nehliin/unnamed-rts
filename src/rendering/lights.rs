@@ -78,26 +78,26 @@ impl LightUniformBuffer {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: &light_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: &light_count_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
             ],
         });
         LightUniformBuffer {
+            bind_group,
             light_buffer,
             light_count_buffer,
-            bind_group,
         }
     }
 }

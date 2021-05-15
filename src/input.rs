@@ -29,9 +29,9 @@ impl InputHandler {
 
         InputHandler {
             text_input_sender,
+            mouse_scroll_sender,
             mouse_motion_sender,
             modifiers_state_sender,
-            mouse_scroll_sender,
         }
     }
 

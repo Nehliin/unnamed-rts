@@ -37,6 +37,15 @@ pub struct Time {
     pub delta_time: f32,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SerilizableHeightMap {
+    pub size: u32,
+    pub name: String,
+    pub displacement_buffer: Vec<u8>,
+    pub color_buffer: Vec<u8>,
+    pub transform: Transform,
+}
+
 #[derive(Debug)]
 // Make construction private
 #[non_exhaustive]

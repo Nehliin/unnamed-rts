@@ -3,7 +3,7 @@ use super::{
     camera::Camera, common::DepthTexture, common::DEPTH_FORMAT, texture::update_texture_data,
 };
 use super::{gltf::InstanceData, vertex_buffers::ImmutableVertexData};
-use crate::{assets::AssetLoader, components::Transform};
+use crate::{assets::AssetLoader, components::Transform, resources::SerilizableHeightMap};
 use anyhow::Context;
 use bytemuck::{Pod, Zeroable};
 use crossbeam_channel::Sender;
@@ -44,14 +44,6 @@ impl VertexBuffer for MapVertex {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SerilizableHeightMap {
-    size: u32,
-    name: String,
-    displacement_buffer: Vec<u8>,
-    color_buffer: Vec<u8>,
-    transform: Transform,
-}
 
 #[derive(Debug)]
 pub struct HeightMap<'a> {

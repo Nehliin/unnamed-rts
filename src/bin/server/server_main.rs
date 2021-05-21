@@ -1,4 +1,4 @@
-use glam::{Quat, Vec3};
+use glam::{IVec3, Quat, Vec3};
 use laminar::{Config, Packet, SocketEvent};
 use legion::*;
 use log::{error, info, warn};
@@ -10,8 +10,8 @@ use std::{
 };
 use systems::CommandBuffer;
 use unnamed_rts::resources::{
-    NetworkSerialization, NetworkSocket, ServerUpdate, Time, SERVER_ADDR, SERVER_PORT,
-    SERVER_UPDATE_STREAM,
+    NetworkSerialization, NetworkSocket, SerilizableHeightMap, ServerUpdate, Time, SERVER_ADDR,
+    SERVER_PORT, SERVER_UPDATE_STREAM,
 };
 use unnamed_rts::{components::*, resources::ClientUpdate};
 
@@ -99,6 +99,41 @@ fn start_game(
         });
 }
 
+#[derive(Debug, Clone)]
+struct DisplacementBuffer {
+    pub inner: Vec<u8>,
+    pub size: usize,
+}
+
+impl DisplacementBuffer {
+    pub fn get(&self, x: i32, y: i32) -> IVec3 {
+        let height = (self.inner[self.size * y as usize + x as usize] * 5) as i32;
+        IVec3::new(x, height, y)
+    }
+
+    pub fn adjacent(&self, x: i32, y: i32) -> Vec<IVec3> {
+        vec![
+            self.get(x + 1, y + 1),
+            self.get(x + 1, y),
+            self.get(x + 1, y - 1),
+            self.get(x - 1, y + 1),
+            self.get(x - 1, y),
+            self.get(x - 1, y - 1),
+        ]
+    }
+}
+
+fn setup_map(resources: &mut Resources) {
+    // TODO: This is temporary, the entire map isn't needed here and
+    // clients should probably download it from the serverin the future if it's not already cached client side
+    let map_file = std::fs::File::open("assets/mymap.map").unwrap();
+    let seriliziable_map: SerilizableHeightMap = bincode::deserialize_from(map_file).unwrap();
+    resources.insert(DisplacementBuffer {
+        inner: seriliziable_map.displacement_buffer,
+        size: seriliziable_map.size as usize,
+    });
+}
+
 fn main() {
     env_logger::builder()
         .filter_level(log::LevelFilter::Debug)
@@ -112,6 +147,7 @@ fn main() {
 
     let mut world = World::default();
     let mut resources = Resources::default();
+    setup_map(&mut resources);
     let initial_state = setup_world(&mut world, &net_serilization);
     let mut connected_clients = ConnectedClients::default();
     start_game(
@@ -131,6 +167,7 @@ fn main() {
 
     let mut schedule = Schedule::builder()
         .add_system(client_input_system())
+        .add_system(path_finding_system())
         .add_system(movement_system())
         .build();
 

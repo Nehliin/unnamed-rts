@@ -1,4 +1,4 @@
-use glam::{IVec3, Quat, Vec3};
+use glam::{i32, IVec3, Quat, Vec3};
 use laminar::{Config, Packet, SocketEvent};
 use legion::*;
 use log::{error, info, warn};
@@ -26,7 +26,11 @@ fn setup_world(world: &mut World, net_serilization: &NetworkSerialization) -> Ve
     world.extend(vec![
         (
             EntityType::BasicUnit,
-            Transform::new(Vec3::ZERO, Vec3::new(1.0, 1.0, 1.0), Quat::IDENTITY),
+            Transform::new(
+                Vec3::new(1.0, 0.0, 1.0),
+                Vec3::new(1.0, 1.0, 1.0),
+                Quat::IDENTITY,
+            ),
             Velocity {
                 velocity: Vec3::splat(0.0),
             },
@@ -100,26 +104,41 @@ fn start_game(
 }
 
 #[derive(Debug, Clone)]
-struct DisplacementBuffer {
+pub struct DisplacementBuffer {
     pub inner: Vec<u8>,
     pub size: usize,
 }
 
 impl DisplacementBuffer {
-    pub fn get(&self, x: i32, y: i32) -> IVec3 {
-        let height = (self.inner[self.size * y as usize + x as usize] * 5) as i32;
-        IVec3::new(x, height, y)
+    pub fn get(&self, img_x: f32, img_y: f32) -> Option<PathNode> {
+        // Scaling needs to be taken into account
+        let (x, y) = (img_x as i32 * 10, img_y as i32 * 10);
+        if (x < 0 || y < 0) || (x > self.size as i32 || y > self.size as i32) {
+            return None;
+        }
+        let height = self.inner[self.size * y as usize + x as usize] as i32 * 5;
+        Some(PathNode {
+            x: (( x / 10 ) as f32).into(),
+            y: (height as f32).into(),
+            z: (( y / 10 ) as f32).into(),
+        })
     }
 
-    pub fn adjacent(&self, x: i32, y: i32) -> Vec<IVec3> {
+    pub fn adjacent(&self, img_x: f32, img_y: f32) -> Vec<(PathNode, u32)> {
         vec![
-            self.get(x + 1, y + 1),
-            self.get(x + 1, y),
-            self.get(x + 1, y - 1),
-            self.get(x - 1, y + 1),
-            self.get(x - 1, y),
-            self.get(x - 1, y - 1),
+            self.get(img_x + 1.0, img_y + 1.0),
+            self.get(img_x + 1.0, img_y),
+            self.get(img_x + 1.0, img_y - 1.0),
+            self.get(img_x - 1.0, img_y + 1.0),
+            self.get(img_x - 1.0, img_y),
+            self.get(img_x - 1.0, img_y - 1.0),
+            self.get(img_x, img_y + 1.0),
+            self.get(img_x, img_y - 1.0),
         ]
+        .into_iter()
+        .flatten()
+        .map(|p| (p, 1))
+        .collect()
     }
 }
 
@@ -202,6 +221,7 @@ fn client_input(
                 match net_serilization.deserialize_client_update(&packet.payload()) {
                     ClientUpdate::Move { entity, target } => {
                         info!("Successfully deserialized packet!");
+                        println!("Target {}", target);
                         command_buffer.add_component(
                             entity,
                             MoveTarget {

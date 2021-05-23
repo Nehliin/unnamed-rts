@@ -1,15 +1,16 @@
 use bytemuck::{Pod, Zeroable};
-use glam::{Vec2, Vec3};
+use glam::{UVec2, Vec2, Vec3, Vec3A, Vec4Swizzles};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use serde::{Deserialize, Serialize};
 
 use crate::components::Transform;
 #[repr(C)]
-#[derive(Debug, Default, Pod, Zeroable, Clone, Copy)]
+#[derive(Debug, Default, Pod, Zeroable, Deserialize, Serialize, Clone, Copy)]
 pub struct TileVertex {
     position: Vec3,
     uv: Vec2,
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum TileType {
     Flat,
     RampTop,
@@ -32,11 +33,11 @@ impl Default for TileType {
     }
 }
 
-const VERTECIES_PER_TILE: usize = 9;
+pub const VERTECIES_PER_TILE: usize = 9;
 const INDICIES_PER_TILE: usize = 24;
-const TILE_WIDTH: f32 = 2.0;
-const TILE_HEIGHT: f32 = 2.0;
-// X/Y/Z coords per tile?
+pub const TILE_WIDTH: f32 = 2.0;
+pub const TILE_HEIGHT: f32 = 2.0;
+// Z coords per tile?
 
 /*
  *   *------*------*
@@ -49,7 +50,7 @@ const TILE_HEIGHT: f32 = 2.0;
  *   |/  6  | 8   \|
  *   *------*------*
  */
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Default)]
 pub struct Tile {
     verticies: [TileVertex; VERTECIES_PER_TILE],
     indicies: [u32; INDICIES_PER_TILE],
@@ -59,7 +60,7 @@ pub struct Tile {
 
 impl Tile {
     pub fn new(top_left_corner: Vec3, start_idx: u32, size: u32) -> Self {
-        let size = size as f32;
+        let size = size as f32 * TILE_HEIGHT * TILE_WIDTH;
         // TODO change order of this to make indices closer to each other
         // FIX TEXTURE MAPPNG: Maybe use z instead of y?
         let verticies = [
@@ -86,57 +87,56 @@ impl Tile {
             },
             // Middle left
             TileVertex {
-                position: top_left_corner - Vec3::Z * TILE_HEIGHT / 2.0,
+                position: top_left_corner + Vec3::Z * TILE_HEIGHT / 2.0,
                 uv: Vec2::new(
-                    (top_left_corner - Vec3::Z * TILE_HEIGHT / 2.0).x / size,
-                    (top_left_corner - Vec3::Z * TILE_HEIGHT / 2.0).z / size,
+                    (top_left_corner + Vec3::Z * TILE_HEIGHT / 2.0).x / size,
+                    (top_left_corner + Vec3::Z * TILE_HEIGHT / 2.0).z / size,
                 ),
             },
             // Middle middle
             TileVertex {
-                position: top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, -TILE_HEIGHT / 2.0),
+                position: top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT / 2.0),
                 uv: Vec2::new(
-                    (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, -TILE_HEIGHT / 2.0)).x
+                    (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT / 2.0)).x
                         / size,
-                    (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, -TILE_HEIGHT / 2.0)).z
+                    (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT / 2.0)).z
                         / size,
                 ),
             },
             // Middle right
             TileVertex {
-                position: top_left_corner + Vec3::new(TILE_WIDTH, 0.0, -TILE_HEIGHT / 2.0),
+                position: top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT / 2.0),
                 uv: Vec2::new(
-                    (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, -TILE_HEIGHT / 2.0)).x / size,
-                    (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, -TILE_HEIGHT / 2.0)).z / size,
+                    (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT / 2.0)).x / size,
+                    (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT / 2.0)).z / size,
                 ),
             },
             // Bottom left
             TileVertex {
-                position: top_left_corner + Vec3::new(0.0, 0.0, -TILE_HEIGHT),
+                position: top_left_corner + Vec3::new(0.0, 0.0, TILE_HEIGHT),
                 uv: Vec2::new(
-                    (top_left_corner + Vec3::new(0.0, 0.0, -TILE_HEIGHT)).x / size,
-                    (top_left_corner + Vec3::new(0.0, 0.0, -TILE_HEIGHT)).z / size,
+                    (top_left_corner + Vec3::new(0.0, 0.0, TILE_HEIGHT)).x / size,
+                    (top_left_corner + Vec3::new(0.0, 0.0, TILE_HEIGHT)).z / size,
                 ),
             },
             // Bottom middle
             TileVertex {
-                position: top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, -TILE_HEIGHT),
+                position: top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT),
                 uv: Vec2::new(
-                    (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, -TILE_HEIGHT)).x / size,
-                    (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, -TILE_HEIGHT)).z / size,
+                    (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT)).x / size,
+                    (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT)).z / size,
                 ),
             },
             // Bottom right
             TileVertex {
-                position: top_left_corner + Vec3::new(TILE_WIDTH, 0.0, -TILE_HEIGHT),
+                position: top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT),
                 uv: Vec2::new(
-                    (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, -TILE_HEIGHT)).x / size,
-                    (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, -TILE_HEIGHT)).z / size,
+                    (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT)).x / size,
+                    (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT)).z / size,
                 ),
             },
         ];
         #[rustfmt::skip]
-        // CCW ordering
         let indicies = [
             // 1
             start_idx + 1, start_idx + 4, start_idx,
@@ -172,11 +172,36 @@ pub struct TileMapRenderData<'a> {
     pub vertex_buffer: vertex_buffers::MutableVertexData<TileVertex>,
     pub index_buffer: wgpu::Buffer,
     pub num_indexes: u32,
-    pub color_texture: wgpu::Texture,
-    pub color_content: texture::TextureContent<'a>,
+    color_texture: wgpu::Texture,
+    color_content: texture::TextureContent<'a>,
+    decal_layer_texture: wgpu::Texture,
+    decal_layer_content: texture::TextureContent<'a>,
     // TODO remove
     pub instance_buffer: vertex_buffers::MutableVertexData<crate::rendering::gltf::InstanceData>,
     pub bind_group: wgpu::BindGroup,
+    pub needs_decal_update: bool,
+}
+
+#[cfg(feature = "graphics")]
+impl<'a> TileMapRenderData<'a> {
+    pub fn decal_buffer_mut(&mut self) -> (u32, &mut [u8]) {
+        self.needs_decal_update = true;
+        (
+            self.decal_layer_content.stride,
+            self.decal_layer_content.bytes.to_mut(),
+        )
+    }
+
+    pub fn update_tilemap_data(&mut self, queue: &wgpu::Queue) {
+        if self.needs_decal_update {
+            texture::update_texture_data(
+                &self.decal_layer_content,
+                &self.decal_layer_texture,
+                queue,
+            );
+            self.needs_decal_update = false;
+        }
+    }
 }
 
 #[cfg(feature = "graphics")]
@@ -188,8 +213,11 @@ impl<'a> TileMapRenderData<'a> {
         size: u32,
         transform: &Transform,
     ) -> Self {
-        let color_content = texture::TextureContent::checkerd(size);
+        let color_content = texture::TextureContent::checkerd(size, (TILE_WIDTH) as usize);
         let color_texture = texture::allocate_simple_texture(device, queue, &color_content, true);
+        let decal_layer_content = texture::TextureContent::black(size * TILE_WIDTH as u32);
+        let decal_layer_texture =
+            texture::allocate_simple_texture(device, queue, &decal_layer_content, false);
         //TODO: improve this
         let verticies = tiles
             .into_par_iter()
@@ -217,13 +245,15 @@ impl<'a> TileMapRenderData<'a> {
             &[gltf::InstanceData::new(transform.get_model_matrix())],
         );
         let color_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let decal_layer_view =
+            decal_layer_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let color_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("Tilemap color texture sampler"),
             address_mode_u: wgpu::AddressMode::Repeat,
             address_mode_v: wgpu::AddressMode::Repeat,
             address_mode_w: wgpu::AddressMode::Repeat,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
             mipmap_filter: wgpu::FilterMode::Nearest,
             lod_min_clamp: -100.0,
             lod_max_clamp: 100.0,
@@ -238,6 +268,10 @@ impl<'a> TileMapRenderData<'a> {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&decal_layer_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
                     resource: wgpu::BindingResource::Sampler(&color_sampler),
                 },
             ],
@@ -249,20 +283,13 @@ impl<'a> TileMapRenderData<'a> {
             num_indexes,
             color_texture,
             color_content,
+            decal_layer_texture,
+            decal_layer_content,
             instance_buffer,
             bind_group,
+            needs_decal_update: false,
         }
     }
-}
-
-// Use const generics here perhaps
-#[derive(Debug)]
-#[cfg(feature = "graphics")]
-pub struct TileMap<'a> {
-    pub tiles: Vec<Tile>,
-    pub size: u32,
-    pub transform: Transform,
-    pub render_data: TileMapRenderData<'a>,
 }
 
 fn generate_tiles(size: u32) -> Vec<Tile> {
@@ -281,39 +308,71 @@ fn generate_tiles(size: u32) -> Vec<Tile> {
     tiles
 }
 
-#[cfg(feature = "graphics")]
-impl<'a> TileMap<'a> {
-    pub fn new(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        size: u32,
-        transform: Transform,
-    ) -> Self {
+// Use const generics here perhaps
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TileMap {
+    pub name: String,
+    pub tiles: Vec<Tile>,
+    pub size: u32,
+    pub transform: Transform,
+}
+
+impl TileMap {
+    pub fn new(name: String, size: u32, transform: Transform) -> Self {
         let tiles = generate_tiles(size);
         TileMap {
-            transform,
-            size,
-            render_data: TileMapRenderData::new(device, queue, &tiles, size, &transform),
+            name,
             tiles,
+            size,
+            transform,
         }
     }
+
+    pub fn to_tile_coords(&self, world_coords: Vec3A) -> Option<UVec2> {
+        let local_coords = self.transform.get_model_matrix().inverse() * world_coords.extend(1.0);
+        let map_coords = Vec2::new(local_coords.x, local_coords.z);
+        /*  if map_coords.cmple(Vec2::ZERO).any()
+            || map_coords
+                .cmpgt(Vec2::new(
+                    self.size as f32 * TILE_WIDTH,
+                    self.size as f32 * TILE_HEIGHT,
+                ))
+                .any()
+        {
+            Some(UVec2::new(
+                (map_coords.x / TILE_WIDTH) as u32,
+                (map_coords.y / TILE_HEIGHT) as u32,
+            ))
+        } else {
+            error!("OUT OF BOUNDS! {}", map_coords);
+            None
+        } */
+        Some(UVec2::new(
+            (map_coords.x / TILE_WIDTH) as u32,
+            (map_coords.y / TILE_HEIGHT) as u32,
+        ))
+    }
+}
+#[derive(Debug)]
+#[cfg(feature = "graphics")]
+pub struct DrawableTileMap<'a> {
+    pub map: TileMap,
+    pub render_data: TileMapRenderData<'a>,
 }
 
-#[cfg(not(feature = "graphics"))]
-pub struct TileMap {
-    tiles: Vec<Tile>,
-    size: u32,
-    transform: Transform,
-}
-
-#[cfg(not(feature = "graphics"))]
-impl TileMap {
-    pub fn new(size: u32, transform: Transform) -> Self {
-        let tiles = generate_tiles(size);
-        TileMap {
-            size,
-            transform,
-            tiles,
+#[cfg(feature = "graphics")]
+impl<'a> DrawableTileMap<'a> {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, tilemap: TileMap) -> Self {
+        let render_data = TileMapRenderData::new(
+            device,
+            queue,
+            &tilemap.tiles,
+            tilemap.size,
+            &tilemap.transform,
+        );
+        DrawableTileMap {
+            map: tilemap,
+            render_data,
         }
     }
 }

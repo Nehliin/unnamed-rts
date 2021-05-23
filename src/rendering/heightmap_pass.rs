@@ -141,7 +141,7 @@ impl<'a> HeightMap<'a> {
             name,
             size,
             texture,
-            TextureContent::checkerd(size),
+            TextureContent::checkerd(size, 1),
             transform,
         )
     }

@@ -2,7 +2,7 @@ use std::{f32::consts::PI, time::Instant};
 
 use glam::{Quat, Vec3};
 use legion::*;
-use unnamed_rts::{assets::{self, Assets, Handle}, components::Transform, rendering::{camera::{self, Camera}, common::DepthTexture, debug_lines_pass::{self, BoundingBoxMap}, gltf::GltfModel, grid_pass, lights::{self, LightUniformBuffer}, model_pass, selection_pass, tilemap_pass, ui::ui_resources::UiTexture}, resources::{DebugRenderSettings, WindowSize}, states::{State, StateTransition}, tilemap::TileMap};
+use unnamed_rts::{assets::{self, Assets, Handle}, components::Transform, rendering::{camera::{self, Camera}, common::DepthTexture, debug_lines_pass::{self, BoundingBoxMap}, gltf::GltfModel, grid_pass, lights::{self, LightUniformBuffer}, model_pass, selection_pass, tilemap_pass, ui::ui_resources::UiTexture}, resources::{DebugRenderSettings, WindowSize}, states::{State, StateTransition}, tilemap::{DrawableTileMap, TileMap}};
 use wgpu::{Device, Queue};
 
 use crate::editor_systems::{self, EditorSettings, HeightMapModificationState, UiState};
@@ -57,7 +57,8 @@ impl State for EditState {
             size.physical_height,
         );
         let transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
-        let tilemap = TileMap::new(&device, &queue, 10, transform);
+        let tilemap = TileMap::new("Tilemap".into(), 10, transform);
+        let tilemap = DrawableTileMap::new(&device, &queue, tilemap);
 
         // render resources
         let depth_texture = DepthTexture::new(&device, size.physical_width, size.physical_height);
@@ -117,21 +118,21 @@ impl State for EditState {
             .add_system(lights::update_system())
             .add_system(model_pass::draw_system())
             .add_system(selection_pass::draw_system())
-            /* .add_system(editor_systems::height_map_modification_system(
+            .add_system(editor_systems::tilemap_modification_system(
                 HeightMapModificationState {
                     last_update: std::time::Instant::now(),
                 },
             ))
- */            //.add_system(heightmap_pass::update_system())
+            .add_system(tilemap_pass::update_system())
             .add_system(tilemap_pass::draw_system())
             .add_system(grid_pass::draw_system())
             .add_system(debug_lines_pass::update_bounding_boxes_system())
             .add_system(debug_lines_pass::draw_system())
-            /* .add_system(editor_systems::editor_ui_system(UiState {
+            .add_system(editor_systems::editor_ui_system(UiState {
                 img: self.test_img.unwrap(),
                 show_load_popup: false,
                 load_error_label: None,
-            })) */
+            })) 
             .build()
     }
 }

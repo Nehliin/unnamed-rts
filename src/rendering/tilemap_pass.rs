@@ -2,12 +2,15 @@ use std::borrow::Cow;
 
 use crossbeam_channel::Sender;
 use glam::Vec2;
+use legion::*;
 use once_cell::sync::OnceCell;
-use legion::*; 
 
-use crate::{rendering::{camera::Camera, common::DEPTH_FORMAT, gltf::InstanceData}, tilemap::{TileMap, TileVertex}};
+use crate::{
+    rendering::{camera::Camera, common::DEPTH_FORMAT, gltf::InstanceData},
+    tilemap::{DrawableTileMap, TileVertex},
+};
 
-use super::{common::DepthTexture, vertex_buffers::{VertexBuffer, VertexBufferData}};
+use super::{common::DepthTexture, texture::update_texture_data, vertex_buffers::{VertexBuffer, VertexBufferData}};
 
 impl VertexBuffer for TileVertex {
     const STEP_MODE: wgpu::InputStepMode = wgpu::InputStepMode::Vertex;
@@ -38,7 +41,7 @@ pub fn get_or_create_tilemap_layout(device: &wgpu::Device) -> &'static wgpu::Bin
                     visibility: wgpu::ShaderStage::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
                         multisampled: false,
                     },
                     count: None,
@@ -46,9 +49,19 @@ pub fn get_or_create_tilemap_layout(device: &wgpu::Device) -> &'static wgpu::Bin
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
                     ty: wgpu::BindingType::Sampler {
                         comparison: false,
-                        filtering: true,
+                        filtering: false,
                     },
                     count: None,
                 },
@@ -93,7 +106,7 @@ impl TileMapPass {
                 targets: &[wgpu::TextureFormat::Bgra8UnormSrgb.into()],
             }),
             primitive: wgpu::PrimitiveState {
-                cull_mode: Some(wgpu::Face::Back),
+                cull_mode: None, //Some(wgpu::Face::Back), FIXME change back the index order again
                 polygon_mode: wgpu::PolygonMode::Fill,
                 ..Default::default()
             },
@@ -115,13 +128,18 @@ impl TileMapPass {
 }
 
 #[system]
+pub fn update(#[resource] queue: &wgpu::Queue, #[resource] tilemap: &mut DrawableTileMap) {
+   tilemap.render_data.update_tilemap_data(queue);
+}
+
+#[system]
 pub fn draw(
     #[resource] pass: &TileMapPass,
     #[resource] current_frame: &wgpu::SwapChainTexture,
     #[resource] device: &wgpu::Device,
     #[resource] depth_texture: &DepthTexture,
     #[resource] camera: &Camera,
-    #[resource] tile_map: &TileMap,
+    #[resource] tile_map: &DrawableTileMap,
 ) {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Tilemap pass encoder"),
@@ -148,7 +166,10 @@ pub fn draw(
     render_pass.push_debug_group("Tilemap pass");
     render_pass.set_pipeline(&pass.render_pipeline);
     render_pass.set_vertex_buffer(0, tile_map.render_data.vertex_buffer.slice(..));
-    render_pass.set_index_buffer(tile_map.render_data.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+    render_pass.set_index_buffer(
+        tile_map.render_data.index_buffer.slice(..),
+        wgpu::IndexFormat::Uint32,
+    );
     render_pass.set_vertex_buffer(1, tile_map.render_data.instance_buffer.slice(..));
     render_pass.set_bind_group(0, &tile_map.render_data.bind_group, &[]);
     render_pass.set_bind_group(1, &camera.bind_group(), &[]);

@@ -10,34 +10,29 @@ pub struct TextureContent<'a> {
     pub stride: u32,
     pub size: wgpu::Extent3d,
 }
-
+// FIXME
 impl<'a> TextureContent<'a> {
-    pub fn checkerd(size: u32) -> Self {
+    pub fn checkerd(size: u32, tile_size: usize) -> Self {
         let img_size = wgpu::Extent3d {
-            width: size,
-            height: size,
+            width: size * tile_size as u32,
+            height: size * tile_size as u32,
             depth_or_array_layers: 1,
         };
+        let test:u32 = std::convert::TryInto::try_into(tile_size * tile_size).unwrap();
         // construct checkered content
-        let mut bytes: Vec<u8> = vec![0; (size * size) as usize * 4];
+        let mut bytes: Vec<u8> = vec![0; (size * test * size) as usize * 4];
         bytes
-            .par_chunks_exact_mut(size as usize * 4)
+            .par_chunks_exact_mut(size as usize * 4 * tile_size)
             .enumerate()
-            .for_each(|(y, chunk)| {
+            .for_each(|(x, chunk)| {
                 chunk
-                    .chunks_exact_mut(4)
+                    .chunks_exact_mut(4 * tile_size)
                     .enumerate()
-                    .for_each(|(x, texel)| {
-                        if (x / 3 + y / 3) % 2 == 0 {
-                            texel[0] = 128;
-                            texel[1] = 128;
-                            texel[2] = 128;
-                            texel[3] = 128;
+                    .for_each(|(y, texel)| {
+                        if x % 2 == 0 {
+                            texel.fill(128);
                         } else {
-                            texel[0] = 255;
-                            texel[1] = 255;
-                            texel[2] = 255;
-                            texel[3] = 255;
+                            texel.fill(255)
                         }
                     });
             });

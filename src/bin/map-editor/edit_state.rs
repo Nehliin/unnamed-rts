@@ -2,23 +2,7 @@ use std::{f32::consts::PI, time::Instant};
 
 use glam::{Quat, Vec3};
 use legion::*;
-use unnamed_rts::{
-    assets::{self, Assets, Handle},
-    components::Transform,
-    rendering::{
-        camera::{self, Camera},
-        common::DepthTexture,
-        debug_lines_pass::{self, BoundingBoxMap},
-        gltf::GltfModel,
-        grid_pass,
-        heightmap_pass::{self, HeightMap},
-        lights::{self, LightUniformBuffer},
-        model_pass, selection_pass,
-        ui::ui_resources::UiTexture,
-    },
-    resources::{DebugRenderSettings, WindowSize},
-    states::{State, StateTransition},
-};
+use unnamed_rts::{assets::{self, Assets, Handle}, components::Transform, rendering::{camera::{self, Camera}, common::DepthTexture, debug_lines_pass::{self, BoundingBoxMap}, gltf::GltfModel, grid_pass, lights::{self, LightUniformBuffer}, model_pass, selection_pass, tilemap_pass, ui::ui_resources::UiTexture}, resources::{DebugRenderSettings, WindowSize}, states::{State, StateTransition}, tilemap::TileMap};
 use wgpu::{Device, Queue};
 
 use crate::editor_systems::{self, EditorSettings, HeightMapModificationState, UiState};
@@ -38,11 +22,11 @@ impl State for EditState {
     ) {
         let (debug_sender, debug_rc) = crossbeam_channel::bounded(1);
         let (model_sender, model_rc) = crossbeam_channel::bounded(1);
-        let (heightmap_sender, heightmap_rc) = crossbeam_channel::bounded(1);
+        let (tilemap_sender, tilemap_rc) = crossbeam_channel::bounded(1);
         let (lines_sender, lines_rc) = crossbeam_channel::bounded(1);
         let (selectable_sender, selectable_rc) = crossbeam_channel::bounded(1);
         command_receivers.push(model_rc);
-        command_receivers.push(heightmap_rc);
+        command_receivers.push(tilemap_rc);
         command_receivers.push(selectable_rc);
         command_receivers.push(debug_rc);
         command_receivers.push(lines_rc);
@@ -57,7 +41,7 @@ impl State for EditState {
         let grid_pass = grid_pass::GridPass::new(&device, debug_sender);
         let model_pass = model_pass::ModelPass::new(&device, model_sender);
         let selection_pass = selection_pass::SelectionPass::new(&device, selectable_sender);
-        let heightmap_pass = heightmap_pass::HeightMapPass::new(&device, heightmap_sender);
+        let heightmap_pass = tilemap_pass::TileMapPass::new(&device, tilemap_sender);
         let debug_lines_pass = debug_lines_pass::DebugLinesPass::new(&device, lines_sender);
         info!("Pipeline setup time: {}ms", start.elapsed().as_millis());
 
@@ -72,10 +56,8 @@ impl State for EditState {
             size.physical_width,
             size.physical_height,
         );
-        let mut transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
-        transform.scale = Vec3::splat(0.1);
-        transform.rotation = Quat::from_rotation_x(PI / 2.0);
-        let height_map = HeightMap::new(&device, &queue, "MyMap".to_string(), 512, transform);
+        let transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
+        let tilemap = TileMap::new(&device, &queue, 10, transform);
 
         // render resources
         let depth_texture = DepthTexture::new(&device, size.physical_width, size.physical_height);
@@ -88,17 +70,17 @@ impl State for EditState {
         resources.insert(grid_pass);
         resources.insert(selection_pass);
         resources.insert(heightmap_pass);
-        resources.insert(Assets::<HeightMap>::default());
+        //resources.insert(Assets::<HeightMap>::default());
         resources.insert(debug_lines_pass);
         resources.insert(BoundingBoxMap::default());
         resources.insert(DebugRenderSettings {
-            show_grid: true,
+            show_grid: false,
             show_bounding_boxes: true,
         });
         let editor_settings = EditorSettings::default();
         resources.insert(editor_settings);
         resources.insert(depth_texture);
-        resources.insert(height_map);
+        resources.insert(tilemap);
         resources.insert(light_uniform);
         resources.insert(camera);
     }
@@ -135,21 +117,21 @@ impl State for EditState {
             .add_system(lights::update_system())
             .add_system(model_pass::draw_system())
             .add_system(selection_pass::draw_system())
-            .add_system(editor_systems::height_map_modification_system(
+            /* .add_system(editor_systems::height_map_modification_system(
                 HeightMapModificationState {
                     last_update: std::time::Instant::now(),
                 },
             ))
-            .add_system(heightmap_pass::update_system())
-            .add_system(heightmap_pass::draw_system())
+ */            //.add_system(heightmap_pass::update_system())
+            .add_system(tilemap_pass::draw_system())
             .add_system(grid_pass::draw_system())
             .add_system(debug_lines_pass::update_bounding_boxes_system())
             .add_system(debug_lines_pass::draw_system())
-            .add_system(editor_systems::editor_ui_system(UiState {
+            /* .add_system(editor_systems::editor_ui_system(UiState {
                 img: self.test_img.unwrap(),
                 show_load_popup: false,
                 load_error_label: None,
-            }))
+            })) */
             .build()
     }
 }

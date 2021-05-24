@@ -2,7 +2,23 @@ use std::{f32::consts::PI, time::Instant};
 
 use glam::{Quat, Vec3};
 use legion::*;
-use unnamed_rts::{assets::{self, Assets, Handle}, components::Transform, rendering::{camera::{self, Camera}, common::DepthTexture, debug_lines_pass::{self, BoundingBoxMap}, gltf::GltfModel, grid_pass, lights::{self, LightUniformBuffer}, model_pass, selection_pass, tilemap_pass, ui::ui_resources::UiTexture}, resources::{DebugRenderSettings, WindowSize}, states::{State, StateTransition}, tilemap::{DrawableTileMap, TileMap}};
+use unnamed_rts::{
+    assets::{self, Assets, Handle},
+    components::Transform,
+    rendering::{
+        camera::{self, Camera},
+        common::DepthTexture,
+        debug_lines_pass::{self, BoundingBoxMap},
+        gltf::GltfModel,
+        grid_pass,
+        lights::{self, LightUniformBuffer},
+        model_pass, selection_pass, tilemap_pass,
+        ui::ui_resources::UiTexture,
+    },
+    resources::{DebugRenderSettings, WindowSize},
+    states::{State, StateTransition},
+    tilemap::{DrawableTileMap, TileMap},
+};
 use wgpu::{Device, Queue};
 
 use crate::editor_systems::{self, EditorSettings, HeightMapModificationState, UiState};
@@ -57,7 +73,7 @@ impl State for EditState {
             size.physical_height,
         );
         let transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
-        let tilemap = TileMap::new("Tilemap".into(), 10, transform);
+        let tilemap = TileMap::new("Tilemap".into(), 4, transform);
         let tilemap = DrawableTileMap::new(&device, &queue, tilemap);
 
         // render resources
@@ -132,7 +148,7 @@ impl State for EditState {
                 img: self.test_img.unwrap(),
                 show_load_popup: false,
                 load_error_label: None,
-            })) 
+            }))
             .build()
     }
 }

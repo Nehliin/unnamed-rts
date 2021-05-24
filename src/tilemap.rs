@@ -60,37 +60,38 @@ pub struct Tile {
 
 impl Tile {
     pub fn new(top_left_corner: Vec3, start_idx: u32, size: u32) -> Self {
-        let size = size as f32 * TILE_HEIGHT * TILE_WIDTH;
+        let height = size as f32 * TILE_HEIGHT;
+        let width = size as f32 * TILE_WIDTH;
         // TODO change order of this to make indices closer to each other
         // FIX TEXTURE MAPPNG: Maybe use z instead of y?
         let verticies = [
             // Top left
             TileVertex {
                 position: top_left_corner,
-                uv: Vec2::new(top_left_corner.x / size, top_left_corner.z / size),
+                uv: Vec2::new(top_left_corner.x / width, 1.0 - top_left_corner.z / height),
             },
             // Top middle
             TileVertex {
                 position: top_left_corner + Vec3::X * TILE_WIDTH / 2.0,
                 uv: Vec2::new(
-                    (top_left_corner + Vec3::X * TILE_WIDTH / 2.0).x / size,
-                    (top_left_corner + Vec3::X * TILE_WIDTH / 2.0).z / size,
+                    (top_left_corner + Vec3::X * TILE_WIDTH / 2.0).x / width,
+                    1.0 - (top_left_corner + Vec3::X * TILE_WIDTH / 2.0).z / height,
                 ),
             },
             // Top right
             TileVertex {
                 position: top_left_corner + Vec3::X * TILE_WIDTH,
                 uv: Vec2::new(
-                    (top_left_corner + Vec3::X * TILE_WIDTH).x / size,
-                    (top_left_corner + Vec3::X * TILE_WIDTH).z / size,
+                    (top_left_corner + Vec3::X * TILE_WIDTH).x / width,
+                    1.0 - (top_left_corner + Vec3::X * TILE_WIDTH).z / height,
                 ),
             },
             // Middle left
             TileVertex {
                 position: top_left_corner + Vec3::Z * TILE_HEIGHT / 2.0,
                 uv: Vec2::new(
-                    (top_left_corner + Vec3::Z * TILE_HEIGHT / 2.0).x / size,
-                    (top_left_corner + Vec3::Z * TILE_HEIGHT / 2.0).z / size,
+                    (top_left_corner + Vec3::Z * TILE_HEIGHT / 2.0).x / width,
+                    1.0 - (top_left_corner + Vec3::Z * TILE_HEIGHT / 2.0).z / height,
                 ),
             },
             // Middle middle
@@ -98,41 +99,43 @@ impl Tile {
                 position: top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT / 2.0),
                 uv: Vec2::new(
                     (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT / 2.0)).x
-                        / size,
-                    (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT / 2.0)).z
-                        / size,
+                        / width,
+                    1.0 - (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT / 2.0)).z
+                        / height,
                 ),
             },
             // Middle right
             TileVertex {
                 position: top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT / 2.0),
                 uv: Vec2::new(
-                    (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT / 2.0)).x / size,
-                    (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT / 2.0)).z / size,
+                    (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT / 2.0)).x / width,
+                    1.0 - (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT / 2.0)).z
+                        / height,
                 ),
             },
             // Bottom left
             TileVertex {
                 position: top_left_corner + Vec3::new(0.0, 0.0, TILE_HEIGHT),
                 uv: Vec2::new(
-                    (top_left_corner + Vec3::new(0.0, 0.0, TILE_HEIGHT)).x / size,
-                    (top_left_corner + Vec3::new(0.0, 0.0, TILE_HEIGHT)).z / size,
+                    (top_left_corner + Vec3::new(0.0, 0.0, TILE_HEIGHT)).x / width,
+                    1.0 - (top_left_corner + Vec3::new(0.0, 0.0, TILE_HEIGHT)).z / height,
                 ),
             },
             // Bottom middle
             TileVertex {
                 position: top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT),
                 uv: Vec2::new(
-                    (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT)).x / size,
-                    (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT)).z / size,
+                    (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT)).x / width,
+                    1.0 - (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT)).z
+                        / height,
                 ),
             },
             // Bottom right
             TileVertex {
                 position: top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT),
                 uv: Vec2::new(
-                    (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT)).x / size,
-                    (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT)).z / size,
+                    (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT)).x / width,
+                    1.0 - (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT)).z / height,
                 ),
             },
         ];
@@ -213,9 +216,11 @@ impl<'a> TileMapRenderData<'a> {
         size: u32,
         transform: &Transform,
     ) -> Self {
+        dbg!(&tiles);
         let color_content = texture::TextureContent::checkerd(size, (TILE_WIDTH) as usize);
         let color_texture = texture::allocate_simple_texture(device, queue, &color_content, true);
-        let decal_layer_content = texture::TextureContent::black(size * TILE_WIDTH as u32);
+        let decal_layer_content =
+            texture::TextureContent::black_v2(size * TILE_WIDTH as u32, size * TILE_HEIGHT as u32);
         let decal_layer_texture =
             texture::allocate_simple_texture(device, queue, &decal_layer_content, false);
         //TODO: improve this
@@ -249,9 +254,9 @@ impl<'a> TileMapRenderData<'a> {
             decal_layer_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let color_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("Tilemap color texture sampler"),
-            address_mode_u: wgpu::AddressMode::Repeat,
-            address_mode_v: wgpu::AddressMode::Repeat,
-            address_mode_w: wgpu::AddressMode::Repeat,
+            address_mode_u: wgpu::AddressMode::ClampToBorder,
+            address_mode_v: wgpu::AddressMode::ClampToBorder,
+            address_mode_w: wgpu::AddressMode::ClampToBorder,
             mag_filter: wgpu::FilterMode::Nearest,
             min_filter: wgpu::FilterMode::Nearest,
             mipmap_filter: wgpu::FilterMode::Nearest,
@@ -330,27 +335,17 @@ impl TileMap {
 
     pub fn to_tile_coords(&self, world_coords: Vec3A) -> Option<UVec2> {
         let local_coords = self.transform.get_model_matrix().inverse() * world_coords.extend(1.0);
-        let map_coords = Vec2::new(local_coords.x, local_coords.z);
-        /*  if map_coords.cmple(Vec2::ZERO).any()
+        let map_coords = Vec2::new(local_coords.x / TILE_WIDTH, local_coords.z / TILE_HEIGHT);
+        if map_coords.cmplt(Vec2::ZERO).any()
             || map_coords
-                .cmpgt(Vec2::new(
-                    self.size as f32 * TILE_WIDTH,
-                    self.size as f32 * TILE_HEIGHT,
-                ))
+                .cmpgt(Vec2::new(self.size as f32, self.size as f32))
                 .any()
         {
-            Some(UVec2::new(
-                (map_coords.x / TILE_WIDTH) as u32,
-                (map_coords.y / TILE_HEIGHT) as u32,
-            ))
-        } else {
-            error!("OUT OF BOUNDS! {}", map_coords);
             None
-        } */
-        Some(UVec2::new(
-            (map_coords.x / TILE_WIDTH) as u32,
-            (map_coords.y / TILE_HEIGHT) as u32,
-        ))
+        } else {
+            let ret = UVec2::new(map_coords.x as u32, map_coords.y as u32);
+            Some(ret)
+        }
     }
 }
 #[derive(Debug)]

@@ -237,7 +237,7 @@ pub fn tilemap_modification(
         if t >= 0.0 {
             // there was an intersection
             let target = (t * ray.direction) + ray.origin;
-            let tile_coords = tilemap.map.to_tile_coords(target.into());
+            let tile_coords = tilemap.map.to_tile_coords(target);
             if tile_coords.is_none() {
                 return;
             }
@@ -307,26 +307,36 @@ fn draw_square_decal(
     stride: u32,
     tile_coords: UVec2,
     buffer: &mut [u8],
-    hm_settings: &HmEditorSettings,
+    _hm_settings: &HmEditorSettings,
     map_size: u32,
 ) {
+    // First off the pixel buffer is flipped with respect to the y axis
+    // The decal layer is currently running one TILE_X pixels per tile which works for selection
+    // but not much else
+    buffer[0] = 255;
+    buffer[5] = 255;
+    buffer[10] = 255;
+    let row = (stride * TILE_WIDTH as u32 * map_size) as usize;
+    buffer[row - 2] = 255;
+    buffer[row * ( map_size - 1) as usize - 2] = 255;
     //TODO: Handle scaling of tiles here
     let to_buffer_coords = |coord: UVec2| {
         let row_size = TILE_WIDTH as u32 * stride * map_size;
         let mut row = coord.y * row_size;
         // Wrong constant here?
-        row += coord.x * TILE_HEIGHT as u32 * stride;
+        row += coord.x * TILE_WIDTH as u32 * stride;
         row as usize
     };
-    for x in tile_coords.x..tile_coords.x + (TILE_WIDTH as u32) {
-        for y in tile_coords.y..tile_coords.y + (TILE_HEIGHT as u32) {
-            let index = to_buffer_coords(UVec2::new(x, y));
-            buffer[index + 0] = 0;
+    /* for x in tile_coords.x..tile_coords.x + (TILE_WIDTH as u32 * stride) {
+        for y in tile_coords.y..tile_coords.y + (TILE_HEIGHT  as u32 * stride) {
+            // SWAP ME
+            let index = to_buffer_coords(UVec2::new(y, x));
+            buffer[index] = 0;
             buffer[index + 1] = 255;
             buffer[index + 2] = 0;
             buffer[index + 3] = 255;
         }
-    }
+    } */
     /* let size_vec = Vec2::splat(size);
     let scaled_size_vec = Vec2::splat(size + 2.0);
 

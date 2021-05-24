@@ -45,7 +45,7 @@ impl Renderer {
         let (device, queue) = adapter
             .request_device(
                 &DeviceDescriptor {
-                    features: Features::NON_FILL_POLYGON_MODE, // TODO: Set this properly
+                    features: Features::NON_FILL_POLYGON_MODE | Features::ADDRESS_MODE_CLAMP_TO_BORDER, // TODO: Set this properly
                     limits: Limits::default(),
                     label: Some("Device"),
                 },

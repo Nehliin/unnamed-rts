@@ -12,6 +12,7 @@ pub struct TextureContent<'a> {
 }
 // FIXME
 impl<'a> TextureContent<'a> {
+    // This can be a simple 4x4 tileset that's repeated 
     pub fn checkerd(size: u32, tile_size: usize) -> Self {
         let img_size = wgpu::Extent3d {
             width: size * tile_size as u32,
@@ -55,6 +56,21 @@ impl<'a> TextureContent<'a> {
             label: Some("Checkered default texture"),
             format: wgpu::TextureFormat::Rgba8Unorm,
             bytes: Cow::Owned(vec![0; (size * size) as usize * 4]),
+            stride: 4,
+            size: img_size,
+        }
+    }
+
+    pub fn black_v2(width: u32, height: u32) -> Self {
+        let img_size = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        TextureContent {
+            label: Some("Black/empty default texture"),
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            bytes: Cow::Owned(vec![0; (width * height) as usize * 4]),
             stride: 4,
             size: img_size,
         }
@@ -246,7 +262,7 @@ pub fn update_texture_data(
     let texture_data_layout = wgpu::ImageDataLayout {
         offset: 0,
         bytes_per_row: NonZeroU32::new(content.stride * content.size.width),
-        rows_per_image: None,
+        rows_per_image: NonZeroU32::new(content.size.height),
     };
     let texture_view = wgpu::ImageCopyTexture {
         texture: allocated_texture,

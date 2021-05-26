@@ -33,7 +33,7 @@ impl<'a> TextureContent<'a> {
                         if x % 2 == 0 {
                             texel.fill(128);
                         } else {
-                            texel.fill(255)
+                            texel.fill(64)
                         }
                     });
             });

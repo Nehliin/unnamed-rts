@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use crossbeam_channel::Sender;
-use glam::Vec2;
+use glam::{Vec2, Vec3};
 use legion::*;
 use once_cell::sync::OnceCell;
 
@@ -23,7 +23,7 @@ impl VertexBuffer for TileVertex {
                 shader_location: 0,
             },
             wgpu::VertexAttribute {
-                offset: std::mem::size_of::<Vec2>() as u64,
+                offset: std::mem::size_of::<Vec3>() as u64,
                 format: wgpu::VertexFormat::Float32x2,
                 shader_location: 1,
             },

@@ -310,56 +310,27 @@ fn draw_square_decal(
     _hm_settings: &HmEditorSettings,
     map_size: u32,
 ) {
-    // First off the pixel buffer is flipped with respect to the y axis
-    // The decal layer is currently running one TILE_X pixels per tile which works for selection
-    // but not much else
-    buffer[0] = 255;
-    buffer[5] = 255;
-    buffer[10] = 255;
-    let row = (stride * TILE_WIDTH as u32 * map_size) as usize;
-    buffer[row - 2] = 255;
-    buffer[row * ( map_size - 1) as usize - 2] = 255;
-    //TODO: Handle scaling of tiles here
-    let to_buffer_coords = |coord: UVec2| {
-        let row_size = TILE_WIDTH as u32 * stride * map_size;
-        let mut row = coord.y * row_size;
-        // Wrong constant here?
-        row += coord.x * TILE_WIDTH as u32 * stride;
-        row as usize
-    };
-    /* for x in tile_coords.x..tile_coords.x + (TILE_WIDTH as u32 * stride) {
-        for y in tile_coords.y..tile_coords.y + (TILE_HEIGHT  as u32 * stride) {
-            // SWAP ME
-            let index = to_buffer_coords(UVec2::new(y, x));
-            buffer[index] = 0;
-            buffer[index + 1] = 255;
-            buffer[index + 2] = 0;
-            buffer[index + 3] = 255;
-        }
-    } */
-    /* let size_vec = Vec2::splat(size);
-    let scaled_size_vec = Vec2::splat(size + 2.0);
-
-    buffer
-        .par_chunks_exact_mut((map_size * stride) as usize)
-        .enumerate()
-        .for_each(|(y, chunk)| {
-            chunk
+    let pixel_width: u32 = 2;
+    let pixel_height: u32 = 2;
+    let row_size = stride * map_size * pixel_width;
+    buffer[(tile_coords.y * row_size * pixel_height) as usize..((tile_coords.y + 1) * row_size * pixel_height) as usize]
+        // THIS SHOULD DIVIDE BASED ON PIXEL HEIGHT PER TILE
+        .par_chunks_exact_mut( row_size as usize  )
+        .for_each(| chunk| {
+             chunk
                 .chunks_exact_mut(stride as usize)
                 .enumerate()
                 .for_each(|(x, bytes)| {
-                    let pos = vec2(x as f32, y as f32);
-                    let within_outer =
-                        pos.cmpge(center - scaled_size_vec) & pos.cmple(center + scaled_size_vec);
-                    let within_inner = pos.cmpge(center - size_vec) & pos.cmple(center + size_vec);
-                    if within_outer.all() && !within_inner.all() {
-                        bytes[0] = 0;
-                        bytes[1] = 255;
-                        bytes[2] = 0;
-                        bytes[3] = 255;
+                    let start = tile_coords.x * pixel_width;
+                    let end = start + pixel_height;
+                    if (start as usize) <= x && x < end as usize {
+                       bytes[0] = 0;
+                       bytes[1] = 255;
+                       bytes[2] = 0;
+                       bytes[3] = 255;
                     }
-                })
-        }); */
+                }); 
+        }); 
 }
 
 fn update_height_map_circular(

@@ -68,14 +68,14 @@ impl Tile {
             // Top left
             TileVertex {
                 position: top_left_corner,
-                uv: Vec2::new(top_left_corner.x / width, 1.0 - top_left_corner.z / height),
+                uv: Vec2::new(top_left_corner.x / width, top_left_corner.z / height),
             },
             // Top middle
             TileVertex {
                 position: top_left_corner + Vec3::X * TILE_WIDTH / 2.0,
                 uv: Vec2::new(
                     (top_left_corner + Vec3::X * TILE_WIDTH / 2.0).x / width,
-                    1.0 - (top_left_corner + Vec3::X * TILE_WIDTH / 2.0).z / height,
+                    (top_left_corner + Vec3::X * TILE_WIDTH / 2.0).z / height,
                 ),
             },
             // Top right
@@ -83,7 +83,7 @@ impl Tile {
                 position: top_left_corner + Vec3::X * TILE_WIDTH,
                 uv: Vec2::new(
                     (top_left_corner + Vec3::X * TILE_WIDTH).x / width,
-                    1.0 - (top_left_corner + Vec3::X * TILE_WIDTH).z / height,
+                    (top_left_corner + Vec3::X * TILE_WIDTH).z / height,
                 ),
             },
             // Middle left
@@ -91,7 +91,7 @@ impl Tile {
                 position: top_left_corner + Vec3::Z * TILE_HEIGHT / 2.0,
                 uv: Vec2::new(
                     (top_left_corner + Vec3::Z * TILE_HEIGHT / 2.0).x / width,
-                    1.0 - (top_left_corner + Vec3::Z * TILE_HEIGHT / 2.0).z / height,
+                    (top_left_corner + Vec3::Z * TILE_HEIGHT / 2.0).z / height,
                 ),
             },
             // Middle middle
@@ -100,7 +100,7 @@ impl Tile {
                 uv: Vec2::new(
                     (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT / 2.0)).x
                         / width,
-                    1.0 - (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT / 2.0)).z
+                    (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT / 2.0)).z
                         / height,
                 ),
             },
@@ -109,8 +109,7 @@ impl Tile {
                 position: top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT / 2.0),
                 uv: Vec2::new(
                     (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT / 2.0)).x / width,
-                    1.0 - (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT / 2.0)).z
-                        / height,
+                    (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT / 2.0)).z / height,
                 ),
             },
             // Bottom left
@@ -118,7 +117,7 @@ impl Tile {
                 position: top_left_corner + Vec3::new(0.0, 0.0, TILE_HEIGHT),
                 uv: Vec2::new(
                     (top_left_corner + Vec3::new(0.0, 0.0, TILE_HEIGHT)).x / width,
-                    1.0 - (top_left_corner + Vec3::new(0.0, 0.0, TILE_HEIGHT)).z / height,
+                    (top_left_corner + Vec3::new(0.0, 0.0, TILE_HEIGHT)).z / height,
                 ),
             },
             // Bottom middle
@@ -126,8 +125,7 @@ impl Tile {
                 position: top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT),
                 uv: Vec2::new(
                     (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT)).x / width,
-                    1.0 - (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT)).z
-                        / height,
+                    (top_left_corner + Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT)).z / height,
                 ),
             },
             // Bottom right
@@ -135,7 +133,7 @@ impl Tile {
                 position: top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT),
                 uv: Vec2::new(
                     (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT)).x / width,
-                    1.0 - (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT)).z / height,
+                    (top_left_corner + Vec3::new(TILE_WIDTH, 0.0, TILE_HEIGHT)).z / height,
                 ),
             },
         ];
@@ -216,7 +214,6 @@ impl<'a> TileMapRenderData<'a> {
         size: u32,
         transform: &Transform,
     ) -> Self {
-        dbg!(&tiles);
         let color_content = texture::TextureContent::checkerd(size, (TILE_WIDTH) as usize);
         let color_texture = texture::allocate_simple_texture(device, queue, &color_content, true);
         let decal_layer_content =

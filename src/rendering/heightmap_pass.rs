@@ -212,7 +212,7 @@ impl<'a> HeightMap<'a> {
         let displacement_texture =
             allocate_simple_texture(device, queue, &displacement_content, false);
         let color_texture = allocate_simple_texture(device, queue, &color_content, false);
-        let decal_layer_content = TextureContent::black(size);
+        let decal_layer_content = TextureContent::black(size, size);
         let decal_layer_texture =
             allocate_simple_texture(device, queue, &decal_layer_content, false);
 

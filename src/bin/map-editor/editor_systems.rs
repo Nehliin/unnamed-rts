@@ -1,20 +1,18 @@
-use std::{ops::Index, time::Instant};
+use std::{time::Instant};
 
 use egui::CollapsingHeader;
-use glam::{vec2, UVec2, Vec2, Vec3A, Vec4, Vec4Swizzles};
+use glam::{UVec2, Vec2, Vec3A};
 use legion::*;
 use rayon::prelude::*;
 use unnamed_rts::{
-    assets::{Assets, Handle},
+    assets::{Handle},
     input::{CursorPosition, MouseButtonState},
     rendering::{
         camera::Camera,
-        heightmap_pass::HeightMap,
-        texture::TextureContent,
         ui::ui_resources::{UiContext, UiTexture},
     },
     resources::{Time, WindowSize},
-    tilemap::{DrawableTileMap, Tile, TILE_HEIGHT, TILE_WIDTH},
+    tilemap::{DrawableTileMap,  TileMap, TileMapRenderData },
 };
 use winit::event::MouseButton;
 #[derive(Debug, Default)]
@@ -30,18 +28,9 @@ pub enum HmEditorMode {
     ColorTexture,
 }
 
-// TODO: The actual buffer modification part of this should
-// probably live in a HeightMapTool trait
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum HmEditorTool {
-    Square,
-    Circle,
-}
-
 // Settings for the heightmap
 #[derive(Debug)]
 pub struct HmEditorSettings {
-    pub tool: HmEditorTool,
     pub tool_strenght: u8,
     pub tool_size: f32,
     pub max_height: u8,
@@ -54,7 +43,6 @@ pub struct HmEditorSettings {
 impl Default for HmEditorSettings {
     fn default() -> Self {
         HmEditorSettings {
-            tool: HmEditorTool::Circle,
             tool_strenght: 1,
             tool_size: 20.0,
             max_height: 255,
@@ -85,7 +73,7 @@ pub fn editor_ui(
     //#[resource] queue: &wgpu::Queue,
 ) {
     if editor_settings.hm_settings.save_path.is_none() {
-        editor_settings.hm_settings.save_path = Some(format!("assets/{}.map", tilemap.map.name));
+        editor_settings.hm_settings.save_path = Some(format!("assets/{}.map", tilemap.map.name()));
     }
     egui::SidePanel::left("editor_side_panel", 120.0).show(&ui_context.context, |ui| {
         ui.vertical_centered(|ui| {
@@ -95,18 +83,6 @@ pub fn editor_ui(
                 CollapsingHeader::new("Heightmap settings")
                     .default_open(true)
                     .show(ui, |ui| {
-                        ui.columns(2, |uis| {
-                            uis[0].selectable_value(
-                                &mut settings.tool,
-                                HmEditorTool::Circle,
-                                "Circle",
-                            );
-                            uis[1].selectable_value(
-                                &mut settings.tool,
-                                HmEditorTool::Square,
-                                "Square",
-                            );
-                        });
                         egui::ComboBox::from_label("Edit mode")
                             .selected_text(format!("{:?}", settings.mode))
                             .show_ui(ui, |ui| {
@@ -135,7 +111,7 @@ pub fn editor_ui(
                         {
                             match settings.mode {
                                 HmEditorMode::DisplacementMap => {
-                                    tilemap.map.tiles.fill(Tile::default());
+                                   tilemap.map.reset(); 
                                 }
                                 HmEditorMode::ColorTexture => {
                                     /*let map_size = tilemap.map.size;
@@ -196,7 +172,8 @@ pub fn editor_ui(
             ui.columns(3, |columns| {
                 columns[1].label(format!(
                     "Map editor: {}, size: {}",
-                    tilemap.map.name, tilemap.map.size,
+                    tilemap.map.name(),
+                    tilemap.map.size(),
                 ));
             })
         });
@@ -232,7 +209,7 @@ pub fn tilemap_modification(
     if denominator.abs() > 0.0001 {
         // it isn't parallel to the plane
         // (camera can still theoretically be within the height_map but don't care about that)
-        let height_map_pos: Vec3A = tilemap.map.transform.translation.into();
+        let height_map_pos: Vec3A = tilemap.map.transform().translation.into();
         let t = (height_map_pos - ray.origin).dot(normal) / denominator;
         if t >= 0.0 {
             // there was an intersection
@@ -247,45 +224,29 @@ pub fn tilemap_modification(
                 return;
             }
             modification_state.last_update = time.current_time;
-
             if mouse_button_state.is_pressed(&MouseButton::Left) {
-                match hm_settings.tool {
-                    HmEditorTool::Square => {
-                        // update_height_map_square(tilemap, hm_settings, center);
-                    }
-                    HmEditorTool::Circle => {
-                        //update_height_map_circular(tilemap, hm_settings, center);
-                    }
-                }
+                update_height_map_square(tile_coords, &mut tilemap.map, hm_settings);
             }
-            let map_size = tilemap.map.size;
-            // TODO: only do this if the intersection is within bounds
-            let (stride, buffer) = tilemap.render_data.decal_buffer_mut();
-            // clear previous decal value, this is innefficient and should be changed to only clear previous
-            // marked radius to avoid removing unrelated things in the decal layer
-            buffer.fill(0);
-            match hm_settings.tool {
-                HmEditorTool::Square => {
-                    draw_square_decal(stride, tile_coords, buffer, hm_settings, map_size);
-                }
-                HmEditorTool::Circle => {
-                    //draw_circle_decal(stride, center, buffer, hm_settings, map_size);
-                }
-            }
+            let map_size = tilemap.map.size();
+            draw_square_decal(tile_coords, &mut tilemap.render_data, map_size);
         }
     }
 }
 
 fn draw_circle_decal(
-    stride: u32,
-    center: Vec2,
-    buffer: &mut [u8],
+    tile_coords: UVec2,
+    render_data: &mut TileMapRenderData,
     hm_settings: &HmEditorSettings,
     map_size: u32,
 ) {
+    let width_resolution = render_data.tile_width_resultion;
+    let center = tile_coords.as_f32();
     let radius = hm_settings.tool_size;
+    let (stride, buffer) = render_data.decal_buffer_mut();
+    let row_size = stride * map_size * width_resolution;
+    buffer.fill(0);
     buffer
-        .par_chunks_exact_mut((map_size * stride) as usize)
+        .par_chunks_exact_mut(row_size as usize)
         .enumerate()
         .for_each(|(y, chunk)| {
             chunk
@@ -303,177 +264,42 @@ fn draw_circle_decal(
         });
 }
 
-fn draw_square_decal(
-    stride: u32,
-    tile_coords: UVec2,
-    buffer: &mut [u8],
-    _hm_settings: &HmEditorSettings,
-    map_size: u32,
-) {
-    let pixel_width: u32 = 2;
-    let pixel_height: u32 = 2;
-    let row_size = stride * map_size * pixel_width;
-    buffer[(tile_coords.y * row_size * pixel_height) as usize..((tile_coords.y + 1) * row_size * pixel_height) as usize]
-        // THIS SHOULD DIVIDE BASED ON PIXEL HEIGHT PER TILE
-        .par_chunks_exact_mut( row_size as usize  )
-        .for_each(| chunk| {
-             chunk
+fn draw_square_decal(tile_coords: UVec2, render_data: &mut TileMapRenderData, map_size: u32) {
+    let width_resolution = render_data.tile_width_resultion;
+    let height_resolution = render_data.tile_height_resultion;
+    let (stride, buffer) = render_data.decal_buffer_mut();
+    buffer.fill(0);
+    let row_size = stride * map_size * width_resolution;
+    let buffer_start = (tile_coords.y * row_size * height_resolution) as usize;
+    let buffer_end = ((tile_coords.y + 1) * row_size * height_resolution) as usize;
+    buffer[buffer_start..buffer_end]
+        .par_chunks_exact_mut(row_size as usize)
+        .for_each(|chunk| {
+            chunk
                 .chunks_exact_mut(stride as usize)
                 .enumerate()
                 .for_each(|(x, bytes)| {
-                    let start = tile_coords.x * pixel_width;
-                    let end = start + pixel_height;
+                    let start = tile_coords.x * width_resolution;
+                    let end = start + height_resolution;
                     if (start as usize) <= x && x < end as usize {
-                       bytes[0] = 0;
-                       bytes[1] = 255;
-                       bytes[2] = 0;
-                       bytes[3] = 255;
+                        bytes[0] = 0;
+                        bytes[1] = 255;
+                        bytes[2] = 0;
+                        bytes[3] = 255;
                     }
-                }); 
-        }); 
-}
-
-fn update_height_map_circular(
-    height_map: &mut HeightMap,
-    hm_settings: &HmEditorSettings,
-    center: Vec2,
-) {
-    let radius = hm_settings.tool_size;
-    let strength = hm_settings.tool_strenght as f32;
-    // assuming row order
-    // TODO: Not very performance frendly
-    match hm_settings.mode {
-        HmEditorMode::DisplacementMap => {
-            let map_size = height_map.get_size();
-            let (_, buffer) = height_map.get_displacement_buffer_mut();
-            buffer
-                .par_chunks_exact_mut(map_size as usize)
-                .enumerate()
-                .for_each(|(y, chunk)| {
-                    chunk.par_iter_mut().enumerate().for_each(|(x, byte)| {
-                        let distance = Vec2::new(x as f32, y as f32).distance(center);
-                        if distance < radius {
-                            let raise = strength * (radius - distance) / radius;
-                            if hm_settings.inverted {
-                                *byte =
-                                    std::cmp::max(0, (*byte as f32 - raise as f32).round() as u32)
-                                        as u8;
-                            } else {
-                                *byte = std::cmp::min(
-                                    hm_settings.max_height as u32,
-                                    (*byte as f32 + raise as f32).round() as u32,
-                                ) as u8;
-                            };
-                        }
-                    })
                 });
-        }
-        HmEditorMode::ColorTexture => {
-            let map_size = height_map.get_size();
-            let (stride, buffer) = height_map.get_color_buffer_mut();
-            buffer
-                .par_chunks_exact_mut((map_size * stride) as usize)
-                .enumerate()
-                .for_each(|(y, chunk)| {
-                    chunk
-                        .chunks_exact_mut(stride as usize)
-                        .enumerate()
-                        .for_each(|(x, bytes)| {
-                            let distance = Vec2::new(x as f32, y as f32).distance(center);
-                            if distance < radius {
-                                let color = strength * (radius - distance) / radius;
-                                if hm_settings.inverted {
-                                    let val = std::cmp::max(
-                                        0,
-                                        (bytes[0] as f32 - color as f32).round() as u32,
-                                    ) as u8;
-                                    // Shouldn't harde code indexes here..
-                                    bytes[0] = val;
-                                    bytes[1] = 0;
-                                    bytes[2] = 0;
-                                    bytes[3] = 0;
-                                } else {
-                                    let val = std::cmp::min(
-                                        255,
-                                        (bytes[0] as f32 + color as f32).round() as u32,
-                                    ) as u8;
-                                    bytes[0] = val;
-                                    bytes[1] = 0;
-                                    bytes[2] = 0;
-                                    bytes[3] = 0;
-                                };
-                            }
-                        })
-                });
-        }
-    }
+        });
 }
 
 fn update_height_map_square(
-    height_map: &mut HeightMap,
+    tile_coords: UVec2,
+    tilemap: &mut TileMap,
     hm_settings: &HmEditorSettings,
-    center: Vec2,
 ) {
-    let size = hm_settings.tool_size;
-    let scale_factor = 1.9;
-    let scaled_size = size * scale_factor;
-    let size_vec = Vec2::splat(size);
-    let scaled_size_vec = Vec2::splat(scaled_size);
-    let strength = hm_settings.tool_strenght as f32;
-
-    let proportional_change = |byte: &mut u8, proportion: f32| {
-        if hm_settings.inverted {
-            *byte = std::cmp::max(0, (*byte as f32 - strength * proportion).round() as u32) as u8;
-        } else {
-            *byte = std::cmp::min(
-                hm_settings.max_height as u32,
-                (*byte as f32 + strength * proportion).round() as u32,
-            ) as u8;
-        };
-    };
-    let dist_center_to_corner = scaled_size - size;
-    // assuming row order
-    // TODO: Not very performance frendly
+    let tile = tilemap.tile_mut(tile_coords.x, tile_coords.y);
     match hm_settings.mode {
         HmEditorMode::DisplacementMap => {
-            let map_size = height_map.get_size();
-            let (_, buffer) = height_map.get_displacement_buffer_mut();
-            buffer
-                .par_chunks_exact_mut(map_size as usize)
-                .enumerate()
-                .for_each(|(y, chunk)| {
-                    chunk.par_iter_mut().enumerate().for_each(|(x, byte)| {
-                        let pos = vec2(x as f32, y as f32);
-                        let within_inner =
-                            pos.cmpge(center - size_vec) & pos.cmple(center + size_vec);
-                        let within_outer = pos.cmpge(center - scaled_size_vec)
-                            & pos.cmple(center + scaled_size_vec);
-                        if within_inner.all() {
-                            proportional_change(byte, 1.0);
-                        } else if within_outer.all() {
-                            // bitmask is used to check individual boolean values of the vec
-                            if within_inner.bitmask() & 1 != 0 {
-                                // // area
-                                let sign = (pos.y - center.y).signum();
-                                let d = pos.distance(Vec2::new(pos.x, center.y + size * sign));
-                                let max = scaled_size_vec.x;
-                                proportional_change(byte, (max - d) / max);
-                            } else if within_inner.bitmask() & (1 << 1) != 0 {
-                                // xx area
-                                let sign = (pos.x - center.x).signum();
-                                let d = pos.distance(Vec2::new(center.x + size * sign, pos.y));
-                                proportional_change(byte, (scaled_size - d) / scaled_size);
-                            } else {
-                                // oo area
-                                let dist_to_center = pos.distance(center);
-                                let d = dist_to_center - dist_center_to_corner;
-                                // god knows why this relation to the scalefactor holds true but it works?
-                                let boost = 2.0 - scale_factor;
-                                proportional_change(byte, (scaled_size - d) / scaled_size + boost);
-                            }
-                        }
-                    })
-                });
+            tile.set_height(hm_settings.tool_strenght as f32);
         }
         HmEditorMode::ColorTexture => {
             todo!("Haven't implemented yet")

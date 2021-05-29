@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use crossbeam_channel::Sender;
-use glam::{Vec2, Vec3};
+use glam::Vec3;
 use legion::*;
 use once_cell::sync::OnceCell;
 
@@ -10,7 +10,10 @@ use crate::{
     tilemap::{DrawableTileMap, TileVertex},
 };
 
-use super::{common::DepthTexture, texture::update_texture_data, vertex_buffers::{VertexBuffer, VertexBufferData}};
+use super::{
+    common::DepthTexture,
+    vertex_buffers::{VertexBuffer, VertexBufferData},
+};
 
 impl VertexBuffer for TileVertex {
     const STEP_MODE: wgpu::InputStepMode = wgpu::InputStepMode::Vertex;
@@ -129,7 +132,7 @@ impl TileMapPass {
 
 #[system]
 pub fn update(#[resource] queue: &wgpu::Queue, #[resource] tilemap: &mut DrawableTileMap) {
-   tilemap.render_data.update_tilemap_data(queue);
+    tilemap.update(queue);
 }
 
 #[system]

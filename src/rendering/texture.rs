@@ -13,24 +13,24 @@ pub struct TextureContent<'a> {
 // FIXME
 impl<'a> TextureContent<'a> {
     // This can be a simple 4x4 tileset that's repeated 
-    pub fn checkerd(size: u32, tile_size: usize) -> Self {
+    pub fn checkerd(size: u32, resolution: usize) -> Self {
+        let stride = 4;
         let img_size = wgpu::Extent3d {
-            width: size * tile_size as u32,
-            height: size * tile_size as u32,
+            width: size * resolution as u32,
+            height: size * resolution as u32,
             depth_or_array_layers: 1,
         };
-        let test:u32 = std::convert::TryInto::try_into(tile_size * tile_size).unwrap();
         // construct checkered content
-        let mut bytes: Vec<u8> = vec![0; (size * test * size) as usize * 4];
+        let mut bytes: Vec<u8> = vec![0; (img_size.width * img_size.height) as usize * stride];
         bytes
-            .par_chunks_exact_mut(size as usize * 4 * tile_size)
+            .par_chunks_exact_mut(size as usize * stride * resolution)
             .enumerate()
             .for_each(|(x, chunk)| {
                 chunk
-                    .chunks_exact_mut(4 * tile_size)
+                    .chunks_exact_mut(stride)
                     .enumerate()
                     .for_each(|(y, texel)| {
-                        if x % 2 == 0 {
+                        if (x + y) % 2 == 0 {
                             texel.fill(128);
                         } else {
                             texel.fill(64)
@@ -41,27 +41,13 @@ impl<'a> TextureContent<'a> {
             label: Some("Checkered default texture"),
             format: wgpu::TextureFormat::Rgba8Unorm,
             bytes: Cow::Owned(bytes),
-            stride: 4,
+            stride: stride as u32,
             size: img_size,
         }
     }
 
-    pub fn black(size: u32) -> Self {
-        let img_size = wgpu::Extent3d {
-            width: size,
-            height: size,
-            depth_or_array_layers: 1,
-        };
-        TextureContent {
-            label: Some("Checkered default texture"),
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            bytes: Cow::Owned(vec![0; (size * size) as usize * 4]),
-            stride: 4,
-            size: img_size,
-        }
-    }
-
-    pub fn black_v2(width: u32, height: u32) -> Self {
+    pub fn black(width: u32, height: u32) -> Self {
+        let stride = 4;
         let img_size = wgpu::Extent3d {
             width,
             height,
@@ -70,8 +56,8 @@ impl<'a> TextureContent<'a> {
         TextureContent {
             label: Some("Black/empty default texture"),
             format: wgpu::TextureFormat::Rgba8Unorm,
-            bytes: Cow::Owned(vec![0; (width * height) as usize * 4]),
-            stride: 4,
+            bytes: Cow::Owned(vec![0; (width * height) as usize * stride]),
+            stride: stride as u32,
             size: img_size,
         }
     }

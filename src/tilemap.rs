@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use glam::{UVec2, Vec2, Vec3, Vec3A, Vec4Swizzles};
+use glam::{UVec2, Vec2, Vec3, Vec3A};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +11,7 @@ pub struct TileVertex {
     uv: Vec2,
 }
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+// take f32 per enum val?
 pub enum TileType {
     Flat,
     RampTop,
@@ -33,7 +34,7 @@ impl Default for TileType {
     }
 }
 
-pub const VERTECIES_PER_TILE: usize = 9;
+const VERTECIES_PER_TILE: usize = 9;
 const INDICIES_PER_TILE: usize = 24;
 pub const TILE_WIDTH: f32 = 2.0;
 pub const TILE_HEIGHT: f32 = 2.0;
@@ -50,12 +51,13 @@ pub const TILE_HEIGHT: f32 = 2.0;
  *   |/  6  | 8   \|
  *   *------*------*
  */
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct Tile {
     verticies: [TileVertex; VERTECIES_PER_TILE],
     indicies: [u32; INDICIES_PER_TILE],
     tile_type: TileType,
-    // base_height, ramp_heigh
+    base_height: f32,
+    // ramp height
 }
 
 impl Tile {
@@ -160,7 +162,15 @@ impl Tile {
             verticies,
             indicies,
             tile_type: TileType::Flat,
+            base_height: 0.0,
         }
+    }
+
+    pub fn set_height(&mut self, height: f32) {
+        self.base_height = height;
+        self.verticies
+            .iter_mut()
+            .for_each(|vert| vert.position.y = height);
     }
 }
 
@@ -181,6 +191,8 @@ pub struct TileMapRenderData<'a> {
     pub instance_buffer: vertex_buffers::MutableVertexData<crate::rendering::gltf::InstanceData>,
     pub bind_group: wgpu::BindGroup,
     pub needs_decal_update: bool,
+    pub tile_width_resultion: u32,
+    pub tile_height_resultion: u32,
 }
 
 #[cfg(feature = "graphics")]
@@ -193,16 +205,7 @@ impl<'a> TileMapRenderData<'a> {
         )
     }
 
-    pub fn update_tilemap_data(&mut self, queue: &wgpu::Queue) {
-        if self.needs_decal_update {
-            texture::update_texture_data(
-                &self.decal_layer_content,
-                &self.decal_layer_texture,
-                queue,
-            );
-            self.needs_decal_update = false;
-        }
-    }
+    
 }
 
 #[cfg(feature = "graphics")]
@@ -214,10 +217,11 @@ impl<'a> TileMapRenderData<'a> {
         size: u32,
         transform: &Transform,
     ) -> Self {
-        let color_content = texture::TextureContent::checkerd(size, (TILE_WIDTH) as usize);
+        let resolution = 16;
+        let color_content = texture::TextureContent::checkerd(size, resolution as usize);
         let color_texture = texture::allocate_simple_texture(device, queue, &color_content, true);
         let decal_layer_content =
-            texture::TextureContent::black_v2(size * TILE_WIDTH as u32, size * TILE_HEIGHT as u32);
+            texture::TextureContent::black(size * resolution as u32, size * resolution as u32);
         let decal_layer_texture =
             texture::allocate_simple_texture(device, queue, &decal_layer_content, false);
         //TODO: improve this
@@ -290,6 +294,8 @@ impl<'a> TileMapRenderData<'a> {
             instance_buffer,
             bind_group,
             needs_decal_update: false,
+            tile_height_resultion: resolution,
+            tile_width_resultion: resolution,
         }
     }
 }
@@ -313,10 +319,11 @@ fn generate_tiles(size: u32) -> Vec<Tile> {
 // Use const generics here perhaps
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TileMap {
-    pub name: String,
-    pub tiles: Vec<Tile>,
-    pub size: u32,
-    pub transform: Transform,
+    name: String,
+    tiles: Vec<Tile>,
+    size: u32,
+    transform: Transform,
+    needs_vertex_update: bool,
 }
 
 impl TileMap {
@@ -327,7 +334,13 @@ impl TileMap {
             tiles,
             size,
             transform,
+            needs_vertex_update: false,
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.tiles = generate_tiles(self.size);
+        self.needs_vertex_update = true;
     }
 
     pub fn to_tile_coords(&self, world_coords: Vec3A) -> Option<UVec2> {
@@ -343,6 +356,29 @@ impl TileMap {
             let ret = UVec2::new(map_coords.x as u32, map_coords.y as u32);
             Some(ret)
         }
+    }
+
+    /// Get a reference to the tile map's name.
+    #[inline(always)]
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    /// Get a reference to the tile map's size.
+    #[inline(always)]
+    pub fn size(&self) -> u32 {
+        self.size
+    }
+
+    /// Get a reference to the tile map's transform.
+    pub fn transform(&self) -> &Transform {
+        &self.transform
+    }
+
+    pub fn tile_mut(&mut self, x: u32, y: u32) -> &mut Tile {
+        self.needs_vertex_update = true;
+        // tiles are column ordered
+        &mut self.tiles[(x * self.size + y) as usize]
     }
 }
 #[derive(Debug)]
@@ -365,6 +401,27 @@ impl<'a> DrawableTileMap<'a> {
         DrawableTileMap {
             map: tilemap,
             render_data,
+        }
+    }
+
+    pub fn update(&mut self, queue: &wgpu::Queue) {
+        if self.render_data.needs_decal_update {
+            texture::update_texture_data(
+                &self.render_data.decal_layer_content,
+                &self.render_data.decal_layer_texture,
+                queue,
+            );
+            self.render_data.needs_decal_update = false;
+        }
+        if self.map.needs_vertex_update {
+            let data = self
+                .map
+                .tiles
+                .iter()
+                .flat_map(|tile| tile.verticies.iter().copied())
+                .collect::<Vec<_>>();
+            self.render_data.vertex_buffer.update(queue, &data);
+            self.map.needs_vertex_update = false;
         }
     }
 }

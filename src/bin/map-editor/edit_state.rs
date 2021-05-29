@@ -1,6 +1,6 @@
-use std::{f32::consts::PI, time::Instant};
+use std::time::Instant;
 
-use glam::{Quat, Vec3};
+use glam::Vec3;
 use legion::*;
 use unnamed_rts::{
     assets::{self, Assets, Handle},

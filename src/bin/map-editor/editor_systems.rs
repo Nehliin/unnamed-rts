@@ -1,18 +1,18 @@
-use std::{time::Instant};
+use std::time::Instant;
 
 use egui::CollapsingHeader;
 use glam::{UVec2, Vec2, Vec3A};
 use legion::*;
 use rayon::prelude::*;
 use unnamed_rts::{
-    assets::{Handle},
+    assets::Handle,
     input::{CursorPosition, MouseButtonState},
     rendering::{
         camera::Camera,
         ui::ui_resources::{UiContext, UiTexture},
     },
     resources::{Time, WindowSize},
-    tilemap::{DrawableTileMap,  TileMap, TileMapRenderData },
+    tilemap::{DrawableTileMap, TileMap, TileMapRenderData},
 };
 use winit::event::MouseButton;
 #[derive(Debug, Default)]
@@ -98,7 +98,7 @@ pub fn editor_ui(
                                 );
                             });
                         ui.add(
-                            egui::Slider::new(&mut settings.tool_strenght, 1..=10)
+                            egui::Slider::new(&mut settings.tool_strenght, 0..=10)
                                 .text("Strenght"),
                         );
                         ui.checkbox(&mut settings.inverted, "Invert");
@@ -111,7 +111,7 @@ pub fn editor_ui(
                         {
                             match settings.mode {
                                 HmEditorMode::DisplacementMap => {
-                                   tilemap.map.reset(); 
+                                   tilemap.map.reset();
                                 }
                                 HmEditorMode::ColorTexture => {
                                     /*let map_size = tilemap.map.size;
@@ -296,10 +296,14 @@ fn update_height_map_square(
     tilemap: &mut TileMap,
     hm_settings: &HmEditorSettings,
 ) {
-    let tile = tilemap.tile_mut(tile_coords.x, tile_coords.y);
     match hm_settings.mode {
         HmEditorMode::DisplacementMap => {
-            tile.set_height(hm_settings.tool_strenght as f32);
+            tilemap.set_tile_heght(
+                tile_coords.x,
+                tile_coords.y,
+                hm_settings.tool_strenght as f32,
+                false,
+            );
         }
         HmEditorMode::ColorTexture => {
             todo!("Haven't implemented yet")

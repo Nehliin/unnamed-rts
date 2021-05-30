@@ -28,6 +28,14 @@ pub enum TileType {
     CornerConvexLB,
 }
 
+#[derive(Debug)]
+enum Corner {
+    TopLeft { vert_idx: u32, tile_idx: usize },
+    TopRight { vert_idx: u32, tile_idx: usize },
+    BottomLeft { vert_idx: u32, tile_idx: usize },
+    BottomRight { vert_idx: u32, tile_idx: usize },
+}
+
 impl Default for TileType {
     fn default() -> Self {
         TileType::Flat
@@ -140,6 +148,7 @@ impl Tile {
             },
         ];
         #[rustfmt::skip]
+        // TODO: Fix order of these
         let indicies = [
             // 1
             start_idx + 1, start_idx + 4, start_idx,
@@ -166,7 +175,7 @@ impl Tile {
         }
     }
 
-    pub fn set_height(&mut self, height: f32) {
+    fn set_height(&mut self, height: f32) {
         self.base_height = height;
         self.verticies
             .iter_mut()
@@ -204,8 +213,6 @@ impl<'a> TileMapRenderData<'a> {
             self.decal_layer_content.bytes.to_mut(),
         )
     }
-
-    
 }
 
 #[cfg(feature = "graphics")]
@@ -375,10 +382,188 @@ impl TileMap {
         &self.transform
     }
 
-    pub fn tile_mut(&mut self, x: u32, y: u32) -> &mut Tile {
+    fn smooth_corners(&mut self, tiles: &[Corner], lowered: bool) {
+        // itertools
+        let new_height = tiles
+            .iter()
+            .filter_map(|corner| match corner {
+                &Corner::TopLeft { vert_idx, tile_idx } => self
+                    .tiles
+                    .get(tile_idx)
+                    .map(|tile| tile.verticies[vert_idx as usize].position.y),
+                &Corner::TopRight { vert_idx, tile_idx } => self
+                    .tiles
+                    .get(tile_idx)
+                    .map(|tile| tile.verticies[vert_idx as usize].position.y),
+                &Corner::BottomLeft { vert_idx, tile_idx } => self
+                    .tiles
+                    .get(tile_idx)
+                    .map(|tile| tile.verticies[vert_idx as usize].position.y),
+                &Corner::BottomRight { vert_idx, tile_idx } => self
+                    .tiles
+                    .get(tile_idx)
+                    .map(|tile| tile.verticies[vert_idx as usize].position.y),
+            })
+            .max_by(|x, y| {
+                if lowered {
+                    (*y as u32).cmp(&(*x as u32))
+                } else {
+                    (*x as u32).cmp(&(*y as u32))
+                }
+            })
+            .unwrap();
+        tiles
+            .iter()
+            .filter_map(|corner| match corner {
+                &Corner::TopLeft { vert_idx, tile_idx } => self
+                    .tiles
+                    .get_mut(tile_idx)
+                    .map(|tile| &mut tile.verticies[vert_idx as usize].position.y as *mut f32),
+                &Corner::TopRight { vert_idx, tile_idx } => self
+                    .tiles
+                    .get_mut(tile_idx)
+                    .map(|tile| &mut tile.verticies[vert_idx as usize].position.y as *mut f32),
+                &Corner::BottomLeft { vert_idx, tile_idx } => self
+                    .tiles
+                    .get_mut(tile_idx)
+                    .map(|tile| &mut tile.verticies[vert_idx as usize].position.y as *mut f32),
+                &Corner::BottomRight { vert_idx, tile_idx } => self
+                    .tiles
+                    .get_mut(tile_idx)
+                    .map(|tile| &mut tile.verticies[vert_idx as usize].position.y as *mut f32),
+            })
+            .for_each(|height| unsafe { *height = new_height as f32 })
+    }
+
+    pub fn set_tile_heght(&mut self, x: u32, y: u32, height: f32, lowered: bool) {
+        // marching squares here later on
+        let target = self.tile_index(x, y);
+        let left = self.tile_index(x - 1, y);
+        let right = self.tile_index(x + 1, y);
+        let bottom = self.tile_index(x, y + 1);
+        // remember 0,0 is the top left corner
+        let top = self.tile_index(x, y - 1);
+        let top_left = self.tile_index(x - 1, y - 1);
+        let top_right = self.tile_index(x + 1, y - 1);
+        let bottom_left = self.tile_index(x - 1, y + 1);
+        let bottom_right = self.tile_index(x + 1, y + 1);
+
+        // Update
+        if let Some(tile) = self.tile_mut(x, y) {
+            tile.verticies
+                .iter_mut()
+                .for_each(|vertex| vertex.position.y = height);
+            self.needs_vertex_update = true;
+        } else {
+            return;
+        }
+        // smooth out corners
+        let top_left_tiles = &[
+            Corner::TopLeft {
+                vert_idx: 0,
+                tile_idx: target,
+            },
+            Corner::TopRight {
+                vert_idx: 2,
+                tile_idx: left,
+            },
+            Corner::BottomLeft {
+                vert_idx: 6,
+                tile_idx: top,
+            },
+            Corner::BottomRight {
+                vert_idx: 8,
+                tile_idx: top_left,
+            },
+        ];
+        let top_right_tiles = &[
+            Corner::TopLeft {
+                vert_idx: 0,
+                tile_idx: right,
+            },
+            Corner::TopRight {
+                vert_idx: 2,
+                tile_idx: target,
+            },
+            Corner::BottomLeft {
+                vert_idx: 6,
+                tile_idx: top_right,
+            },
+            Corner::BottomRight {
+                vert_idx: 8,
+                tile_idx: top,
+            },
+        ];
+        let bottom_left_tiles = &[
+            Corner::TopLeft {
+                vert_idx: 0,
+                tile_idx: bottom,
+            },
+            Corner::TopRight {
+                vert_idx: 2,
+                tile_idx: bottom_left,
+            },
+            Corner::BottomLeft {
+                vert_idx: 6,
+                tile_idx: target,
+            },
+            Corner::BottomRight {
+                vert_idx: 8,
+                tile_idx: left,
+            },
+        ];
+        let bottom_right_tiles = &[
+            Corner::TopLeft {
+                vert_idx: 0,
+                tile_idx: bottom_right,
+            },
+            Corner::TopRight {
+                vert_idx: 2,
+                tile_idx: bottom,
+            },
+            Corner::BottomLeft {
+                vert_idx: 6,
+                tile_idx: right,
+            },
+            Corner::BottomRight {
+                vert_idx: 8,
+                tile_idx: target,
+            },
+        ];
+        self.smooth_corners(top_left_tiles, lowered);
+        self.smooth_corners(top_right_tiles, lowered);
+        self.smooth_corners(bottom_left_tiles, lowered);
+        self.smooth_corners(bottom_right_tiles, lowered);
+        let middle_height = |x: f32, y: f32| {
+            if lowered {
+                std::cmp::min(x as i32, y as i32)
+            } else {
+                std::cmp::max(x as i32, y as i32)
+            }
+        };
+        // smooth out middle points
+        let mid_left = &mut self.tiles[left].verticies[5].position.y;
+        *mid_left = middle_height(*mid_left, height) as f32;
+        let mid_right = &mut self.tiles[right].verticies[3].position.y;
+        *mid_right = middle_height(*mid_right, height) as f32;
+        let top_mid = &mut self.tiles[top].verticies[7].position.y;
+        *top_mid = middle_height(*top_mid, height) as f32;
+        let bottom_mid = &mut self.tiles[bottom].verticies[1].position.y;
+        *bottom_mid = middle_height(*bottom_mid, height) as f32;
+        //TODO clean this method up
+    }
+
+    pub fn tile_mut(&mut self, x: u32, y: u32) -> Option<&mut Tile> {
         self.needs_vertex_update = true;
+        let index = self.tile_index(x, y);
+        self.tiles.get_mut(index)
+    }
+
+    #[inline(always)]
+    /// Returns the index to the given tile where (0,0) corresponds to the top left corner
+    pub fn tile_index(&self, x: u32, y: u32) -> usize {
         // tiles are column ordered
-        &mut self.tiles[(x * self.size + y) as usize]
+        (x * self.size + y) as usize
     }
 }
 #[derive(Debug)]

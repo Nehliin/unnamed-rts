@@ -45,7 +45,7 @@ impl Transform {
             rotation,
             scale,
             translation,
-        }
+       }
     }
 
     // Maybe use affine matrix here but I dobut it will make a difference since everything

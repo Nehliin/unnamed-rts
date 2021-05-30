@@ -12,7 +12,7 @@ pub struct TextureContent<'a> {
 }
 // FIXME
 impl<'a> TextureContent<'a> {
-    // This can be a simple 4x4 tileset that's repeated 
+    // This can be a simple 4x4 tileset that's repeated
     pub fn checkerd(size: u32, resolution: usize) -> Self {
         let stride = 4;
         let img_size = wgpu::Extent3d {

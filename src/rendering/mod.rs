@@ -8,6 +8,6 @@ pub mod lights;
 pub mod model_pass;
 pub mod selection_pass;
 pub mod texture;
+pub mod tilemap_pass;
 pub mod ui;
 pub mod vertex_buffers;
-pub mod tilemap_pass;

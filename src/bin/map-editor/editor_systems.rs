@@ -298,7 +298,7 @@ fn update_height_map_square(
 ) {
     match hm_settings.mode {
         HmEditorMode::DisplacementMap => {
-            tilemap.set_tile_heght(
+            tilemap.set_tile_height(
                 tile_coords.x,
                 tile_coords.y,
                 hm_settings.tool_strenght as f32,

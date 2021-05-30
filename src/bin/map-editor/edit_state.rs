@@ -73,8 +73,8 @@ impl State for EditState {
             size.physical_height,
         );
         let mut transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
-        transform.scale = Vec3::splat(0.5);
-        let tilemap = TileMap::new("Tilemap".into(), 10, transform);
+        transform.scale = Vec3::splat(0.1);
+        let tilemap = TileMap::new("Tilemap".into(), 100, transform);
         let tilemap = DrawableTileMap::new(&device, &queue, tilemap);
 
         // render resources

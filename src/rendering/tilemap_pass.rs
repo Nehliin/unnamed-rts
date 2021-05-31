@@ -109,7 +109,7 @@ impl TileMapPass {
                 targets: &[wgpu::TextureFormat::Bgra8UnormSrgb.into()],
             }),
             primitive: wgpu::PrimitiveState {
-                cull_mode: None, //Some(wgpu::Face::Back), FIXME change back the index order again
+                cull_mode: Some(wgpu::Face::Back),
                 polygon_mode: wgpu::PolygonMode::Fill,
                 ..Default::default()
             },

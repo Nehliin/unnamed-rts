@@ -5,7 +5,7 @@ use glam::{UVec2, Vec2, Vec3A};
 use legion::*;
 use rayon::prelude::*;
 use unnamed_rts::{
-    assets::{Assets, Handle},
+    assets::Handle,
     input::{CursorPosition, MouseButtonState},
     rendering::{
         camera::Camera,

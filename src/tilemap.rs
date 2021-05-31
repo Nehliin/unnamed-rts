@@ -161,24 +161,23 @@ impl Tile {
             },
         ];
         #[rustfmt::skip]
-        // TODO: Fix order of these
         let indicies = [
             // 1
-            start_idx + 1, start_idx + 4, start_idx,
+            start_idx, start_idx + 4, start_idx + 1,
             // 2
-            start_idx + 4, start_idx + 3, start_idx,
+            start_idx, start_idx + 3, start_idx + 4,
             // 3
-            start_idx + 2, start_idx + 4, start_idx + 1,
+            start_idx + 1, start_idx + 4, start_idx + 2,
             // 4
-            start_idx + 5, start_idx + 4, start_idx + 2,
+            start_idx + 2, start_idx + 4, start_idx + 5,
             // 5
-            start_idx + 6, start_idx + 3, start_idx + 4,
+            start_idx + 4, start_idx + 3, start_idx + 6,
             // 6
-            start_idx + 4, start_idx + 7, start_idx + 6,
+            start_idx + 6, start_idx + 7, start_idx + 4,
             // 7
-            start_idx + 5, start_idx + 8, start_idx + 4,
+            start_idx + 4, start_idx + 8, start_idx + 5,
             // 8
-            start_idx + 8, start_idx + 7, start_idx + 4,
+            start_idx + 4, start_idx + 7, start_idx + 8,
         ];
         Tile {
             verticies,

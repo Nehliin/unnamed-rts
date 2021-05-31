@@ -1,3 +1,4 @@
+use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
 use glam::{UVec2, Vec2, Vec3, Vec3A};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -335,7 +336,7 @@ fn generate_tiles(size: u32) -> Vec<Tile> {
     tiles
 }
 
-// Use const generics here perhaps
+// Use const generics here for size perhaps
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TileMap {
     name: String,
@@ -355,6 +356,12 @@ impl TileMap {
             transform,
             needs_vertex_update: false,
         }
+    }
+
+    pub fn load(path: &std::path::Path) -> Result<Self> {
+        let map_file = std::fs::File::open(path)?;
+        let map = bincode::deserialize_from(map_file)?;
+        Ok(map)
     }
 
     pub fn reset(&mut self) {
@@ -596,6 +603,7 @@ impl TileMap {
         }
     }
 }
+
 #[derive(Debug)]
 #[cfg(feature = "graphics")]
 pub struct DrawableTileMap<'a> {

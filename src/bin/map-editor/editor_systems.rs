@@ -1,11 +1,11 @@
-use std::time::Instant;
+use std::{path::Path, time::Instant};
 
 use egui::CollapsingHeader;
 use glam::{UVec2, Vec2, Vec3A};
 use legion::*;
 use rayon::prelude::*;
 use unnamed_rts::{
-    assets::Handle,
+    assets::{Assets, Handle},
     input::{CursorPosition, MouseButtonState},
     rendering::{
         camera::Camera,
@@ -18,11 +18,11 @@ use winit::event::MouseButton;
 #[derive(Debug, Default)]
 pub struct EditorSettings {
     pub edit_heightmap: bool,
-    pub hm_settings: HmEditorSettings,
+    pub tm_settings: TileEditorSettings,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum HmEditorMode {
+pub enum TileEditMode {
     DisplacementMap,
     // TODO Take in texture
     ColorTexture,
@@ -30,24 +30,22 @@ pub enum HmEditorMode {
 
 // Settings for the heightmap
 #[derive(Debug)]
-pub struct HmEditorSettings {
+pub struct TileEditorSettings {
     pub tool_strenght: u8,
     pub tool_size: f32,
     pub max_height: u8,
-    pub inverted: bool,
-    pub mode: HmEditorMode,
+    pub mode: TileEditMode,
     pub save_path: Option<String>,
     pub load_path: String,
 }
 
-impl Default for HmEditorSettings {
+impl Default for TileEditorSettings {
     fn default() -> Self {
-        HmEditorSettings {
+        TileEditorSettings {
             tool_strenght: 1,
             tool_size: 20.0,
             max_height: 255,
-            inverted: false,
-            mode: HmEditorMode::DisplacementMap,
+            mode: TileEditMode::DisplacementMap,
             save_path: None,
             load_path: "my_map_name.map".to_string(),
         }
@@ -68,18 +66,17 @@ pub fn editor_ui(
     #[resource] editor_settings: &mut EditorSettings,
     #[resource] tilemap: &mut DrawableTileMap<'static>,
     #[resource] window_size: &WindowSize,
-    //#[resource] hm_assets: &mut Assets<HeightMap<'static>>,
-    //#[resource] device: &wgpu::Device,
-    //#[resource] queue: &wgpu::Queue,
+    #[resource] device: &wgpu::Device,
+    #[resource] queue: &wgpu::Queue,
 ) {
-    if editor_settings.hm_settings.save_path.is_none() {
-        editor_settings.hm_settings.save_path = Some(format!("assets/{}.map", tilemap.map.name()));
+    if editor_settings.tm_settings.save_path.is_none() {
+        editor_settings.tm_settings.save_path = Some(format!("assets/{}.map", tilemap.map.name()));
     }
     egui::SidePanel::left("editor_side_panel", 120.0).show(&ui_context.context, |ui| {
         ui.vertical_centered(|ui| {
             ui.checkbox(&mut editor_settings.edit_heightmap, "Edit heightmap");
             if editor_settings.edit_heightmap {
-                let settings = &mut editor_settings.hm_settings;
+                let settings = &mut editor_settings.tm_settings;
                 CollapsingHeader::new("Heightmap settings")
                     .default_open(true)
                     .show(ui, |ui| {
@@ -88,12 +85,12 @@ pub fn editor_ui(
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(
                                     &mut settings.mode,
-                                    HmEditorMode::DisplacementMap,
+                                    TileEditMode::DisplacementMap,
                                     "Displacement Map",
                                 );
                                 ui.selectable_value(
                                     &mut settings.mode,
-                                    HmEditorMode::ColorTexture,
+                                    TileEditMode::ColorTexture,
                                     "Color Texture",
                                 );
                             });
@@ -101,7 +98,6 @@ pub fn editor_ui(
                             egui::Slider::new(&mut settings.tool_strenght, 0..=10)
                                 .text("Strenght"),
                         );
-                        ui.checkbox(&mut settings.inverted, "Invert");
                         if ui
                             .button("Reset current buffer")
                             .on_hover_text(
@@ -110,10 +106,10 @@ pub fn editor_ui(
                             .clicked()
                         {
                             match settings.mode {
-                                HmEditorMode::DisplacementMap => {
+                                TileEditMode::DisplacementMap => {
                                    tilemap.map.reset();
                                 }
-                                HmEditorMode::ColorTexture => {
+                                TileEditMode::ColorTexture => {
                                     /*let map_size = tilemap.map.size;
                                     let (_, buffer) = tilemap.get_color_buffer_mut();
                                    // TODO: unecessary allocation here but not as important within the editor
@@ -145,16 +141,15 @@ pub fn editor_ui(
                             .show(&ui_context.context, |ui| {
                                 ui.text_edit_singleline(&mut settings.load_path);
                                 if ui.button("Load").clicked() {
-                                    /*match hm_assets.load_immediate(&settings.load_path, device, queue) {
+                                    match TileMap::load(Path::new(&settings.load_path)) {
                                         Ok(loaded_map) => {
-                                            *tilemap = loaded_map;
+                                            *tilemap = DrawableTileMap::new(&device, &queue, loaded_map);
                                             *load_error_label = None;
                                         },
                                         Err(err) => {
                                             *load_error_label = Some(format!("Error: {}", err));
                                         }
-                                    }*/
-                                    todo!("Fix loading!");
+                                    }
                                 }
                                 if let Some(load_error_label) = load_error_label.as_ref() {
                                     ui.add(egui::Label::new(load_error_label).text_color(egui::Color32::RED));
@@ -205,7 +200,7 @@ pub fn tilemap_modification(
     // check intersection with the heightmap
     let normal = Vec3A::new(0.0, 1.0, 0.0);
     let denominator = normal.dot(ray.direction);
-    let hm_settings = &editor_settings.hm_settings;
+    let hm_settings = &editor_settings.tm_settings;
     if denominator.abs() > 0.0001 {
         // it isn't parallel to the plane
         // (camera can still theoretically be within the height_map but don't care about that)
@@ -233,10 +228,11 @@ pub fn tilemap_modification(
     }
 }
 
+// TODO: Implement this later on maybe
 fn draw_circle_decal(
     tile_coords: UVec2,
     render_data: &mut TileMapRenderData,
-    hm_settings: &HmEditorSettings,
+    hm_settings: &TileEditorSettings,
     map_size: u32,
 ) {
     let width_resolution = render_data.tile_width_resultion;
@@ -294,17 +290,17 @@ fn draw_square_decal(tile_coords: UVec2, render_data: &mut TileMapRenderData, ma
 fn update_height_map_square(
     tile_coords: UVec2,
     tilemap: &mut TileMap,
-    hm_settings: &HmEditorSettings,
+    hm_settings: &TileEditorSettings,
 ) {
     match hm_settings.mode {
-        HmEditorMode::DisplacementMap => {
+        TileEditMode::DisplacementMap => {
             tilemap.set_tile_height(
                 tile_coords.x,
                 tile_coords.y,
                 hm_settings.tool_strenght as f32,
             );
         }
-        HmEditorMode::ColorTexture => {
+        TileEditMode::ColorTexture => {
             todo!("Haven't implemented yet")
         }
     }

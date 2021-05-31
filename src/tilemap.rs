@@ -428,12 +428,12 @@ impl TileMap {
         })
     }
 
-    pub fn set_tile_height(&mut self, x: u32, y: u32, height: f32, lowered: bool) {
+    pub fn set_tile_height(&mut self, x: u32, y: u32, height: f32) {
         // Update
+        let is_lowered;
         if let Some(tile) = self.tile_mut(x, y) {
-            tile.verticies
-                .iter_mut()
-                .for_each(|vertex| vertex.position.y = height);
+            is_lowered = height < tile.base_height;
+            tile.set_height(height);
             self.needs_vertex_update = true;
         } else {
             return;
@@ -565,14 +565,14 @@ impl TileMap {
                 tile_idx: target,
             },
         ];
-        self.smooth_edges(top_left_adj, lowered);
-        self.smooth_edges(top_right_adj, lowered);
-        self.smooth_edges(bottom_left_adj, lowered);
-        self.smooth_edges(bottom_right_adj, lowered);
-        self.smooth_edges(middle_left_adj, lowered);
-        self.smooth_edges(middle_right_adj, lowered);
-        self.smooth_edges(middle_top_adj, lowered);
-        self.smooth_edges(middle_bottom_adj, lowered);
+        self.smooth_edges(top_left_adj, is_lowered);
+        self.smooth_edges(top_right_adj, is_lowered);
+        self.smooth_edges(bottom_left_adj, is_lowered);
+        self.smooth_edges(bottom_right_adj, is_lowered);
+        self.smooth_edges(middle_left_adj, is_lowered);
+        self.smooth_edges(middle_right_adj, is_lowered);
+        self.smooth_edges(middle_top_adj, is_lowered);
+        self.smooth_edges(middle_bottom_adj, is_lowered);
     }
 
     pub fn tile_mut(&mut self, x: u32, y: u32) -> Option<&mut Tile> {

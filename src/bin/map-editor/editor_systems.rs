@@ -302,7 +302,6 @@ fn update_height_map_square(
                 tile_coords.x,
                 tile_coords.y,
                 hm_settings.tool_strenght as f32,
-                false,
             );
         }
         HmEditorMode::ColorTexture => {

@@ -1,7 +1,11 @@
 use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
 use glam::{UVec2, Vec2, Vec3, Vec3A};
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::IndexedParallelIterator;
+use rayon::{
+    iter::{IntoParallelIterator, ParallelIterator},
+    slice::ParallelSliceMut,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::components::Transform;
@@ -201,19 +205,21 @@ use crate::rendering::*;
 #[cfg(feature = "graphics")]
 #[derive(Debug)]
 pub struct TileMapRenderData<'a> {
-    pub vertex_buffer: vertex_buffers::MutableVertexData<TileVertex>,
-    pub index_buffer: wgpu::Buffer,
-    pub num_indexes: u32,
+    vertex_buffer: vertex_buffers::MutableVertexData<TileVertex>,
+    index_buffer: wgpu::Buffer,
+    num_indexes: u32,
     color_texture: wgpu::Texture,
     color_content: texture::TextureContent<'a>,
     decal_layer_texture: wgpu::Texture,
     decal_layer_content: texture::TextureContent<'a>,
     // TODO remove
-    pub instance_buffer: vertex_buffers::MutableVertexData<crate::rendering::gltf::InstanceData>,
-    pub bind_group: wgpu::BindGroup,
-    pub needs_decal_update: bool,
-    pub tile_width_resultion: u32,
-    pub tile_height_resultion: u32,
+    instance_buffer: vertex_buffers::MutableVertexData<crate::rendering::gltf::InstanceData>,
+    bind_group: wgpu::BindGroup,
+    needs_decal_update: bool,
+    needs_color_update: bool,
+    needs_vertex_update: bool,
+    tile_width_resultion: u32,
+    tile_height_resultion: u32,
 }
 
 #[cfg(feature = "graphics")]
@@ -224,6 +230,11 @@ impl<'a> TileMapRenderData<'a> {
             self.decal_layer_content.stride,
             self.decal_layer_content.bytes.to_mut(),
         )
+    }
+
+    pub fn color_buffer_mut(&mut self) -> (u32, &mut [u8]) {
+        self.needs_color_update = true;
+        (self.color_content.stride, self.color_content.bytes.to_mut())
     }
 }
 
@@ -313,6 +324,8 @@ impl<'a> TileMapRenderData<'a> {
             instance_buffer,
             bind_group,
             needs_decal_update: false,
+            needs_color_update: false,
+            needs_vertex_update: false,
             tile_height_resultion: resolution,
             tile_width_resultion: resolution,
         }
@@ -342,7 +355,6 @@ pub struct TileMap {
     tiles: Vec<Tile>,
     size: u32,
     transform: Transform,
-    needs_vertex_update: bool,
 }
 
 impl TileMap {
@@ -353,7 +365,6 @@ impl TileMap {
             tiles,
             size,
             transform,
-            needs_vertex_update: false,
         }
     }
 
@@ -363,33 +374,13 @@ impl TileMap {
         Ok(map)
     }
 
-    pub fn reset(&mut self) {
-        self.tiles = generate_tiles(self.size);
-        self.needs_vertex_update = true;
-    }
-
-    pub fn to_tile_coords(&self, world_coords: Vec3A) -> Option<UVec2> {
-        let local_coords = self.transform.get_model_matrix().inverse() * world_coords.extend(1.0);
-        let map_coords = Vec2::new(local_coords.x / TILE_WIDTH, local_coords.z / TILE_HEIGHT);
-        if map_coords.cmplt(Vec2::ZERO).any()
-            || map_coords
-                .cmpgt(Vec2::new(self.size as f32, self.size as f32))
-                .any()
-        {
-            None
-        } else {
-            let ret = UVec2::new(map_coords.x as u32, map_coords.y as u32);
-            Some(ret)
-        }
-    }
-
     /// Get a reference to the tile map's name.
     #[inline(always)]
     pub fn name(&self) -> &str {
         self.name.as_str()
     }
 
-    /// Get a reference to the tile map's size.
+    /// Get the tile map's size.
     #[inline(always)]
     pub fn size(&self) -> u32 {
         self.size
@@ -440,7 +431,6 @@ impl TileMap {
         if let Some(tile) = self.tile_mut(x, y) {
             is_lowered = height < tile.base_height;
             tile.set_height(height);
-            self.needs_vertex_update = true;
         } else {
             return;
         }
@@ -582,7 +572,6 @@ impl TileMap {
     }
 
     pub fn tile_mut(&mut self, x: u32, y: u32) -> Option<&mut Tile> {
-        self.needs_vertex_update = true;
         if let Some(index) = self.tile_index(x as i32, y as i32) {
             self.tiles.get_mut(index)
         } else {
@@ -603,11 +592,11 @@ impl TileMap {
     }
 }
 
-#[derive(Debug)]
 #[cfg(feature = "graphics")]
+#[derive(Debug)]
 pub struct DrawableTileMap<'a> {
-    pub map: TileMap,
-    pub render_data: TileMapRenderData<'a>,
+    map: TileMap,
+    render_data: TileMapRenderData<'a>,
 }
 
 #[cfg(feature = "graphics")]
@@ -626,6 +615,127 @@ impl<'a> DrawableTileMap<'a> {
         }
     }
 
+    /// Get a reference to the tile map's name.
+    #[inline(always)]
+    pub fn name(&self) -> &str {
+        &self.map.name
+    }
+
+    #[inline(always)]
+    /// Get the tile map's size.
+    pub fn size(&self) -> u32 {
+        self.map.size
+    }
+
+    /// Get a reference to the tile map's transform.
+    pub fn transform(&self) -> &Transform {
+        &self.map.transform
+    }
+
+    pub fn tile_texture_resolution(&self) -> UVec2 {
+        UVec2::new(
+            self.render_data.tile_width_resultion,
+            self.render_data.tile_height_resultion,
+        )
+    }
+
+    pub fn reset_displacment(&mut self) {
+        self.map.tiles = generate_tiles(self.map.size);
+        self.render_data.needs_vertex_update = true;
+    }
+
+    pub fn reset_color(&mut self) {
+        self.render_data.color_content = texture::TextureContent::checkerd(
+            self.map.size,
+            self.render_data.tile_height_resultion as usize,
+        );
+        self.render_data.needs_color_update = true;
+    }
+
+    pub fn reset_decal(&mut self) {
+        let (_, buffer) = self.render_data.decal_buffer_mut();
+        buffer.fill(0);
+        self.render_data.needs_decal_update = true;
+    }
+
+    pub fn set_tile_height(&mut self, x: u32, y: u32, height: u8) {
+        self.map.set_tile_height(x, y, height as f32);
+        self.render_data.needs_vertex_update = true;
+    }
+
+    pub fn to_tile_coords(&self, world_coords: Vec3A) -> Option<UVec2> {
+        let local_coords = self.transform().get_model_matrix().inverse() * world_coords.extend(1.0);
+        let map_coords = Vec2::new(local_coords.x / TILE_WIDTH, local_coords.z / TILE_HEIGHT);
+        if map_coords.cmplt(Vec2::ZERO).any()
+            || map_coords
+                .cmpgt(Vec2::new(self.size() as f32, self.size() as f32))
+                .any()
+        {
+            None
+        } else {
+            let ret = UVec2::new(map_coords.x as u32, map_coords.y as u32);
+            Some(ret)
+        }
+    }
+
+    /// Modify a specific tiles decal texels, more efficient than looking through the entire buffer
+    pub fn modify_tile_decal_texels<F>(&mut self, tile_x: u32, tile_y: u32, func: F)
+    where
+        F: Fn(u32, u32, &mut [u8]) + Send + Sync,
+    {
+        let width_resolution = self.render_data.tile_width_resultion;
+        let height_resolution = self.render_data.tile_height_resultion;
+        let (stride, buffer) = self.render_data.decal_buffer_mut();
+        // texel row size
+        let row_size = stride * self.map.size * width_resolution;
+        // only go through the relevant _tile_ row
+        let texel_start = (tile_y * row_size * height_resolution) as usize;
+        let texel_end = ((tile_y + 1) * row_size * height_resolution) as usize;
+        //  Deterimne the texel row offset for the tile
+        let row_offset = (tile_x * width_resolution) as usize;
+        // The texel row end for the tile
+        let row_tile_end = row_offset + width_resolution as usize;
+        buffer[texel_start..texel_end]
+            .par_chunks_exact_mut(row_size as usize)
+            .enumerate()
+            .for_each(|(y, texel_row)| {
+                texel_row
+                    .par_chunks_exact_mut(stride as usize)
+                    .enumerate()
+                    .filter(|(i, _)| row_offset <= *i && *i < row_tile_end)
+                    .for_each(|(x, bytes)| {
+                        func(x as u32, y as u32, bytes);
+                    });
+            });
+    }
+
+    /// Modify the decal tilmap texture by providing a closure which modifies the texel at the
+    /// provided coordinates
+    pub fn modify_decal_texels<F>(&mut self, func: F)
+    where
+        F: Fn(u32, u32, &mut [u8]) + Send + Sync,
+    {
+        let width_resolution = self.render_data.tile_width_resultion;
+        let (stride, buffer) = self.render_data.decal_buffer_mut();
+        // texel row size
+        let row_size = stride * self.map.size * width_resolution;
+        buffer
+            .par_chunks_exact_mut(row_size as usize)
+            .enumerate()
+            .for_each(|(y, texel_row)| {
+                texel_row
+                    .par_chunks_exact_mut(stride as usize)
+                    .enumerate()
+                    .for_each(|(x, bytes)| func(x as u32, y as u32, bytes))
+            });
+    }
+
+    //TODO: This doesn't serialize the color texture
+    pub fn serialize(&self) -> Result<Vec<u8>> {
+        let serialized = bincode::serialize(&self.map)?;
+        Ok(serialized)
+    }
+
     pub fn update(&mut self, queue: &wgpu::Queue) {
         if self.render_data.needs_decal_update {
             texture::update_texture_data(
@@ -635,7 +745,7 @@ impl<'a> DrawableTileMap<'a> {
             );
             self.render_data.needs_decal_update = false;
         }
-        if self.map.needs_vertex_update {
+        if self.render_data.needs_vertex_update {
             let data = self
                 .map
                 .tiles
@@ -643,7 +753,35 @@ impl<'a> DrawableTileMap<'a> {
                 .flat_map(|tile| tile.verticies.iter().copied())
                 .collect::<Vec<_>>();
             self.render_data.vertex_buffer.update(queue, &data);
-            self.map.needs_vertex_update = false;
+            self.render_data.needs_vertex_update = false;
         }
+        if self.render_data.needs_color_update {
+            texture::update_texture_data(
+                &self.render_data.color_content,
+                &self.render_data.color_texture,
+                queue,
+            );
+            self.render_data.needs_color_update = false;
+        }
+    }
+
+    pub fn draw<'map, 'encoder>(&'map self, render_pass: &mut wgpu::RenderPass<'encoder>)
+    where
+        'map: 'encoder,
+    {
+        render_pass.set_bind_group(0, &self.render_data.bind_group, &[]);
+        render_pass.set_vertex_buffer(
+            0,
+            vertex_buffers::VertexBufferData::slice(&self.render_data.vertex_buffer, ..),
+        );
+        render_pass.set_index_buffer(
+            self.render_data.index_buffer.slice(..),
+            wgpu::IndexFormat::Uint32,
+        );
+        render_pass.set_vertex_buffer(
+            1,
+            vertex_buffers::VertexBufferData::slice(&self.render_data.instance_buffer, ..),
+        );
+        render_pass.draw_indexed(0..self.render_data.num_indexes, 0, 0..1);
     }
 }

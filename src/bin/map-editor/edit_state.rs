@@ -21,7 +21,7 @@ use unnamed_rts::{
 };
 use wgpu::{Device, Queue};
 
-use crate::editor_systems::{self, EditorSettings, HeightMapModificationState, UiState};
+use crate::editor_systems::{self, EditorSettings, LastTileMapUpdate, UiState};
 
 #[derive(Debug, Default)]
 pub struct EditState {
@@ -136,7 +136,7 @@ impl State for EditState {
             .add_system(model_pass::draw_system())
             .add_system(selection_pass::draw_system())
             .add_system(editor_systems::tilemap_modification_system(
-                HeightMapModificationState {
+                LastTileMapUpdate {
                     last_update: std::time::Instant::now(),
                 },
             ))

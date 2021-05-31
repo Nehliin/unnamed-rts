@@ -168,15 +168,8 @@ pub fn draw(
     });
     render_pass.push_debug_group("Tilemap pass");
     render_pass.set_pipeline(&pass.render_pipeline);
-    render_pass.set_vertex_buffer(0, tile_map.render_data.vertex_buffer.slice(..));
-    render_pass.set_index_buffer(
-        tile_map.render_data.index_buffer.slice(..),
-        wgpu::IndexFormat::Uint32,
-    );
-    render_pass.set_vertex_buffer(1, tile_map.render_data.instance_buffer.slice(..));
-    render_pass.set_bind_group(0, &tile_map.render_data.bind_group, &[]);
     render_pass.set_bind_group(1, &camera.bind_group(), &[]);
-    render_pass.draw_indexed(0..tile_map.render_data.num_indexes, 0, 0..1);
+    tile_map.draw(&mut render_pass);
     render_pass.pop_debug_group();
     drop(render_pass);
     pass.command_sender.send(encoder.finish()).unwrap();

@@ -1,9 +1,8 @@
 use std::{path::Path, time::Instant};
 
 use egui::CollapsingHeader;
-use glam::{UVec2, Vec2, Vec3A};
+use glam::{UVec2, Vec2, Vec3A, Vec4Swizzles};
 use legion::*;
-use rayon::prelude::*;
 use unnamed_rts::{
     assets::Handle,
     input::{CursorPosition, MouseButtonState},
@@ -12,12 +11,12 @@ use unnamed_rts::{
         ui::ui_resources::{UiContext, UiTexture},
     },
     resources::{Time, WindowSize},
-    tilemap::{DrawableTileMap, TileMap, TileMapRenderData},
+    tilemap::{DrawableTileMap, TileMap},
 };
 use winit::event::MouseButton;
 #[derive(Debug, Default)]
 pub struct EditorSettings {
-    pub edit_heightmap: bool,
+    pub edit_tilemap: bool,
     pub tm_settings: TileEditorSettings,
 }
 
@@ -70,14 +69,14 @@ pub fn editor_ui(
     #[resource] queue: &wgpu::Queue,
 ) {
     if editor_settings.tm_settings.save_path.is_none() {
-        editor_settings.tm_settings.save_path = Some(format!("assets/{}.map", tilemap.map.name()));
+        editor_settings.tm_settings.save_path = Some(format!("assets/{}.map", tilemap.name()));
     }
     egui::SidePanel::left("editor_side_panel", 120.0).show(&ui_context.context, |ui| {
         ui.vertical_centered(|ui| {
-            ui.checkbox(&mut editor_settings.edit_heightmap, "Edit heightmap");
-            if editor_settings.edit_heightmap {
+            ui.checkbox(&mut editor_settings.edit_tilemap, "Edit Tilemap");
+            if editor_settings.edit_tilemap {
                 let settings = &mut editor_settings.tm_settings;
-                CollapsingHeader::new("Heightmap settings")
+                CollapsingHeader::new("Tilemap settings")
                     .default_open(true)
                     .show(ui, |ui| {
                         egui::ComboBox::from_label("Edit mode")
@@ -107,7 +106,7 @@ pub fn editor_ui(
                         {
                             match settings.mode {
                                 TileEditMode::DisplacementMap => {
-                                   tilemap.map.reset();
+                                   tilemap.reset_displacment();
                                 }
                                 TileEditMode::ColorTexture => {
                                     /*let map_size = tilemap.map.size;
@@ -123,9 +122,8 @@ pub fn editor_ui(
                         ui.label(format!("Path saved to: {}", save_path));
                         if ui.button("Save map").clicked() {
                             use std::io::prelude::*;
-                            let seializable = &tilemap.map;
                             let mut file = std::fs::File::create(save_path).unwrap();
-                            file.write_all(&bincode::serialize(seializable).unwrap()).unwrap();
+                            file.write_all(&tilemap.serialize().unwrap()).unwrap();
                         }
                         if ui.button("Load map").clicked() {
                             state.show_load_popup = true;
@@ -167,8 +165,8 @@ pub fn editor_ui(
             ui.columns(3, |columns| {
                 columns[1].label(format!(
                     "Map editor: {}, size: {}",
-                    tilemap.map.name(),
-                    tilemap.map.size(),
+                    tilemap.name(),
+                    tilemap.size(),
                 ));
             })
         });
@@ -176,7 +174,7 @@ pub fn editor_ui(
 }
 
 // TODO: This should be done in a more general way instead
-pub struct HeightMapModificationState {
+pub struct LastTileMapUpdate {
     pub last_update: Instant,
 }
 const MAX_UPDATE_FREQ: f32 = 1.0 / 60.0;
@@ -184,7 +182,7 @@ const MAX_UPDATE_FREQ: f32 = 1.0 / 60.0;
 #[allow(clippy::too_many_arguments)]
 #[system]
 pub fn tilemap_modification(
-    #[state] modification_state: &mut HeightMapModificationState,
+    #[state] last_update: &mut LastTileMapUpdate,
     #[resource] camera: &Camera,
     #[resource] mouse_button_state: &MouseButtonState,
     #[resource] mouse_pos: &CursorPosition,
@@ -193,115 +191,74 @@ pub fn tilemap_modification(
     #[resource] tilemap: &mut DrawableTileMap,
     #[resource] editor_settings: &EditorSettings,
 ) {
-    if !editor_settings.edit_heightmap {
+    if !editor_settings.edit_tilemap {
         return;
     }
     let ray = camera.raycast(mouse_pos, window_size);
     // check intersection with the heightmap
     let normal = Vec3A::new(0.0, 1.0, 0.0);
     let denominator = normal.dot(ray.direction);
-    let hm_settings = &editor_settings.tm_settings;
+    let tm_settings = &editor_settings.tm_settings;
     if denominator.abs() > 0.0001 {
         // it isn't parallel to the plane
         // (camera can still theoretically be within the height_map but don't care about that)
-        let height_map_pos: Vec3A = tilemap.map.transform().translation.into();
+        let height_map_pos: Vec3A = tilemap.transform().translation.into();
         let t = (height_map_pos - ray.origin).dot(normal) / denominator;
         if t >= 0.0 {
             // there was an intersection
             let target = (t * ray.direction) + ray.origin;
-            let tile_coords = tilemap.map.to_tile_coords(target);
+            let tile_coords = tilemap.to_tile_coords(target);
             if tile_coords.is_none() {
                 return;
             }
             let tile_coords = tile_coords.unwrap();
-            if (time.current_time - modification_state.last_update).as_secs_f32() <= MAX_UPDATE_FREQ
-            {
+            if (time.current_time - last_update.last_update).as_secs_f32() <= MAX_UPDATE_FREQ {
                 return;
             }
-            modification_state.last_update = time.current_time;
+            last_update.last_update = time.current_time;
             if mouse_button_state.is_pressed(&MouseButton::Left) {
-                update_height_map_square(tile_coords, &mut tilemap.map, hm_settings);
+                match tm_settings.mode {
+                    TileEditMode::DisplacementMap => {
+                        tilemap.set_tile_height(
+                            tile_coords.x,
+                            tile_coords.y,
+                            tm_settings.tool_strenght,
+                        );
+                    }
+                    TileEditMode::ColorTexture => {
+                        todo!("Haven't implemented yet")
+                    }
+                }
             }
-            let map_size = tilemap.map.size();
-            draw_square_decal(tile_coords, &mut tilemap.render_data, map_size);
-        }
-    }
-}
-
-// TODO: Implement this later on maybe
-fn draw_circle_decal(
-    tile_coords: UVec2,
-    render_data: &mut TileMapRenderData,
-    hm_settings: &TileEditorSettings,
-    map_size: u32,
-) {
-    let width_resolution = render_data.tile_width_resultion;
-    let center = tile_coords.as_f32();
-    let radius = hm_settings.tool_size;
-    let (stride, buffer) = render_data.decal_buffer_mut();
-    let row_size = stride * map_size * width_resolution;
-    buffer.fill(0);
-    buffer
-        .par_chunks_exact_mut(row_size as usize)
-        .enumerate()
-        .for_each(|(y, chunk)| {
-            chunk
-                .chunks_exact_mut(stride as usize)
-                .enumerate()
-                .for_each(|(x, bytes)| {
-                    let distance = Vec2::new(x as f32, y as f32).distance(center);
-                    if (radius - 2.0) < distance && distance < radius {
-                        bytes[0] = 0;
-                        bytes[1] = 255;
-                        bytes[2] = 0;
-                        bytes[3] = 255;
-                    }
-                })
-        });
-}
-
-fn draw_square_decal(tile_coords: UVec2, render_data: &mut TileMapRenderData, map_size: u32) {
-    let width_resolution = render_data.tile_width_resultion;
-    let height_resolution = render_data.tile_height_resultion;
-    let (stride, buffer) = render_data.decal_buffer_mut();
-    buffer.fill(0);
-    let row_size = stride * map_size * width_resolution;
-    let buffer_start = (tile_coords.y * row_size * height_resolution) as usize;
-    let buffer_end = ((tile_coords.y + 1) * row_size * height_resolution) as usize;
-    buffer[buffer_start..buffer_end]
-        .par_chunks_exact_mut(row_size as usize)
-        .for_each(|chunk| {
-            chunk
-                .chunks_exact_mut(stride as usize)
-                .enumerate()
-                .for_each(|(x, bytes)| {
-                    let start = tile_coords.x * width_resolution;
-                    let end = start + height_resolution;
-                    if (start as usize) <= x && x < end as usize {
-                        bytes[0] = 0;
-                        bytes[1] = 255;
-                        bytes[2] = 0;
-                        bytes[3] = 255;
-                    }
-                });
-        });
-}
-
-fn update_height_map_square(
-    tile_coords: UVec2,
-    tilemap: &mut TileMap,
-    hm_settings: &TileEditorSettings,
-) {
-    match hm_settings.mode {
-        TileEditMode::DisplacementMap => {
-            tilemap.set_tile_height(
-                tile_coords.x,
-                tile_coords.y,
-                hm_settings.tool_strenght as f32,
-            );
-        }
-        TileEditMode::ColorTexture => {
-            todo!("Haven't implemented yet")
+            tilemap.reset_decal();
+            match tm_settings.mode {
+                TileEditMode::DisplacementMap => {
+                    tilemap.modify_tile_decal_texels(
+                        tile_coords.x,
+                        tile_coords.y,
+                        |_, _, bytes| {
+                            bytes[0] = 0;
+                            bytes[1] = 255;
+                            bytes[2] = 0;
+                            bytes[3] = 255;
+                        },
+                    );
+                }
+                TileEditMode::ColorTexture => {
+                    let radius = tm_settings.tool_size;
+                    let center = tile_coords * tilemap.tile_texture_resolution();
+                    let center = center.as_f32();
+                    tilemap.modify_decal_texels(|x, y, bytes| {
+                        let distance = Vec2::new(x as f32, y as f32).distance(center);
+                        if (radius - 2.0) < distance && distance < radius {
+                            bytes[0] = 0;
+                            bytes[1] = 255;
+                            bytes[2] = 0;
+                            bytes[3] = 255;
+                        }
+                    });
+                }
+            }
         }
     }
 }

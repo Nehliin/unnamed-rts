@@ -16,7 +16,6 @@ pub struct TileVertex {
     uv: Vec2,
 }
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-// take f32 per enum val?
 pub enum TileType {
     Flat,
     RampTop,
@@ -41,9 +40,10 @@ impl Default for TileType {
 
 const VERTECIES_PER_TILE: usize = 9;
 const INDICIES_PER_TILE: usize = 24;
-pub const TILE_WIDTH: f32 = 2.0;
-pub const TILE_HEIGHT: f32 = 2.0;
+const TILE_WIDTH: f32 = 2.0;
+const TILE_HEIGHT: f32 = 2.0;
 // Z coords per tile?
+
 #[derive(Debug, Copy, Clone)]
 /// Describes the Tile edge vertices
 enum TileEdge {
@@ -90,7 +90,6 @@ impl Tile {
         let height = size as f32 * TILE_HEIGHT;
         let width = size as f32 * TILE_WIDTH;
         // TODO change order of this to make indices closer to each other
-        // FIX TEXTURE MAPPNG: Maybe use z instead of y?
         let verticies = [
             // Top left
             TileVertex {
@@ -248,10 +247,10 @@ impl<'a> TileMapRenderData<'a> {
         transform: &Transform,
     ) -> Self {
         let resolution = 16;
-        let color_content = texture::TextureContent::checkerd(size, resolution as usize);
+        let color_content = texture::TextureContent::new(size * resolution, size * resolution);
         let color_texture = texture::allocate_simple_texture(device, queue, &color_content, true);
         let decal_layer_content =
-            texture::TextureContent::black(size * resolution as u32, size * resolution as u32);
+            texture::TextureContent::new(size * resolution, size * resolution);
         let decal_layer_texture =
             texture::allocate_simple_texture(device, queue, &decal_layer_content, false);
         //TODO: improve this
@@ -602,6 +601,7 @@ pub struct DrawableTileMap<'a> {
 #[cfg(feature = "graphics")]
 impl<'a> DrawableTileMap<'a> {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, tilemap: TileMap) -> Self {
+        let map_size = tilemap.size();
         let render_data = TileMapRenderData::new(
             device,
             queue,
@@ -609,10 +609,26 @@ impl<'a> DrawableTileMap<'a> {
             tilemap.size,
             &tilemap.transform,
         );
-        DrawableTileMap {
+        let mut drawable_map = DrawableTileMap {
             map: tilemap,
             render_data,
+        };
+
+        // Generate checkered default texture
+        // This creates somewhat of an optical illusion (everything looks smaller) which might be
+        // undesirable. It's also pretty slow but that can be improved if absolute necessary
+        // Also the checkered pattern can in reality be a 4x4 texture that's repeated
+        for y in 0..map_size {
+            for x in 0..map_size {
+                if (x + y) % 2 == 0 {
+                    drawable_map.modify_tile_color_texels(x, y, |_, _, buffer| buffer.fill(128));
+                } else {
+                    drawable_map.modify_tile_color_texels(x, y, |_, _, buffer| buffer.fill(64));
+                }
+            }
         }
+        drawable_map.render_data.needs_color_update = true;
+        drawable_map
     }
 
     /// Get a reference to the tile map's name.
@@ -645,10 +661,18 @@ impl<'a> DrawableTileMap<'a> {
     }
 
     pub fn reset_color(&mut self) {
-        self.render_data.color_content = texture::TextureContent::checkerd(
-            self.map.size,
-            self.render_data.tile_height_resultion as usize,
-        );
+        let (_, buffer) = self.render_data.color_buffer_mut();
+        buffer.fill(0);
+        // Generate checkered default texture
+        for y in 0..self.size() {
+            for x in 0..self.size() {
+                if (x + y) % 2 == 0 {
+                    self.modify_tile_color_texels(x, y, |_, _, buffer| buffer.fill(128));
+                } else {
+                    self.modify_tile_color_texels(x, y, |_, _, buffer| buffer.fill(64));
+                }
+            }
+        }
         self.render_data.needs_color_update = true;
     }
 
@@ -678,16 +702,20 @@ impl<'a> DrawableTileMap<'a> {
         }
     }
 
-    /// Modify a specific tiles decal texels, more efficient than looking through the entire buffer
-    pub fn modify_tile_decal_texels<F>(&mut self, tile_x: u32, tile_y: u32, func: F)
-    where
+    fn modify_tile_texels<F>(
+        tile_x: u32,
+        tile_y: u32,
+        map_size: u32,
+        width_resolution: u32,
+        height_resolution: u32,
+        stride: u32,
+        texel_buffer: &mut [u8],
+        func: F,
+    ) where
         F: Fn(u32, u32, &mut [u8]) + Send + Sync,
     {
-        let width_resolution = self.render_data.tile_width_resultion;
-        let height_resolution = self.render_data.tile_height_resultion;
-        let (stride, buffer) = self.render_data.decal_buffer_mut();
         // texel row size
-        let row_size = stride * self.map.size * width_resolution;
+        let row_size = stride * map_size * width_resolution;
         // only go through the relevant _tile_ row
         let texel_start = (tile_y * row_size * height_resolution) as usize;
         let texel_end = ((tile_y + 1) * row_size * height_resolution) as usize;
@@ -695,7 +723,7 @@ impl<'a> DrawableTileMap<'a> {
         let row_offset = (tile_x * width_resolution) as usize;
         // The texel row end for the tile
         let row_tile_end = row_offset + width_resolution as usize;
-        buffer[texel_start..texel_end]
+        texel_buffer[texel_start..texel_end]
             .par_chunks_exact_mut(row_size as usize)
             .enumerate()
             .for_each(|(y, texel_row)| {
@@ -709,17 +737,59 @@ impl<'a> DrawableTileMap<'a> {
             });
     }
 
-    /// Modify the decal tilmap texture by providing a closure which modifies the texel at the
-    /// provided coordinates
-    pub fn modify_decal_texels<F>(&mut self, func: F)
+    /// Modify a specific tiles decal texels, more efficient than looking through the entire buffer
+    pub fn modify_tile_decal_texels<F>(&mut self, tile_x: u32, tile_y: u32, func: F)
     where
         F: Fn(u32, u32, &mut [u8]) + Send + Sync,
     {
+        let height_resolution = self.render_data.tile_height_resultion;
         let width_resolution = self.render_data.tile_width_resultion;
         let (stride, buffer) = self.render_data.decal_buffer_mut();
+        Self::modify_tile_texels(
+            tile_x,
+            tile_y,
+            self.map.size,
+            width_resolution,
+            height_resolution,
+            stride,
+            buffer,
+            func,
+        );
+    }
+
+    pub fn modify_tile_color_texels<F>(&mut self, tile_x: u32, tile_y: u32, func: F)
+    where
+        F: Fn(u32, u32, &mut [u8]) + Send + Sync,
+    {
+        let height_resolution = self.render_data.tile_height_resultion;
+        let width_resolution = self.render_data.tile_width_resultion;
+        let (stride, buffer) = self.render_data.color_buffer_mut();
+        Self::modify_tile_texels(
+            tile_x,
+            tile_y,
+            self.map.size,
+            width_resolution,
+            height_resolution,
+            stride,
+            buffer,
+            func,
+        );
+    }
+
+    /// Modify a tilemap texutre by providing a closure which modifies the texel at the
+    /// provided coordinates
+    fn modify_texels<F>(
+        map_size: u32,
+        width_resolution: u32,
+        stride: u32,
+        texel_buffer: &mut [u8],
+        func: F,
+    ) where
+        F: Fn(u32, u32, &mut [u8]) + Send + Sync,
+    {
         // texel row size
-        let row_size = stride * self.map.size * width_resolution;
-        buffer
+        let row_size = stride * map_size * width_resolution;
+        texel_buffer
             .par_chunks_exact_mut(row_size as usize)
             .enumerate()
             .for_each(|(y, texel_row)| {
@@ -728,6 +798,26 @@ impl<'a> DrawableTileMap<'a> {
                     .enumerate()
                     .for_each(|(x, bytes)| func(x as u32, y as u32, bytes))
             });
+    }
+
+    /// Modify the decal tilmap texture by providing a closure which modifies the texel at the
+    /// provided coordinates
+    pub fn modify_decal_texels<F>(&mut self, func: F)
+    where
+        F: Fn(u32, u32, &mut [u8]) + Send + Sync,
+    {
+        let width_resolution = self.render_data.tile_width_resultion;
+        let (stride, buffer) = self.render_data.decal_buffer_mut();
+        Self::modify_texels(self.map.size, width_resolution, stride, buffer, func);
+    }
+
+    pub fn modify_color_texels<F>(&mut self, func: F)
+    where
+        F: Fn(u32, u32, &mut [u8]) + Send + Sync,
+    {
+        let width_resolution = self.render_data.tile_width_resultion;
+        let (stride, buffer) = self.render_data.color_buffer_mut();
+        Self::modify_texels(self.map.size, width_resolution, stride, buffer, func);
     }
 
     //TODO: This doesn't serialize the color texture

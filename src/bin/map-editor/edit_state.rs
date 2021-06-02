@@ -67,7 +67,7 @@ impl State for EditState {
         let queue = resources.get::<Queue>().expect("Queue to be present");
         let camera = Camera::new(
             &device,
-            Vec3::new(0., 2., 3.5),
+            Vec3::new(1.0, 0.5, 3.5),
             Vec3::new(0.0, 0.0, -1.0),
             size.physical_width,
             size.physical_height,

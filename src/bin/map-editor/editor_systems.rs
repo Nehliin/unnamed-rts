@@ -1,7 +1,7 @@
 use std::{path::Path, time::Instant};
 
 use egui::CollapsingHeader;
-use glam::{UVec2, Vec2, Vec3A, Vec4Swizzles};
+use glam::{Vec2, Vec3A};
 use legion::*;
 use unnamed_rts::{
     assets::Handle,
@@ -109,12 +109,7 @@ pub fn editor_ui(
                                    tilemap.reset_displacment();
                                 }
                                 TileEditMode::ColorTexture => {
-                                    /*let map_size = tilemap.map.size;
-                                    let (_, buffer) = tilemap.get_color_buffer_mut();
-                                   // TODO: unecessary allocation here but not as important within the editor
-                                    let checkerd = TextureContent::checkerd(map_size);
-                                    buffer.copy_from_slice(&checkerd.bytes);*/
-                                    todo!("Fix  textures");
+                                   tilemap.reset_color(); 
                                 }
                             }
                         }
@@ -226,7 +221,18 @@ pub fn tilemap_modification(
                         );
                     }
                     TileEditMode::ColorTexture => {
-                        todo!("Haven't implemented yet")
+                        let radius = tm_settings.tool_size;
+                        let center = tile_coords * tilemap.tile_texture_resolution();
+                        let center = center.as_f32();
+                        tilemap.modify_color_texels(|x, y, bytes| {
+                            let distance = Vec2::new(x as f32, y as f32).distance(center);
+                            if distance < radius {
+                                bytes[0] = 255;
+                                bytes[1] = 0;
+                                bytes[2] = 0;
+                                bytes[3] = 255;
+                            }
+                        });
                     }
                 }
             }

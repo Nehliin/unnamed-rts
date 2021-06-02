@@ -10,10 +10,7 @@ use crate::{
     tilemap::{DrawableTileMap, TileVertex},
 };
 
-use super::{
-    common::DepthTexture,
-    vertex_buffers::{VertexBuffer, VertexBufferData},
-};
+use super::{common::DepthTexture, vertex_buffers::VertexBuffer};
 
 impl VertexBuffer for TileVertex {
     const STEP_MODE: wgpu::InputStepMode = wgpu::InputStepMode::Vertex;

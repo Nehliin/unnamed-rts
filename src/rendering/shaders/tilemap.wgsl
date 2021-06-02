@@ -40,7 +40,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 [[stage(fragment)]]
 fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-   let color = vec4<f32>(textureSample(color_tex, color_sampler, in.uv).rbg, 0.0);
+   let color = textureSample(color_tex, color_sampler, in.uv);
    let decal_color = textureSample(decal_tex, color_sampler, in.uv);
    let final_color = decal_color + color * ( 1.0 - decal_color.a );
    return final_color; 

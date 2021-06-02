@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use crate::resources::DebugRenderSettings;
 
-use super::{
+use crate::rendering::{
     camera::Camera,
     common::{DepthTexture, DEPTH_FORMAT},
 };

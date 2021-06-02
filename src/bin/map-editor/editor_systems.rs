@@ -8,10 +8,11 @@ use unnamed_rts::{
     input::{CursorPosition, MouseButtonState},
     rendering::{
         camera::Camera,
+        drawable_tilemap::*,
         ui::ui_resources::{UiContext, UiTexture},
     },
     resources::{Time, WindowSize},
-    tilemap::{DrawableTileMap, TileMap},
+    tilemap::{ TileMap},
 };
 use winit::event::MouseButton;
 #[derive(Debug, Default)]

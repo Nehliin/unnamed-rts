@@ -7,7 +7,7 @@ use wgpu::{
     CommandBuffer, Device,
 };
 
-use super::ui_resources::UiTexture;
+use crate::rendering::ui::ui_resources::UiTexture;
 
 #[derive(Debug)]
 enum BufferType {
@@ -42,7 +42,7 @@ impl UiPass {
     pub fn new(device: &Device, command_sender: Sender<CommandBuffer>) -> UiPass {
         let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("Ui shader"),
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("../shaders/ui.wgsl"))),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/ui.wgsl"))),
             flags: wgpu::ShaderFlags::VALIDATION,
         });
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {

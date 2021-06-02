@@ -1,96 +1,90 @@
 use std::borrow::Cow;
 
-use crate::assets::{Assets, Handle};
-use crate::components::Transform;
+use crate::assets::*;
+use crate::components::{Selectable, Transform};
+use crate::rendering::{
+    camera::Camera,
+    common::DEPTH_FORMAT,
+    gltf::{GltfModel, InstanceData, MeshVertex, INSTANCE_BUFFER_LEN},
+    vertex_buffers::{MutableVertexData, VertexBuffer},
+};
 use crossbeam_channel::Sender;
+use glam::{Mat4, Vec3};
 use legion::{world::SubWorld, *};
 
-use super::{
-    camera::Camera,
-    common::{DepthTexture, DEPTH_FORMAT},
-    gltf::GltfModel,
-    gltf::PbrMaterial,
-    gltf::{InstanceData, MeshVertex},
-    lights::LightUniformBuffer,
-    vertex_buffers::VertexBuffer,
-};
+use crate::rendering::common::DepthTexture;
 
 #[system]
-pub fn update(
-    world: &SubWorld,
-    #[resource] queue: &wgpu::Queue,
-    #[resource] asset_storage: &Assets<GltfModel>,
-    query: &mut Query<(&Transform, &Handle<GltfModel>)>,
-) {
-    // TODO: Change this to something that actually works for different models
-    // bumpallocation while retaining multithreading would be nice
-    query.par_for_each_chunk(world, |chunk| {
-        let (transforms, models) = chunk.get_components();
-        // HACK
-        if let Some(model) = models.get(0) {
-            // DON'T USE A VEC HERE FOR GODS SAKE
-            let model_matrices = transforms
-                .iter()
-                .map(|trans| InstanceData::new(trans.get_model_matrix()))
-                .collect::<Vec<InstanceData>>();
-            let instance_buffer = &asset_storage.get(model).unwrap().instance_buffer;
-            instance_buffer.update(queue, &model_matrices);
-        }
-    });
-}
-
-#[allow(clippy::too_many_arguments)]
-#[system]
+#[allow(clippy::clippy::too_many_arguments)]
 pub fn draw(
     world: &SubWorld,
-    #[resource] pass: &ModelPass,
+    #[resource] pass: &SelectionPass,
+    #[resource] queue: &wgpu::Queue,
     #[resource] asset_storage: &Assets<GltfModel>,
     #[resource] depth_texture: &DepthTexture,
     #[resource] device: &wgpu::Device,
-    #[resource] light_uniform: &LightUniformBuffer,
     #[resource] current_frame: &wgpu::SwapChainTexture,
     #[resource] camera: &Camera,
-    query: &mut Query<(&Transform, &Handle<GltfModel>)>,
+    query: &mut Query<(&Transform, &Selectable, &Handle<GltfModel>)>,
 ) {
+    // update selected units instance buffer
+    query.par_for_each_chunk(world, |chunk| {
+        let (transforms, selectable, _) = chunk.get_components();
+        // DON'T USE A VEC HERE FOR GODS SAKE
+        let model_matrices = transforms
+            .iter()
+            .zip(selectable)
+            .filter(|(_, selectable)| selectable.is_selected)
+            .map(|(trans, _)| {
+                InstanceData::new(trans.get_model_matrix() * Mat4::from_scale(Vec3::splat(1.01)))
+            })
+            .collect::<Vec<InstanceData>>();
+
+        pass.instance_buffer.update(queue, &model_matrices);
+    });
+
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("Model pass encoder"),
+        label: Some("Selection pass encoder"),
     });
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("Model render pass"),
+        label: Some("Selection render pass"),
         color_attachments: &[wgpu::RenderPassColorAttachment {
             view: &current_frame.view,
             resolve_target: None,
             ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: 0.1,
-                    g: 0.2,
-                    b: 0.3,
-                    a: 1.0,
-                }),
+                load: wgpu::LoadOp::Load,
                 store: true,
             },
         }],
         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
             view: &depth_texture.view,
             depth_ops: Some(wgpu::Operations {
-                load: wgpu::LoadOp::Clear(1.0),
+                load: wgpu::LoadOp::Load,
                 store: true,
             }),
             stencil_ops: Some(wgpu::Operations {
-                load: wgpu::LoadOp::Clear(1),
-                store: true,
+                load: wgpu::LoadOp::Load,
+                store: false,
             }),
         }),
     });
-    render_pass.push_debug_group("Model pass");
+    render_pass.push_debug_group("Selection pass");
     render_pass.set_pipeline(&pass.render_pipeline);
     render_pass.set_bind_group(0, &camera.bind_group(), &[]);
-    render_pass.set_bind_group(2, &light_uniform.bind_group, &[]);
+    let mut query = <(Read<Transform>, Read<Selectable>, Read<Handle<GltfModel>>)>::query();
     query.for_each_chunk(world, |chunk| {
-        let (transforms, models) = chunk.get_components();
+        let (_, selectable, models) = chunk.get_components();
         if let Some(model) = models.get(0) {
             let model = asset_storage.get(model).unwrap();
-            model.draw_instanced(&mut render_pass, 0..transforms.len() as u32);
+            let count = selectable
+                .iter()
+                .filter(|selectable| selectable.is_selected)
+                .count();
+            model.draw_with_instance_buffer(
+                &mut render_pass,
+                &pass.instance_buffer,
+                0..count as u32,
+            );
         }
     });
     render_pass.pop_debug_group();
@@ -98,31 +92,34 @@ pub fn draw(
     pass.command_sender.send(encoder.finish()).unwrap();
 }
 
-pub struct ModelPass {
+pub struct SelectionPass {
     render_pipeline: wgpu::RenderPipeline,
+    // This should be handled better
+    instance_buffer: MutableVertexData<InstanceData>,
     command_sender: Sender<wgpu::CommandBuffer>,
 }
 
-impl ModelPass {
-    pub fn new(device: &wgpu::Device, command_sender: Sender<wgpu::CommandBuffer>) -> ModelPass {
+impl SelectionPass {
+    pub fn new(
+        device: &wgpu::Device,
+        command_sender: Sender<wgpu::CommandBuffer>,
+    ) -> SelectionPass {
+        // TODO: Share this with the modle pass
         let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: Some("Model shader"),
+            label: Some("Selection(model) shader"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/model.wgsl"))),
             flags: wgpu::ShaderFlags::VALIDATION,
         });
+
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Model pipeline layout"),
-                bind_group_layouts: &[
-                    Camera::get_or_create_layout(&device),
-                    PbrMaterial::get_or_create_layout(&device),
-                    LightUniformBuffer::get_or_create_layout(&device),
-                ],
+                label: Some("Selection pipeline layout"),
+                bind_group_layouts: &[Camera::get_or_create_layout(device)],
                 push_constant_ranges: &[],
             });
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Model pipeline"),
+            label: Some("Selection pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader_module,
@@ -131,39 +128,43 @@ impl ModelPass {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader_module,
-                entry_point: "fs_main",
+                entry_point: "flat_main",
                 targets: &[wgpu::TextureFormat::Bgra8UnormSrgb.into()],
             }),
             primitive: wgpu::PrimitiveState {
-                cull_mode: Some(wgpu::Face::Back),
+                cull_mode: None,
                 ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: DEPTH_FORMAT,
                 depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
+                depth_compare: wgpu::CompareFunction::Always,
                 stencil: wgpu::StencilState {
                     front: wgpu::StencilFaceState {
-                        compare: wgpu::CompareFunction::Always,
+                        compare: wgpu::CompareFunction::NotEqual,
                         fail_op: wgpu::StencilOperation::Keep,
                         depth_fail_op: wgpu::StencilOperation::Keep,
                         pass_op: wgpu::StencilOperation::Replace,
                     },
                     back: wgpu::StencilFaceState {
-                        compare: wgpu::CompareFunction::Always,
+                        compare: wgpu::CompareFunction::NotEqual,
                         fail_op: wgpu::StencilOperation::Keep,
                         depth_fail_op: wgpu::StencilOperation::Keep,
                         pass_op: wgpu::StencilOperation::Replace,
                     },
-                    read_mask: 0x00,
-                    write_mask: 0xFF,
+                    read_mask: 0xFF,
+                    write_mask: 0x00, // Disable stencil buffer writes
                 },
                 bias: wgpu::DepthBiasState::default(),
             }),
             multisample: wgpu::MultisampleState::default(),
         });
-        ModelPass {
+        let instance_buffer_len = INSTANCE_BUFFER_LEN / std::mem::size_of::<InstanceData>();
+        let buffer_data = vec![InstanceData::default(); instance_buffer_len];
+        let instance_buffer = VertexBuffer::allocate_mutable_buffer(device, &buffer_data);
+        SelectionPass {
             render_pipeline,
+            instance_buffer,
             command_sender,
         }
     }

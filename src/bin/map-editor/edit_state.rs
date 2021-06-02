@@ -8,16 +8,15 @@ use unnamed_rts::{
     rendering::{
         camera::{self, Camera},
         common::DepthTexture,
-        debug_lines_pass::{self, BoundingBoxMap},
+        drawable_tilemap::*,
         gltf::GltfModel,
-        grid_pass,
         lights::{self, LightUniformBuffer},
-        model_pass, selection_pass, tilemap_pass,
+        pass::*,
         ui::ui_resources::UiTexture,
     },
     resources::{DebugRenderSettings, WindowSize},
     states::{State, StateTransition},
-    tilemap::{DrawableTileMap, TileMap},
+    tilemap::TileMap,
 };
 use wgpu::{Device, Queue};
 
@@ -88,9 +87,8 @@ impl State for EditState {
         resources.insert(grid_pass);
         resources.insert(selection_pass);
         resources.insert(heightmap_pass);
-        //resources.insert(Assets::<HeightMap>::default());
         resources.insert(debug_lines_pass);
-        resources.insert(BoundingBoxMap::default());
+        resources.insert(debug_lines_pass::BoundingBoxMap::default());
         resources.insert(DebugRenderSettings {
             show_grid: false,
             show_bounding_boxes: true,

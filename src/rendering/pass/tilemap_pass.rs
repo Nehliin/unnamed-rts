@@ -6,11 +6,11 @@ use legion::*;
 use once_cell::sync::OnceCell;
 
 use crate::{
-    rendering::{camera::Camera, common::DEPTH_FORMAT, gltf::InstanceData},
-    tilemap::{DrawableTileMap, TileVertex},
+    rendering::{camera::Camera, common::DEPTH_FORMAT, drawable_tilemap::*, gltf::InstanceData},
+    tilemap::TileVertex,
 };
 
-use super::{common::DepthTexture, vertex_buffers::VertexBuffer};
+use crate::rendering::{common::DepthTexture, vertex_buffers::VertexBuffer};
 
 impl VertexBuffer for TileVertex {
     const STEP_MODE: wgpu::InputStepMode = wgpu::InputStepMode::Vertex;

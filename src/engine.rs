@@ -1,6 +1,7 @@
 use crate::{
     input::{self, InputHandler},
-    rendering::ui::{ui_pass, ui_resources::UiContext, ui_systems},
+    rendering::pass::ui_pass,
+    rendering::ui::{ui_resources::UiContext, ui_systems},
     resources::{Time, WindowSize},
     states::State,
     states::{StateStack, StateTransition},

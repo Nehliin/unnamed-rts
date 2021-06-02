@@ -203,19 +203,23 @@ use crate::rendering::*;
 
 #[cfg(feature = "graphics")]
 #[derive(Debug)]
+// This isn't really needed, could be merged with drawable map
 pub struct TileMapRenderData<'a> {
     vertex_buffer: vertex_buffers::MutableVertexData<TileVertex>,
     index_buffer: wgpu::Buffer,
     num_indexes: u32,
-    color_texture: wgpu::Texture,
-    color_content: texture::TextureContent<'a>,
+    color_layer_texture: wgpu::Texture,
+    color_layer_content: texture::TextureContent<'a>,
     decal_layer_texture: wgpu::Texture,
     decal_layer_content: texture::TextureContent<'a>,
+    debug_layer_texture: wgpu::Texture,
+    debug_layer_content: texture::TextureContent<'a>,
     // TODO remove
     instance_buffer: vertex_buffers::MutableVertexData<crate::rendering::gltf::InstanceData>,
     bind_group: wgpu::BindGroup,
     needs_decal_update: bool,
     needs_color_update: bool,
+    needs_debug_update: bool,
     needs_vertex_update: bool,
     tile_width_resultion: u32,
     tile_height_resultion: u32,
@@ -223,6 +227,7 @@ pub struct TileMapRenderData<'a> {
 
 #[cfg(feature = "graphics")]
 impl<'a> TileMapRenderData<'a> {
+    // This have no particular meaning anymore
     pub fn decal_buffer_mut(&mut self) -> (u32, &mut [u8]) {
         self.needs_decal_update = true;
         (
@@ -233,7 +238,18 @@ impl<'a> TileMapRenderData<'a> {
 
     pub fn color_buffer_mut(&mut self) -> (u32, &mut [u8]) {
         self.needs_color_update = true;
-        (self.color_content.stride, self.color_content.bytes.to_mut())
+        (
+            self.color_layer_content.stride,
+            self.color_layer_content.bytes.to_mut(),
+        )
+    }
+
+    pub fn debug_buffer_mut(&mut self) -> (u32, &mut [u8]) {
+        self.needs_debug_update = true;
+        (
+            self.debug_layer_content.stride,
+            self.debug_layer_content.bytes.to_mut(),
+        )
     }
 }
 
@@ -247,11 +263,17 @@ impl<'a> TileMapRenderData<'a> {
         transform: &Transform,
     ) -> Self {
         let resolution = 16;
-        let color_content = texture::TextureContent::new(size * resolution, size * resolution);
-        let color_texture = texture::allocate_simple_texture(device, queue, &color_content, true);
+        let color_layer_content =
+            texture::TextureContent::new(size * resolution, size * resolution);
+        let color_layer_texture =
+            texture::allocate_simple_texture(device, queue, &color_layer_content, true);
         let decal_layer_content =
             texture::TextureContent::new(size * resolution, size * resolution);
         let decal_layer_texture =
+            texture::allocate_simple_texture(device, queue, &decal_layer_content, false);
+        let debug_layer_content =
+            texture::TextureContent::new(size * resolution, size * resolution);
+        let debug_layer_texture =
             texture::allocate_simple_texture(device, queue, &decal_layer_content, false);
         //TODO: improve this
         let verticies = tiles
@@ -279,9 +301,11 @@ impl<'a> TileMapRenderData<'a> {
             device,
             &[gltf::InstanceData::new(transform.get_model_matrix())],
         );
-        let color_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let color_view = color_layer_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let decal_layer_view =
             decal_layer_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let debug_layer_view =
+            debug_layer_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let color_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("Tilemap color texture sampler"),
             address_mode_u: wgpu::AddressMode::ClampToBorder,
@@ -307,6 +331,10 @@ impl<'a> TileMapRenderData<'a> {
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&debug_layer_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
                     resource: wgpu::BindingResource::Sampler(&color_sampler),
                 },
             ],
@@ -316,14 +344,17 @@ impl<'a> TileMapRenderData<'a> {
             vertex_buffer,
             index_buffer,
             num_indexes,
-            color_texture,
-            color_content,
+            color_layer_texture,
+            color_layer_content,
             decal_layer_texture,
             decal_layer_content,
+            debug_layer_content,
+            debug_layer_texture,
             instance_buffer,
             bind_group,
             needs_decal_update: false,
             needs_color_update: false,
+            needs_debug_update: false,
             needs_vertex_update: false,
             tile_height_resultion: resolution,
             tile_width_resultion: resolution,
@@ -660,7 +691,7 @@ impl<'a> DrawableTileMap<'a> {
         self.render_data.needs_vertex_update = true;
     }
 
-    pub fn reset_color(&mut self) {
+    pub fn reset_color_layer(&mut self) {
         let (_, buffer) = self.render_data.color_buffer_mut();
         buffer.fill(0);
         // Generate checkered default texture
@@ -676,10 +707,16 @@ impl<'a> DrawableTileMap<'a> {
         self.render_data.needs_color_update = true;
     }
 
-    pub fn reset_decal(&mut self) {
+    pub fn reset_decal_layer(&mut self) {
         let (_, buffer) = self.render_data.decal_buffer_mut();
         buffer.fill(0);
         self.render_data.needs_decal_update = true;
+    }
+
+    pub fn reset_debug_layer(&mut self) {
+        let (_, buffer) = self.render_data.debug_buffer_mut();
+        buffer.fill(0);
+        self.render_data.needs_debug_update = true;
     }
 
     pub fn set_tile_height(&mut self, x: u32, y: u32, height: u8) {
@@ -847,8 +884,8 @@ impl<'a> DrawableTileMap<'a> {
         }
         if self.render_data.needs_color_update {
             texture::update_texture_data(
-                &self.render_data.color_content,
-                &self.render_data.color_texture,
+                &self.render_data.color_layer_content,
+                &self.render_data.color_layer_texture,
                 queue,
             );
             self.render_data.needs_color_update = false;

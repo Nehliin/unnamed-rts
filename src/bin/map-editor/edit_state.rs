@@ -148,6 +148,7 @@ impl State for EditState {
             .add_system(editor_systems::editor_ui_system(UiState {
                 img: self.test_img.unwrap(),
                 show_load_popup: false,
+                debug_tile_draw_on: false,
                 load_error_label: None,
             }))
             .build()

@@ -21,7 +21,8 @@ struct VertexInput {
 
 [[group(0), binding(0)]] var color_tex: texture_2d<f32>;
 [[group(0), binding(1)]] var decal_tex: texture_2d<f32>;
-[[group(0), binding(2)]] var color_sampler: sampler;
+[[group(0), binding(2)]] var debug_tex: texture_2d<f32>;
+[[group(0), binding(3)]] var color_sampler: sampler;
 
 struct VertexOutput {
  [[builtin(position)]] position: vec4<f32>;
@@ -42,6 +43,8 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
    let color = textureSample(color_tex, color_sampler, in.uv);
    let decal_color = textureSample(decal_tex, color_sampler, in.uv);
-   let final_color = decal_color + color * ( 1.0 - decal_color.a );
+   let debug_color = textureSample(debug_tex, color_sampler, in.uv);
+   let merged_color = debug_color + color * (1.0 - debug_color.a);
+   let final_color = decal_color + merged_color * ( 1.0 - decal_color.a );
    return final_color; 
 }

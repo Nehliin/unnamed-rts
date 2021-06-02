@@ -34,6 +34,7 @@ pub struct TileEditorSettings {
     pub tool_size: f32,
     pub max_height: u8,
     pub mode: TileEditMode,
+    pub draw_tile_types: bool,
     pub save_path: Option<String>,
     pub load_path: String,
 }
@@ -45,6 +46,7 @@ impl Default for TileEditorSettings {
             tool_size: 20.0,
             max_height: 255,
             mode: TileEditMode::DisplacementMap,
+            draw_tile_types: false,
             save_path: None,
             load_path: "my_map_name.map".to_string(),
         }
@@ -54,11 +56,13 @@ impl Default for TileEditorSettings {
 pub struct UiState<'a> {
     pub img: Handle<UiTexture<'a>>,
     pub show_load_popup: bool,
+    pub debug_tile_draw_on: bool,
     pub load_error_label: Option<String>,
 }
 
 #[system]
 #[allow(clippy::too_many_arguments)]
+// This system is a bit of spagettios but I will clean it up later. Features more important atm!
 pub fn editor_ui(
     #[state] state: &mut UiState<'static>,
     #[resource] ui_context: &UiContext,
@@ -109,10 +113,23 @@ pub fn editor_ui(
                                    tilemap.reset_displacment();
                                 }
                                 TileEditMode::ColorTexture => {
-                                   tilemap.reset_color(); 
+                                   tilemap.reset_color_layer(); 
                                 }
                             }
                         }
+                        ui.separator();
+                        ui.checkbox(&mut settings.draw_tile_types, "Debug Draw tile types");
+                        if settings.draw_tile_types {
+                            if !state.debug_tile_draw_on {
+                                state.debug_tile_draw_on = true;
+                                info!("Will draw debug tiles!"); 
+                            }
+                        } else if state.debug_tile_draw_on {
+                           tilemap.reset_debug_layer();
+                           state.debug_tile_draw_on = false;
+                           info!("Stop drawing debug layer!");
+                        }
+
                         let save_path = settings.save_path.as_ref().expect("Name should be used as default value");
                         ui.label(format!("Path saved to: {}", save_path));
                         if ui.button("Save map").clicked() {
@@ -236,7 +253,7 @@ pub fn tilemap_modification(
                     }
                 }
             }
-            tilemap.reset_decal();
+            tilemap.reset_decal_layer();
             match tm_settings.mode {
                 TileEditMode::DisplacementMap => {
                     tilemap.modify_tile_decal_texels(

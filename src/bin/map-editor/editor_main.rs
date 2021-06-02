@@ -1,7 +1,9 @@
 #[macro_use]
 extern crate log;
+
 use edit_state::EditState;
 use futures::executor::block_on;
+use mimalloc::MiMalloc;
 use unnamed_rts::{engine::Engine, states::State};
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -11,6 +13,9 @@ use winit::{
 
 mod edit_state;
 mod editor_systems;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
     env_logger::builder()

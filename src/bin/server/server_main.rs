@@ -2,6 +2,7 @@ use glam::{Quat, Vec3};
 use laminar::{Config, Packet, SocketEvent};
 use legion::*;
 use log::{error, info, warn};
+use mimalloc::MiMalloc;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use server_systems::*;
 use std::{
@@ -14,6 +15,9 @@ use unnamed_rts::resources::{
     SERVER_UPDATE_STREAM,
 };
 use unnamed_rts::{components::*, resources::ClientUpdate};
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 mod server_systems;
 #[derive(Debug, Default)]

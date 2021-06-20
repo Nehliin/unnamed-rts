@@ -264,6 +264,58 @@ impl<'a> DrawableTileMap<'a> {
         self.render_data.needs_debug_update = true;
     }
 
+    pub fn fill_debug_layer(&mut self) {
+        let height_resolution = self.render_data.tile_height_resultion;
+        let width_resolution = self.render_data.tile_width_resultion;
+        let (stride, buffer) = self.render_data.debug_buffer_mut();
+        let size = self.map.size();
+        for x in 0..size {
+            for y in 0..size {
+                if let Some(tile) = self.map.tile(x, y) {
+                    match tile.tile_type {
+                        TileType::Flat => {}
+                        TileType::RampTop
+                        | TileType::RampBottom
+                        | TileType::RampRight
+                        | TileType::RampLeft
+                            if tile.ramp_height.abs() < 2 =>
+                        {
+                            Self::modify_tile_texels(
+                                x,
+                                y,
+                                size,
+                                width_resolution,
+                                height_resolution,
+                                stride,
+                                buffer,
+                                |_, _, tile_texels| {
+                                    tile_texels[2] = 255;
+                                    tile_texels[3] = 255;
+                                },
+                            );
+                        }
+                        _ => {
+                            Self::modify_tile_texels(
+                                x,
+                                y,
+                                size,
+                                width_resolution,
+                                height_resolution,
+                                stride,
+                                buffer,
+                                |_, _, tile_texels| {
+                                    tile_texels[0] = 255;
+                                    tile_texels[3] = 255;
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        self.render_data.needs_debug_update = true;
+    }
+
     pub fn set_tile_height(&mut self, x: u32, y: u32, height: u8) {
         self.map.set_tile_height(x, y, height as f32);
         self.render_data.needs_vertex_update = true;
@@ -434,6 +486,14 @@ impl<'a> DrawableTileMap<'a> {
                 queue,
             );
             self.render_data.needs_color_update = false;
+        }
+        if self.render_data.needs_debug_update {
+            texture::update_texture_data(
+                &self.render_data.debug_layer_content,
+                &self.render_data.debug_layer_texture,
+                queue,
+            );
+            self.render_data.needs_debug_update = false;
         }
     }
 

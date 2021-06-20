@@ -12,7 +12,7 @@ use unnamed_rts::{
         ui::ui_resources::{UiContext, UiTexture},
     },
     resources::{Time, WindowSize},
-    tilemap::{ TileMap},
+    tilemap::TileMap,
 };
 use winit::event::MouseButton;
 #[derive(Debug, Default)]
@@ -114,7 +114,7 @@ pub fn editor_ui(
                                    tilemap.reset_displacment();
                                 }
                                 TileEditMode::ColorTexture => {
-                                   tilemap.reset_color_layer(); 
+                                   tilemap.reset_color_layer();
                                 }
                             }
                         }
@@ -124,6 +124,7 @@ pub fn editor_ui(
                             if !state.debug_tile_draw_on {
                                 state.debug_tile_draw_on = true;
                                 info!("Will draw debug tiles!"); 
+                                tilemap.fill_debug_layer();
                             }
                         } else if state.debug_tile_draw_on {
                            tilemap.reset_debug_layer();

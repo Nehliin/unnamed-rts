@@ -86,7 +86,7 @@ pub struct InstanceData {
 
 impl InstanceData {
     pub fn new(model: Mat4) -> Self {
-        let sub_mat: Mat3 = model.into();
+        let sub_mat = Mat3::from_mat4(model);
         let normal_matrix = sub_mat.inverse().transpose();
         InstanceData {
             model,

@@ -20,19 +20,22 @@ pub fn draw_debug_ui(
     #[resource] time: &Time,
     query: &mut Query<&Selectable>,
 ) {
-    egui::SidePanel::left("Debug menue", 80.0).show(&ui_context.context, |ui| {
-        let label = egui::Label::new(format!("FPS: {:.0}", 1.0 / time.delta_time))
-            .text_color(egui::Color32::WHITE);
-        ui.add(label);
-        ui.checkbox(
-            &mut debug_settings.show_bounding_boxes,
-            "Show bounding boxes",
-        );
-        ui.checkbox(&mut debug_settings.show_grid, "Show debug grid");
-        for selectable in query.iter(world) {
-            ui.label(format!("Selected: {}", selectable.is_selected));
-        }
-    });
+    egui::SidePanel::left("Debug menue")
+        .resizable(false)
+        .max_width(80.0)
+        .show(&ui_context.context, |ui| {
+            let label = egui::Label::new(format!("FPS: {:.0}", 1.0 / time.delta_time))
+                .text_color(egui::Color32::WHITE);
+            ui.add(label);
+            ui.checkbox(
+                &mut debug_settings.show_bounding_boxes,
+                "Show bounding boxes",
+            );
+            ui.checkbox(&mut debug_settings.show_grid, "Show debug grid");
+            for selectable in query.iter(world) {
+                ui.label(format!("Selected: {}", selectable.is_selected));
+            }
+        });
 }
 
 #[system]

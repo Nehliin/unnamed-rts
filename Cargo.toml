@@ -35,7 +35,7 @@ debug-assertions = true
 futures = "0.3"
 env_logger = "0.8"
 mint = "0.5"
-glam = {version = "0.15", features = ["mint", "serde", "debug-glam-assert", "bytemuck"]}
+glam = {version = "0.17", features = ["mint", "serde", "debug-glam-assert", "bytemuck"]}
 log = "0.4"
 legion = {version = "0.4", features = ["extended-tuple-impls"]} 
 bytemuck = {version = "1.5", features = ["derive"] }
@@ -52,8 +52,8 @@ mimalloc = {version = "0.1", default-features = false}
 # Graphics
 image = {version = "0.23", optional = true }
 crevice = {version = "0.6", optional = true }
-wgpu = {version = "0.8.1", optional = true}
-egui = {version = "0.12", optional = true }
+wgpu = {version = "0.9", optional = true}
+egui = {version = "0.13", optional = true }
 gltf = {version = "0.16", optional = true }
 winit = {version = "0.25", optional = true} 
 

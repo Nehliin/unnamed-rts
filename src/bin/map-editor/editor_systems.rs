@@ -78,7 +78,10 @@ pub fn editor_ui(
     if editor_settings.tm_settings.save_path.is_none() {
         editor_settings.tm_settings.save_path = Some(format!("assets/{}.map", tilemap.name()));
     }
-    egui::SidePanel::left("editor_side_panel", 120.0).show(&ui_context.context, |ui| {
+    egui::SidePanel::left("editor_side_panel")
+        .resizable(false)
+        .max_width(120.0)
+        .show(&ui_context.context, |ui| {
         ui.vertical_centered(|ui| {
             ui.checkbox(&mut editor_settings.edit_tilemap, "Edit Tilemap");
             if editor_settings.edit_tilemap {
@@ -180,7 +183,7 @@ pub fn editor_ui(
             }
         });
     });
-    egui::TopPanel::top("editor_top_panel").show(&ui_context.context, |ui| {
+    egui::TopBottomPanel::top("editor_top_panel").show(&ui_context.context, |ui| {
         ui.horizontal(|ui| {
             ui.columns(3, |columns| {
                 columns[1].label(format!(

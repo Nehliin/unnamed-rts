@@ -1,8 +1,10 @@
-use futures::executor::block_on;
-use game_state::GameState;
-use unnamed_rts::{engine::Engine, states::State};
 #[macro_use]
 extern crate log;
+
+use futures::executor::block_on;
+use game_state::GameState;
+use mimalloc::MiMalloc;
+use unnamed_rts::{engine::Engine, states::State};
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -12,6 +14,9 @@ use winit::{
 mod client_network;
 mod client_systems;
 mod game_state;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
     env_logger::builder()

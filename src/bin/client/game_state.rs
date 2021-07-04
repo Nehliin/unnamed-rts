@@ -7,22 +7,28 @@ use core::fmt::Debug;
 use crossbeam_channel::Receiver;
 use glam::Vec3;
 use legion::*;
-use unnamed_rts::resources::{NetworkSerialization, WindowSize};
+use std::path::Path;
 use unnamed_rts::{
     assets::{self, Assets},
     rendering::{
         camera::{self, Camera},
         common::DepthTexture,
-        debug_lines_pass::{self, BoundingBoxMap},
         gltf::GltfModel,
-        grid_pass,
-        heightmap_pass::{self, HeightMap},
         lights::{self, LightUniformBuffer},
-        model_pass, selection_pass,
+        pass::debug_lines_pass::{self, BoundingBoxMap},
+        pass::grid_pass,
+        pass::model_pass,
+        pass::selection_pass,
+        pass::tilemap_pass,
         ui::ui_resources::UiTexture,
     },
     resources::DebugRenderSettings,
     states::{State, StateTransition},
+    tilemap::TileMap,
+};
+use unnamed_rts::{
+    rendering::drawable_tilemap::DrawableTileMap,
+    resources::{NetworkSerialization, WindowSize},
 };
 use wgpu::{CommandBuffer, Device, Queue};
 
@@ -38,11 +44,11 @@ impl State for GameState {
     ) {
         let (debug_sender, debug_rc) = crossbeam_channel::bounded(1);
         let (model_sender, model_rc) = crossbeam_channel::bounded(1);
-        let (heightmap_sender, heightmap_rc) = crossbeam_channel::bounded(1);
+        let (tilemap_sender, tilemap_rc) = crossbeam_channel::bounded(1);
         let (lines_sender, lines_rc) = crossbeam_channel::bounded(1);
         let (selectable_sender, selectable_rc) = crossbeam_channel::bounded(1);
         command_receivers.push(model_rc);
-        command_receivers.push(heightmap_rc);
+        command_receivers.push(tilemap_rc);
         command_receivers.push(selectable_rc);
         command_receivers.push(debug_rc);
         command_receivers.push(lines_rc);
@@ -50,7 +56,7 @@ impl State for GameState {
         let grid_pass = grid_pass::GridPass::new(&device, debug_sender);
         let model_pass = model_pass::ModelPass::new(&device, model_sender);
         let selection_pass = selection_pass::SelectionPass::new(&device, selectable_sender);
-        let heightmap_pass = heightmap_pass::HeightMapPass::new(&device, heightmap_sender);
+        let tilemap_pass = tilemap_pass::TileMapPass::new(&device, tilemap_sender);
         let debug_lines_pass = debug_lines_pass::DebugLinesPass::new(&device, lines_sender);
 
         let size = resources
@@ -66,10 +72,11 @@ impl State for GameState {
             size.physical_height,
         );
         let light_uniform = LightUniformBuffer::new(&device);
-        let mut height_map_assets = Assets::<HeightMap>::default();
-        let height_map = height_map_assets
-            .load_immediate("mymap.map", &device, &queue)
-            .unwrap();
+        let tilemap = DrawableTileMap::new(
+            &device,
+            &queue,
+            TileMap::load(Path::new("assets/Tilemap.map")).unwrap(),
+        );
         let mut model_assets = Assets::<GltfModel>::default();
         let suit = model_assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
         let depth_texture = DepthTexture::new(&device, size.physical_width, size.physical_height);
@@ -78,11 +85,11 @@ impl State for GameState {
         drop(queue);
         resources.insert(Assets::<UiTexture>::default());
         resources.insert(model_assets);
-        resources.insert(height_map);
+        resources.insert(tilemap);
         resources.insert(model_pass);
         resources.insert(grid_pass);
         resources.insert(selection_pass);
-        resources.insert(heightmap_pass);
+        resources.insert(tilemap_pass);
         resources.insert(debug_lines_pass);
         resources.insert(BoundingBoxMap::default());
         resources.insert(NetworkSerialization::default());
@@ -131,7 +138,7 @@ impl State for GameState {
             .add_system(lights::update_system())
             .add_system(model_pass::draw_system())
             .add_system(selection_pass::draw_system())
-            .add_system(heightmap_pass::draw_system())
+            .add_system(tilemap_pass::draw_system())
             .add_system(client_systems::selection_system())
             .add_system(grid_pass::draw_system())
             .add_system(debug_lines_pass::update_bounding_boxes_system())

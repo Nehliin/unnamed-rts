@@ -1,21 +1,21 @@
 use std::borrow::Cow;
 
-use super::{
+use crate::assets::*;
+use crate::components::{Selectable, Transform};
+use crate::rendering::{
     camera::Camera,
     common::DEPTH_FORMAT,
     gltf::{GltfModel, InstanceData, MeshVertex, INSTANCE_BUFFER_LEN},
     vertex_buffers::{MutableVertexData, VertexBuffer},
 };
-use crate::assets::*;
-use crate::components::{Selectable, Transform};
 use crossbeam_channel::Sender;
 use glam::{Mat4, Vec3};
 use legion::{world::SubWorld, *};
 
-use super::common::DepthTexture;
+use crate::rendering::common::DepthTexture;
 
 #[system]
-#[allow(clippy::clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 pub fn draw(
     world: &SubWorld,
     #[resource] pass: &SelectionPass,

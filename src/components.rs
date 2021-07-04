@@ -22,7 +22,7 @@ pub enum EntityType {
     BasicUnit,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 pub struct Transform {
     pub rotation: Quat,
     pub scale: Vec3,

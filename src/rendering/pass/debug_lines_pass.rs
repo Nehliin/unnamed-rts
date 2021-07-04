@@ -1,13 +1,13 @@
 use std::borrow::Cow;
 
-use super::{
+use crate::components::Transform;
+use crate::rendering::{
     camera::Camera,
     common::{DepthTexture, DEPTH_FORMAT},
     gltf::GltfModel,
     gltf::InstanceData,
     vertex_buffers::{ImmutableVertexData, VertexBuffer, VertexBufferData},
 };
-use crate::components::Transform;
 use crate::{
     assets::{Assets, Handle},
     resources::DebugRenderSettings,
@@ -49,7 +49,7 @@ pub fn update_bounding_boxes(
     });
 }
 
-#[allow(clippy::clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 #[system]
 pub fn draw(
     world: &SubWorld,

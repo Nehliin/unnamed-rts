@@ -1,6 +1,7 @@
 use crate::{
     input::{self, InputHandler},
-    rendering::ui::{ui_pass, ui_resources::UiContext, ui_systems},
+    rendering::pass::ui_pass,
+    rendering::ui::{ui_resources::UiContext, ui_systems},
     resources::{Time, WindowSize},
     states::State,
     states::{StateStack, StateTransition},
@@ -45,7 +46,8 @@ impl Renderer {
         let (device, queue) = adapter
             .request_device(
                 &DeviceDescriptor {
-                    features: Features::NON_FILL_POLYGON_MODE, // TODO: Set this properly
+                    features: Features::NON_FILL_POLYGON_MODE
+                        | Features::ADDRESS_MODE_CLAMP_TO_BORDER, // TODO: Set this properly
                     limits: Limits::default(),
                     label: Some("Device"),
                 },

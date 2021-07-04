@@ -1,65 +1,56 @@
-use std::time::Instant;
+use std::{path::Path, time::Instant};
 
 use egui::CollapsingHeader;
-use glam::{vec2, Vec2, Vec3A, Vec4, Vec4Swizzles};
+use glam::{UVec2, Vec2, Vec3A};
 use legion::*;
-use rayon::prelude::*;
 use unnamed_rts::{
-    assets::{Assets, Handle},
+    assets::Handle,
     input::{CursorPosition, MouseButtonState},
     rendering::{
         camera::Camera,
-        heightmap_pass::HeightMap,
-        texture::TextureContent,
+        drawable_tilemap::*,
         ui::ui_resources::{UiContext, UiTexture},
     },
     resources::{Time, WindowSize},
+    tilemap::TileMap,
 };
 use winit::event::MouseButton;
 #[derive(Debug, Default)]
 pub struct EditorSettings {
-    pub edit_heightmap: bool,
-    pub hm_settings: HmEditorSettings,
+    pub edit_tilemap: bool,
+    pub tm_settings: TileEditorSettings,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum HmEditorMode {
+pub enum TileEditMode {
     DisplacementMap,
     // TODO Take in texture
     ColorTexture,
 }
 
-// TODO: The actual buffer modification part of this should
-// probably live in a HeightMapTool trait
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum HmEditorTool {
-    Square,
-    Circle,
-}
-
 // Settings for the heightmap
 #[derive(Debug)]
-pub struct HmEditorSettings {
-    pub tool: HmEditorTool,
-    pub tool_strenght: f32,
+pub struct TileEditorSettings {
+    pub tool_strenght: u8,
     pub tool_size: f32,
     pub max_height: u8,
-    pub inverted: bool,
-    pub mode: HmEditorMode,
+    pub mode: TileEditMode,
+    pub draw_tile_types: bool,
+    pub current_tile: UVec2,
     pub save_path: Option<String>,
     pub load_path: String,
 }
 
-impl Default for HmEditorSettings {
+impl Default for TileEditorSettings {
     fn default() -> Self {
-        HmEditorSettings {
-            tool: HmEditorTool::Circle,
-            tool_strenght: 5.0,
+        TileEditorSettings {
+            tool_strenght: 1,
             tool_size: 20.0,
             max_height: 255,
-            inverted: false,
-            mode: HmEditorMode::DisplacementMap,
+            mode: TileEditMode::DisplacementMap,
+            draw_tile_types: false,
             save_path: None,
+            current_tile: UVec2::new(0, 0),
             load_path: "my_map_name.map".to_string(),
         }
     }
@@ -68,70 +59,51 @@ impl Default for HmEditorSettings {
 pub struct UiState<'a> {
     pub img: Handle<UiTexture<'a>>,
     pub show_load_popup: bool,
+    pub debug_tile_draw_on: bool,
     pub load_error_label: Option<String>,
 }
 
 #[system]
 #[allow(clippy::too_many_arguments)]
+// This system is a bit of spagettios but I will clean it up later. Features more important atm!
 pub fn editor_ui(
     #[state] state: &mut UiState<'static>,
     #[resource] ui_context: &UiContext,
     #[resource] editor_settings: &mut EditorSettings,
-    #[resource] height_map: &mut HeightMap<'static>,
+    #[resource] tilemap: &mut DrawableTileMap<'static>,
     #[resource] window_size: &WindowSize,
-    #[resource] hm_assets: &mut Assets<HeightMap<'static>>,
     #[resource] device: &wgpu::Device,
     #[resource] queue: &wgpu::Queue,
 ) {
-    if editor_settings.hm_settings.save_path.is_none() {
-        editor_settings.hm_settings.save_path =
-            Some(format!("assets/{}.map", height_map.get_name()));
+    if editor_settings.tm_settings.save_path.is_none() {
+        editor_settings.tm_settings.save_path = Some(format!("assets/{}.map", tilemap.name()));
     }
     egui::SidePanel::left("editor_side_panel", 120.0).show(&ui_context.context, |ui| {
         ui.vertical_centered(|ui| {
-            ui.checkbox(&mut editor_settings.edit_heightmap, "Edit heightmap");
-            if editor_settings.edit_heightmap {
-                let settings = &mut editor_settings.hm_settings;
-                CollapsingHeader::new("Heightmap settings")
+            ui.checkbox(&mut editor_settings.edit_tilemap, "Edit Tilemap");
+            if editor_settings.edit_tilemap {
+                let settings = &mut editor_settings.tm_settings;
+                CollapsingHeader::new("Tilemap settings")
                     .default_open(true)
                     .show(ui, |ui| {
-                        ui.columns(2, |uis| {
-                            uis[0].selectable_value(
-                                &mut settings.tool,
-                                HmEditorTool::Circle,
-                                "Circle",
-                            );
-                            uis[1].selectable_value(
-                                &mut settings.tool,
-                                HmEditorTool::Square,
-                                "Square",
-                            );
-                        });
                         egui::ComboBox::from_label("Edit mode")
                             .selected_text(format!("{:?}", settings.mode))
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(
                                     &mut settings.mode,
-                                    HmEditorMode::DisplacementMap,
+                                    TileEditMode::DisplacementMap,
                                     "Displacement Map",
                                 );
                                 ui.selectable_value(
                                     &mut settings.mode,
-                                    HmEditorMode::ColorTexture,
+                                    TileEditMode::ColorTexture,
                                     "Color Texture",
                                 );
                             });
                         ui.add(
-                            egui::Slider::new(&mut settings.tool_size, 1.0..=300.0).text("Size"),
-                        );
-                        ui.add(
-                            egui::Slider::new(&mut settings.tool_strenght, 1.0..=10.0)
+                            egui::Slider::new(&mut settings.tool_strenght, 0..=10)
                                 .text("Strenght"),
                         );
-                        ui.add(
-                            egui::Slider::new(&mut settings.max_height, 0..=255).text("Max height"),
-                        );
-                        ui.checkbox(&mut settings.inverted, "Invert");
                         if ui
                             .button("Reset current buffer")
                             .on_hover_text(
@@ -140,26 +112,38 @@ pub fn editor_ui(
                             .clicked()
                         {
                             match settings.mode {
-                                HmEditorMode::DisplacementMap => {
-                                    let (_, buffer) = height_map.get_displacement_buffer_mut();
-                                    buffer.fill(0);
+                                TileEditMode::DisplacementMap => {
+                                   tilemap.reset_displacment();
                                 }
-                                HmEditorMode::ColorTexture => {
-                                    let map_size = height_map.get_size();
-                                    let (_, buffer) = height_map.get_color_buffer_mut();
-                                   // TODO: unecessary allocation here but not as important within the editor
-                                    let checkerd = TextureContent::checkerd(map_size);
-                                    buffer.copy_from_slice(&checkerd.bytes);
+                                TileEditMode::ColorTexture => {
+                                   tilemap.reset_color_layer();
                                 }
                             }
                         }
+                        ui.separator();
+                        let (tile_x, tile_y) = settings.current_tile.into();
+                        if let Some(tile_type) = tilemap.tile(tile_x,tile_y ).map(|tile| tile.tile_type) {
+                            ui.label(format!("Current tile_type: {:?}", tile_type));
+                        }
+                        ui.checkbox(&mut settings.draw_tile_types, "Debug Draw tile types");
+                        if settings.draw_tile_types {
+                            if !state.debug_tile_draw_on {
+                                state.debug_tile_draw_on = true;
+                                info!("Will draw debug tiles!"); 
+                                tilemap.fill_debug_layer();
+                            }
+                        } else if state.debug_tile_draw_on {
+                           tilemap.reset_debug_layer();
+                           state.debug_tile_draw_on = false;
+                           info!("Stop drawing debug layer!");
+                        }
+
                         let save_path = settings.save_path.as_ref().expect("Name should be used as default value");
                         ui.label(format!("Path saved to: {}", save_path));
                         if ui.button("Save map").clicked() {
                             use std::io::prelude::*;
-                            let serialized = height_map.to_serializable();
                             let mut file = std::fs::File::create(save_path).unwrap();
-                            file.write_all(&bincode::serialize(&serialized).unwrap()).unwrap();
+                            file.write_all(&tilemap.serialize().unwrap()).unwrap();
                         }
                         if ui.button("Load map").clicked() {
                             state.show_load_popup = true;
@@ -175,9 +159,9 @@ pub fn editor_ui(
                             .show(&ui_context.context, |ui| {
                                 ui.text_edit_singleline(&mut settings.load_path);
                                 if ui.button("Load").clicked() {
-                                    match hm_assets.load_immediate(&settings.load_path, device, queue) {
+                                    match TileMap::load(Path::new(&settings.load_path)) {
                                         Ok(loaded_map) => {
-                                            *height_map = loaded_map;
+                                            *tilemap = DrawableTileMap::new(&device, &queue, loaded_map);
                                             *load_error_label = None;
                                         },
                                         Err(err) => {
@@ -201,8 +185,8 @@ pub fn editor_ui(
             ui.columns(3, |columns| {
                 columns[1].label(format!(
                     "Map editor: {}, size: {}",
-                    height_map.get_name(),
-                    height_map.get_size()
+                    tilemap.name(),
+                    tilemap.size(),
                 ));
             })
         });
@@ -210,281 +194,103 @@ pub fn editor_ui(
 }
 
 // TODO: This should be done in a more general way instead
-pub struct HeightMapModificationState {
+pub struct LastTileMapUpdate {
     pub last_update: Instant,
 }
 const MAX_UPDATE_FREQ: f32 = 1.0 / 60.0;
 
 #[allow(clippy::too_many_arguments)]
 #[system]
-pub fn height_map_modification(
-    #[state] modification_state: &mut HeightMapModificationState,
+pub fn tilemap_modification(
+    #[state] last_update: &mut LastTileMapUpdate,
     #[resource] camera: &Camera,
     #[resource] mouse_button_state: &MouseButtonState,
     #[resource] mouse_pos: &CursorPosition,
     #[resource] window_size: &WindowSize,
     #[resource] time: &Time,
-    #[resource] height_map: &mut HeightMap,
-    #[resource] editor_settings: &EditorSettings,
+    #[resource] tilemap: &mut DrawableTileMap,
+    #[resource] editor_settings: &mut EditorSettings,
 ) {
-    if !editor_settings.edit_heightmap {
+    if !editor_settings.edit_tilemap {
         return;
     }
     let ray = camera.raycast(mouse_pos, window_size);
     // check intersection with the heightmap
     let normal = Vec3A::new(0.0, 1.0, 0.0);
     let denominator = normal.dot(ray.direction);
-    let hm_settings = &editor_settings.hm_settings;
+    let tm_settings = &mut editor_settings.tm_settings;
     if denominator.abs() > 0.0001 {
         // it isn't parallel to the plane
         // (camera can still theoretically be within the height_map but don't care about that)
-        let height_map_pos: Vec3A = height_map.get_transform().translation.into();
+        let height_map_pos: Vec3A = tilemap.transform().translation.into();
         let t = (height_map_pos - ray.origin).dot(normal) / denominator;
         if t >= 0.0 {
             // there was an intersection
             let target = (t * ray.direction) + ray.origin;
-            // TODO: inbounds check here?
-            let local_coords = height_map.get_transform().get_model_matrix().inverse()
-                * Vec4::new(target.x, target.y, target.z, 1.0);
-            let center = local_coords.xy();
-            if (time.current_time - modification_state.last_update).as_secs_f32() <= MAX_UPDATE_FREQ
-            {
+            let tile_coords = tilemap.to_tile_coords(target);
+            if tile_coords.is_none() {
                 return;
             }
-            modification_state.last_update = time.current_time;
-
+            let tile_coords = tile_coords.unwrap();
+            *tm_settings.current_tile = *tile_coords;
+            if (time.current_time - last_update.last_update).as_secs_f32() <= MAX_UPDATE_FREQ {
+                return;
+            }
+            last_update.last_update = time.current_time;
             if mouse_button_state.is_pressed(&MouseButton::Left) {
-                match hm_settings.tool {
-                    HmEditorTool::Square => {
-                        update_height_map_square(height_map, hm_settings, center);
+                match tm_settings.mode {
+                    TileEditMode::DisplacementMap => {
+                        tilemap.set_tile_height(
+                            tile_coords.x,
+                            tile_coords.y,
+                            tm_settings.tool_strenght,
+                        );
                     }
-                    HmEditorTool::Circle => {
-                        update_height_map_circular(height_map, hm_settings, center);
-                    }
-                }
-            }
-            let map_size = height_map.get_size();
-            // TODO: only do this if the intersection is within bounds
-            let (stride, buffer) = height_map.get_decal_buffer_mut();
-            // clear previous decal value, this is innefficient and should be changed to only clear previous
-            // marked radius to avoid removing unrelated things in the decal layer
-            buffer.fill(0);
-            match hm_settings.tool {
-                HmEditorTool::Square => {
-                    draw_square_decal(stride, center, buffer, hm_settings, map_size);
-                }
-                HmEditorTool::Circle => {
-                    draw_circle_decal(stride, center, buffer, hm_settings, map_size);
-                }
-            }
-        }
-    }
-}
-
-fn draw_circle_decal(
-    stride: u32,
-    center: Vec2,
-    buffer: &mut [u8],
-    hm_settings: &HmEditorSettings,
-    map_size: u32,
-) {
-    let radius = hm_settings.tool_size;
-    buffer
-        .par_chunks_exact_mut((map_size * stride) as usize)
-        .enumerate()
-        .for_each(|(y, chunk)| {
-            chunk
-                .chunks_exact_mut(stride as usize)
-                .enumerate()
-                .for_each(|(x, bytes)| {
-                    let distance = Vec2::new(x as f32, y as f32).distance(center);
-                    if (radius - 2.0) < distance && distance < radius {
-                        bytes[0] = 0;
-                        bytes[1] = 255;
-                        bytes[2] = 0;
-                        bytes[3] = 255;
-                    }
-                })
-        });
-}
-
-fn draw_square_decal(
-    stride: u32,
-    center: Vec2,
-    buffer: &mut [u8],
-    hm_settings: &HmEditorSettings,
-    map_size: u32,
-) {
-    let size = hm_settings.tool_size;
-    let size_vec = Vec2::splat(size);
-    let scaled_size_vec = Vec2::splat(size + 2.0);
-
-    buffer
-        .par_chunks_exact_mut((map_size * stride) as usize)
-        .enumerate()
-        .for_each(|(y, chunk)| {
-            chunk
-                .chunks_exact_mut(stride as usize)
-                .enumerate()
-                .for_each(|(x, bytes)| {
-                    let pos = vec2(x as f32, y as f32);
-                    let within_outer =
-                        pos.cmpge(center - scaled_size_vec) & pos.cmple(center + scaled_size_vec);
-                    let within_inner = pos.cmpge(center - size_vec) & pos.cmple(center + size_vec);
-                    if within_outer.all() && !within_inner.all() {
-                        bytes[0] = 0;
-                        bytes[1] = 255;
-                        bytes[2] = 0;
-                        bytes[3] = 255;
-                    }
-                })
-        });
-}
-
-fn update_height_map_circular(
-    height_map: &mut HeightMap,
-    hm_settings: &HmEditorSettings,
-    center: Vec2,
-) {
-    let radius = hm_settings.tool_size;
-    let strength = hm_settings.tool_strenght;
-    // assuming row order
-    // TODO: Not very performance frendly
-    match hm_settings.mode {
-        HmEditorMode::DisplacementMap => {
-            let map_size = height_map.get_size();
-            let (_, buffer) = height_map.get_displacement_buffer_mut();
-            buffer
-                .par_chunks_exact_mut(map_size as usize)
-                .enumerate()
-                .for_each(|(y, chunk)| {
-                    chunk.par_iter_mut().enumerate().for_each(|(x, byte)| {
-                        let distance = Vec2::new(x as f32, y as f32).distance(center);
-                        if distance < radius {
-                            let raise = strength * (radius - distance) / radius;
-                            if hm_settings.inverted {
-                                *byte =
-                                    std::cmp::max(0, (*byte as f32 - raise as f32).round() as u32)
-                                        as u8;
-                            } else {
-                                *byte = std::cmp::min(
-                                    hm_settings.max_height as u32,
-                                    (*byte as f32 + raise as f32).round() as u32,
-                                ) as u8;
-                            };
-                        }
-                    })
-                });
-        }
-        HmEditorMode::ColorTexture => {
-            let map_size = height_map.get_size();
-            let (stride, buffer) = height_map.get_color_buffer_mut();
-            buffer
-                .par_chunks_exact_mut((map_size * stride) as usize)
-                .enumerate()
-                .for_each(|(y, chunk)| {
-                    chunk
-                        .chunks_exact_mut(stride as usize)
-                        .enumerate()
-                        .for_each(|(x, bytes)| {
+                    TileEditMode::ColorTexture => {
+                        let radius = tm_settings.tool_size;
+                        let center = tile_coords * tilemap.tile_texture_resolution();
+                        let center = center.as_f32();
+                        tilemap.modify_color_texels(|x, y, bytes| {
                             let distance = Vec2::new(x as f32, y as f32).distance(center);
                             if distance < radius {
-                                let color = strength * (radius - distance) / radius;
-                                if hm_settings.inverted {
-                                    let val = std::cmp::max(
-                                        0,
-                                        (bytes[0] as f32 - color as f32).round() as u32,
-                                    ) as u8;
-                                    // Shouldn't harde code indexes here..
-                                    bytes[0] = val;
-                                    bytes[1] = 0;
-                                    bytes[2] = 0;
-                                    bytes[3] = 0;
-                                } else {
-                                    let val = std::cmp::min(
-                                        255,
-                                        (bytes[0] as f32 + color as f32).round() as u32,
-                                    ) as u8;
-                                    bytes[0] = val;
-                                    bytes[1] = 0;
-                                    bytes[2] = 0;
-                                    bytes[3] = 0;
-                                };
+                                bytes[0] = 255;
+                                bytes[1] = 0;
+                                bytes[2] = 0;
+                                bytes[3] = 255;
                             }
-                        })
-                });
-        }
-    }
-}
-
-fn update_height_map_square(
-    height_map: &mut HeightMap,
-    hm_settings: &HmEditorSettings,
-    center: Vec2,
-) {
-    let size = hm_settings.tool_size;
-    let scale_factor = 1.9;
-    let scaled_size = size * scale_factor;
-    let size_vec = Vec2::splat(size);
-    let scaled_size_vec = Vec2::splat(scaled_size);
-    let strength = hm_settings.tool_strenght;
-
-    let proportional_change = |byte: &mut u8, proportion: f32| {
-        if hm_settings.inverted {
-            *byte = std::cmp::max(0, (*byte as f32 - strength * proportion).round() as u32) as u8;
-        } else {
-            *byte = std::cmp::min(
-                hm_settings.max_height as u32,
-                (*byte as f32 + strength * proportion).round() as u32,
-            ) as u8;
-        };
-    };
-    let dist_center_to_corner = scaled_size - size;
-    // assuming row order
-    // TODO: Not very performance frendly
-    match hm_settings.mode {
-        HmEditorMode::DisplacementMap => {
-            let map_size = height_map.get_size();
-            let (_, buffer) = height_map.get_displacement_buffer_mut();
-            buffer
-                .par_chunks_exact_mut(map_size as usize)
-                .enumerate()
-                .for_each(|(y, chunk)| {
-                    chunk.par_iter_mut().enumerate().for_each(|(x, byte)| {
-                        let pos = vec2(x as f32, y as f32);
-                        let within_inner =
-                            pos.cmpge(center - size_vec) & pos.cmple(center + size_vec);
-                        let within_outer = pos.cmpge(center - scaled_size_vec)
-                            & pos.cmple(center + scaled_size_vec);
-                        if within_inner.all() {
-                            proportional_change(byte, 1.0);
-                        } else if within_outer.all() {
-                            // bitmask is used to check individual boolean values of the vec
-                            if within_inner.bitmask() & 1 != 0 {
-                                // // area
-                                let sign = (pos.y - center.y).signum();
-                                let d = pos.distance(Vec2::new(pos.x, center.y + size * sign));
-                                let max = scaled_size_vec.x;
-                                proportional_change(byte, (max - d) / max);
-                            } else if within_inner.bitmask() & (1 << 1) != 0 {
-                                // xx area
-                                let sign = (pos.x - center.x).signum();
-                                let d = pos.distance(Vec2::new(center.x + size * sign, pos.y));
-                                proportional_change(byte, (scaled_size - d) / scaled_size);
-                            } else {
-                                // oo area
-                                let dist_to_center = pos.distance(center);
-                                let d = dist_to_center - dist_center_to_corner;
-                                // god knows why this relation to the scalefactor holds true but it works?
-                                let boost = 2.0 - scale_factor;
-                                proportional_change(byte, (scaled_size - d) / scaled_size + boost);
-                            }
+                        });
+                    }
+                }
+            }
+            tilemap.reset_decal_layer();
+            match tm_settings.mode {
+                TileEditMode::DisplacementMap => {
+                    tilemap.modify_tile_decal_texels(
+                        tile_coords.x,
+                        tile_coords.y,
+                        |_, _, bytes| {
+                            bytes[0] = 0;
+                            bytes[1] = 255;
+                            bytes[2] = 0;
+                            bytes[3] = 255;
+                        },
+                    );
+                }
+                TileEditMode::ColorTexture => {
+                    let radius = tm_settings.tool_size;
+                    let center = tile_coords * tilemap.tile_texture_resolution();
+                    let center = center.as_f32();
+                    tilemap.modify_decal_texels(|x, y, bytes| {
+                        let distance = Vec2::new(x as f32, y as f32).distance(center);
+                        if (radius - 2.0) < distance && distance < radius {
+                            bytes[0] = 0;
+                            bytes[1] = 255;
+                            bytes[2] = 0;
+                            bytes[3] = 255;
                         }
-                    })
-                });
-        }
-        HmEditorMode::ColorTexture => {
-            todo!("Haven't implemented yet")
+                    });
+                }
+            }
         }
     }
 }

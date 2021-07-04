@@ -5,7 +5,7 @@ use crate::components::Transform;
 use crossbeam_channel::Sender;
 use legion::{world::SubWorld, *};
 
-use super::{
+use crate::rendering::{
     camera::Camera,
     common::{DepthTexture, DEPTH_FORMAT},
     gltf::GltfModel,

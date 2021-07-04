@@ -3,6 +3,7 @@ use std::time::Instant;
 use crate::{
     assets::Assets,
     input::MouseMotion,
+    rendering::pass::ui_pass::UiPass,
     resources::{Time, WindowSize},
 };
 use egui::{pos2, vec2, Pos2};
@@ -13,10 +14,7 @@ use winit::event::{ModifiersState, MouseButton, MouseScrollDelta};
 
 use crate::input::{self, EventReader};
 
-use super::{
-    ui_pass::UiPass,
-    ui_resources::{UiContext, UiTexture},
-};
+use super::ui_resources::{UiContext, UiTexture};
 
 fn handle_mouse_input(
     mouse_input: &input::MouseButtonState,
@@ -42,7 +40,7 @@ fn handle_mouse_input(
     }
 }
 
-#[allow(clippy::clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 #[system]
 pub fn update_ui(
     #[resource] ui_ctx: &mut UiContext,

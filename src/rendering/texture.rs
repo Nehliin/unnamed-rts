@@ -1,4 +1,3 @@
-use rayon::prelude::*;
 use std::{borrow::Cow, num::NonZeroU32};
 use wgpu::{Device, Queue};
 
@@ -12,55 +11,18 @@ pub struct TextureContent<'a> {
 }
 
 impl<'a> TextureContent<'a> {
-    pub fn checkerd(size: u32) -> Self {
+    pub fn new(width: u32, height: u32) -> Self {
+        let stride = 4;
         let img_size = wgpu::Extent3d {
-            width: size,
-            height: size,
-            depth_or_array_layers: 1,
-        };
-        // construct checkered content
-        let mut bytes: Vec<u8> = vec![0; (size * size) as usize * 4];
-        bytes
-            .par_chunks_exact_mut(size as usize * 4)
-            .enumerate()
-            .for_each(|(y, chunk)| {
-                chunk
-                    .chunks_exact_mut(4)
-                    .enumerate()
-                    .for_each(|(x, texel)| {
-                        if (x / 3 + y / 3) % 2 == 0 {
-                            texel[0] = 128;
-                            texel[1] = 128;
-                            texel[2] = 128;
-                            texel[3] = 128;
-                        } else {
-                            texel[0] = 255;
-                            texel[1] = 255;
-                            texel[2] = 255;
-                            texel[3] = 255;
-                        }
-                    });
-            });
-        TextureContent {
-            label: Some("Checkered default texture"),
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            bytes: Cow::Owned(bytes),
-            stride: 4,
-            size: img_size,
-        }
-    }
-
-    pub fn black(size: u32) -> Self {
-        let img_size = wgpu::Extent3d {
-            width: size,
-            height: size,
+            width,
+            height,
             depth_or_array_layers: 1,
         };
         TextureContent {
-            label: Some("Checkered default texture"),
+            label: Some("Black/empty default texture"),
             format: wgpu::TextureFormat::Rgba8Unorm,
-            bytes: Cow::Owned(vec![0; (size * size) as usize * 4]),
-            stride: 4,
+            bytes: Cow::Owned(vec![0; (width * height) as usize * stride]),
+            stride: stride as u32,
             size: img_size,
         }
     }
@@ -251,7 +213,7 @@ pub fn update_texture_data(
     let texture_data_layout = wgpu::ImageDataLayout {
         offset: 0,
         bytes_per_row: NonZeroU32::new(content.stride * content.size.width),
-        rows_per_image: None,
+        rows_per_image: NonZeroU32::new(content.size.height),
     };
     let texture_view = wgpu::ImageCopyTexture {
         texture: allocated_texture,

@@ -15,7 +15,7 @@ use legion::{world::SubWorld, *};
 use crate::rendering::common::DepthTexture;
 
 #[system]
-#[allow(clippy::clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 pub fn draw(
     world: &SubWorld,
     #[resource] pass: &SelectionPass,

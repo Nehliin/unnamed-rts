@@ -277,22 +277,24 @@ impl<'a> DrawableTileMap<'a> {
                         TileType::RampTop
                         | TileType::RampBottom
                         | TileType::RampRight
-                        | TileType::RampLeft
-                            if tile.ramp_height.abs() < 2 =>
-                        {
-                            Self::modify_tile_texels(
-                                x,
-                                y,
-                                size,
-                                width_resolution,
-                                height_resolution,
-                                stride,
-                                buffer,
-                                |_, _, tile_texels| {
-                                    tile_texels[2] = 255;
-                                    tile_texels[3] = 255;
-                                },
-                            );
+                        | TileType::RampLeft => {
+                            if tile.height_diff.abs() < 2 {
+                                {
+                                    Self::modify_tile_texels(
+                                        x,
+                                        y,
+                                        size,
+                                        width_resolution,
+                                        height_resolution,
+                                        stride,
+                                        buffer,
+                                        |_, _, tile_texels| {
+                                            tile_texels[2] = 255;
+                                            tile_texels[3] = 255;
+                                        },
+                                    );
+                                }
+                            }
                         }
                         _ => {
                             Self::modify_tile_texels(
@@ -321,6 +323,10 @@ impl<'a> DrawableTileMap<'a> {
         self.render_data.needs_vertex_update = true;
     }
 
+    pub fn tile(&self, x: u32, y: u32) -> Option<&Tile> {
+        self.map.tile(x, y)
+    }
+
     pub fn to_tile_coords(&self, world_coords: Vec3A) -> Option<UVec2> {
         let local_coords = self.transform().get_model_matrix().inverse() * world_coords.extend(1.0);
         let map_coords = Vec2::new(local_coords.x / TILE_WIDTH, local_coords.z / TILE_HEIGHT);
@@ -336,6 +342,7 @@ impl<'a> DrawableTileMap<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn modify_tile_texels<F>(
         tile_x: u32,
         tile_y: u32,

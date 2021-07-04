@@ -49,7 +49,7 @@ pub fn update_bounding_boxes(
     });
 }
 
-#[allow(clippy::clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 #[system]
 pub fn draw(
     world: &SubWorld,

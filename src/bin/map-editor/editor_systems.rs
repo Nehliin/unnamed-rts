@@ -1,7 +1,7 @@
 use std::{path::Path, time::Instant};
 
 use egui::CollapsingHeader;
-use glam::{Vec2, Vec3A};
+use glam::{UVec2, Vec2, Vec3A};
 use legion::*;
 use unnamed_rts::{
     assets::Handle,
@@ -36,6 +36,7 @@ pub struct TileEditorSettings {
     pub max_height: u8,
     pub mode: TileEditMode,
     pub draw_tile_types: bool,
+    pub current_tile: UVec2,
     pub save_path: Option<String>,
     pub load_path: String,
 }
@@ -49,6 +50,7 @@ impl Default for TileEditorSettings {
             mode: TileEditMode::DisplacementMap,
             draw_tile_types: false,
             save_path: None,
+            current_tile: UVec2::new(0, 0),
             load_path: "my_map_name.map".to_string(),
         }
     }
@@ -119,6 +121,10 @@ pub fn editor_ui(
                             }
                         }
                         ui.separator();
+                        let (tile_x, tile_y) = settings.current_tile.into();
+                        if let Some(tile_type) = tilemap.tile(tile_x,tile_y ).map(|tile| tile.tile_type) {
+                            ui.label(format!("Current tile_type: {:?}", tile_type));
+                        }
                         ui.checkbox(&mut settings.draw_tile_types, "Debug Draw tile types");
                         if settings.draw_tile_types {
                             if !state.debug_tile_draw_on {
@@ -203,7 +209,7 @@ pub fn tilemap_modification(
     #[resource] window_size: &WindowSize,
     #[resource] time: &Time,
     #[resource] tilemap: &mut DrawableTileMap,
-    #[resource] editor_settings: &EditorSettings,
+    #[resource] editor_settings: &mut EditorSettings,
 ) {
     if !editor_settings.edit_tilemap {
         return;
@@ -212,7 +218,7 @@ pub fn tilemap_modification(
     // check intersection with the heightmap
     let normal = Vec3A::new(0.0, 1.0, 0.0);
     let denominator = normal.dot(ray.direction);
-    let tm_settings = &editor_settings.tm_settings;
+    let tm_settings = &mut editor_settings.tm_settings;
     if denominator.abs() > 0.0001 {
         // it isn't parallel to the plane
         // (camera can still theoretically be within the height_map but don't care about that)
@@ -226,6 +232,7 @@ pub fn tilemap_modification(
                 return;
             }
             let tile_coords = tile_coords.unwrap();
+            *tm_settings.current_tile = *tile_coords;
             if (time.current_time - last_update.last_update).as_secs_f32() <= MAX_UPDATE_FREQ {
                 return;
             }

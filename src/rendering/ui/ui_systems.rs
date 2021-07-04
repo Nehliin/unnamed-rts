@@ -40,7 +40,7 @@ fn handle_mouse_input(
     }
 }
 
-#[allow(clippy::clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 #[system]
 pub fn update_ui(
     #[resource] ui_ctx: &mut UiContext,

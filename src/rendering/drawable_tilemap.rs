@@ -167,6 +167,7 @@ impl<'a> TileMapRenderData<'a> {
         }
     }
 }
+
 #[cfg(feature = "graphics")]
 #[derive(Debug)]
 pub struct DrawableTileMap<'a> {
@@ -207,23 +208,31 @@ impl<'a> DrawableTileMap<'a> {
         drawable_map
     }
 
+    // TODO: not clean
+    #[inline]
+    pub fn tile_map(&self) -> &TileMap {
+        &self.map
+    }
+
     /// Get a reference to the tile map's name.
     #[inline(always)]
     pub fn name(&self) -> &str {
         &self.map.name()
     }
 
-    #[inline(always)]
     /// Get the tile map's size.
+    #[inline]
     pub fn size(&self) -> u32 {
         self.map.size()
     }
 
     /// Get a reference to the tile map's transform.
+    #[inline]
     pub fn transform(&self) -> &Transform {
         &self.map.transform()
     }
 
+    #[inline]
     pub fn tile_texture_resolution(&self) -> UVec2 {
         UVec2::new(
             self.render_data.tile_width_resultion,
@@ -231,6 +240,7 @@ impl<'a> DrawableTileMap<'a> {
         )
     }
 
+    #[inline]
     pub fn reset_displacment(&mut self) {
         self.map.set_tiles(generate_tiles(self.map.size()));
         self.render_data.needs_vertex_update = true;
@@ -252,12 +262,14 @@ impl<'a> DrawableTileMap<'a> {
         self.render_data.needs_color_update = true;
     }
 
+    #[inline]
     pub fn reset_decal_layer(&mut self) {
         let (_, buffer) = self.render_data.decal_buffer_mut();
         buffer.fill(0);
         self.render_data.needs_decal_update = true;
     }
 
+    #[inline]
     pub fn reset_debug_layer(&mut self) {
         let (_, buffer) = self.render_data.debug_buffer_mut();
         buffer.fill(0);
@@ -269,9 +281,9 @@ impl<'a> DrawableTileMap<'a> {
         let width_resolution = self.render_data.tile_width_resultion;
         let (stride, buffer) = self.render_data.debug_buffer_mut();
         let size = self.map.size();
-        for x in 0..size {
+        for x in 0..size  {
             for y in 0..size {
-                if let Some(tile) = self.map.tile(x, y) {
+                if let Some(tile) = self.map.tile(x as i32, y as i32) {
                     match tile.tile_type {
                         TileType::Flat => {}
                         TileType::RampTop
@@ -318,13 +330,19 @@ impl<'a> DrawableTileMap<'a> {
         self.render_data.needs_debug_update = true;
     }
 
-    pub fn set_tile_height(&mut self, x: u32, y: u32, height: u8) {
+    #[inline]
+    pub fn set_tile_height(&mut self, x: i32, y: i32, height: u8) {
         self.map.set_tile_height(x, y, height as f32);
         self.render_data.needs_vertex_update = true;
     }
 
-    pub fn tile(&self, x: u32, y: u32) -> Option<&Tile> {
+    #[inline]
+    pub fn tile(&self, x: i32, y: i32) -> Option<&Tile> {
         self.map.tile(x, y)
+    }
+
+    pub fn temp_idx_calc(&self, x: i32, y: i32) -> Option<usize> {
+        self.map.tile_index(x,y )
     }
 
     pub fn to_tile_coords(&self, world_coords: Vec3A) -> Option<UVec2> {
@@ -405,6 +423,25 @@ impl<'a> DrawableTileMap<'a> {
         let height_resolution = self.render_data.tile_height_resultion;
         let width_resolution = self.render_data.tile_width_resultion;
         let (stride, buffer) = self.render_data.color_buffer_mut();
+        Self::modify_tile_texels(
+            tile_x,
+            tile_y,
+            self.map.size(),
+            width_resolution,
+            height_resolution,
+            stride,
+            buffer,
+            func,
+        );
+    }
+
+    pub fn modify_tile_debug_texels<F>(&mut self, tile_x: u32, tile_y: u32, func: F)
+    where
+        F: Fn(u32, u32, &mut [u8]) + Send + Sync,
+    {
+        let height_resolution = self.render_data.tile_height_resultion;
+        let width_resolution = self.render_data.tile_width_resultion;
+        let (stride, buffer) = self.render_data.debug_buffer_mut();
         Self::modify_tile_texels(
             tile_x,
             tile_y,

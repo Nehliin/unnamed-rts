@@ -25,8 +25,8 @@ pub struct BoundingBoxMap {
     vertex_info_map: FxHashMap<Handle<GltfModel>, ImmutableVertexData<BoxVert>>,
 }
 
-#[system]
 // maybe handle rotation here at some point, currently just using AABB
+#[system]
 pub fn update_bounding_boxes(
     world: &SubWorld,
     #[resource] bounding_box_map: &mut BoundingBoxMap,

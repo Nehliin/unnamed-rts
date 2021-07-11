@@ -1,11 +1,8 @@
 use std::time::Instant;
 
-use glam::Vec3;
+use glam::{Quat, Vec3};
 use legion::*;
-use unnamed_rts::{
-    assets::{self, Assets, Handle},
-    components::Transform,
-    rendering::{
+use unnamed_rts::{assets::{self, Assets, Handle}, components::{Selectable, Transform, Velocity}, rendering::{
         camera::{self, Camera},
         common::DepthTexture,
         drawable_tilemap::*,
@@ -13,11 +10,7 @@ use unnamed_rts::{
         lights::{self, LightUniformBuffer},
         pass::*,
         ui::ui_resources::UiTexture,
-    },
-    resources::{DebugRenderSettings, WindowSize},
-    states::{State, StateTransition},
-    tilemap::TileMap,
-};
+    }, resources::{DebugRenderSettings, WindowSize}, states::{State, StateTransition}, tilemap::TileMap};
 use wgpu::{Device, Queue};
 
 use crate::editor_systems::{self, EditorSettings, LastTileMapUpdate, UiState};
@@ -31,7 +24,7 @@ pub struct EditState {
 impl State for EditState {
     fn on_init(
         &mut self,
-        _world: &mut legion::World,
+        world: &mut legion::World,
         resources: &mut legion::Resources,
         command_receivers: &mut Vec<crossbeam_channel::Receiver<wgpu::CommandBuffer>>,
     ) {
@@ -67,22 +60,34 @@ impl State for EditState {
         let camera = Camera::new(
             &device,
             Vec3::new(1.0, 0.5, 3.5),
-            Vec3::new(0.0, 0.0, -1.0),
+            -Vec3::Z,
             size.physical_width,
             size.physical_height,
         );
-        let mut transform = Transform::from_position(Vec3::new(0.0, 0.0, 0.0));
-        transform.scale = Vec3::splat(0.1);
+        let transform = Transform::from_position(Vec3::ZERO);
         let tilemap = TileMap::new("Tilemap".into(), 100, transform);
         let tilemap = DrawableTileMap::new(&device, &queue, tilemap);
 
+        let mut model_assets = Assets::<GltfModel>::default();
+        let unit = model_assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
+        world.extend(vec![(
+            //Transform::new(Vec3::ZERO, Vec3::new(0.5, 0.5, 0.5), Quat::IDENTITY),
+            Transform::new(Vec3::ZERO, Vec3::ONE, Quat::IDENTITY),
+            Velocity {
+                velocity: Vec3::splat(0.0),
+            },
+            unit,
+            Selectable {
+                is_selected: false
+            },
+        )]);
         // render resources
         let depth_texture = DepthTexture::new(&device, size.physical_width, size.physical_height);
         let light_uniform = LightUniformBuffer::new(&device);
         drop(device);
         drop(size);
         drop(queue);
-
+        resources.insert(model_assets);
         resources.insert(model_pass);
         resources.insert(grid_pass);
         resources.insert(selection_pass);
@@ -143,6 +148,9 @@ impl State for EditState {
             .add_system(grid_pass::draw_system())
             .add_system(debug_lines_pass::update_bounding_boxes_system())
             .add_system(debug_lines_pass::draw_system())
+            .add_system(editor_systems::selection_system())
+            .add_system(editor_systems::move_action_system())
+            .add_system(editor_systems::movement_system(Default::default()))
             .add_system(editor_systems::editor_ui_system(UiState {
                 img: self.test_img.unwrap(),
                 show_load_popup: false,

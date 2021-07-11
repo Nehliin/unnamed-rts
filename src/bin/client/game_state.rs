@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use crate::{
     client_network::{self, add_client_components, connect_to_server},
-    client_systems::{self},
+    client_systems,
 };
 use core::fmt::Debug;
 use crossbeam_channel::Receiver;
@@ -72,6 +72,7 @@ impl State for GameState {
             size.physical_height,
         );
         let light_uniform = LightUniformBuffer::new(&device);
+        // TODO: This must be synced with the server
         let tilemap = DrawableTileMap::new(
             &device,
             &queue,

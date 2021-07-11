@@ -1,14 +1,17 @@
 use std::{path::Path, time::Instant};
 
 use egui::CollapsingHeader;
-use glam::{UVec2, Vec2, Vec3A};
-use legion::*;
+use glam::{IVec2, UVec2, Vec2, Vec3A, Vec4, Vec4Swizzles};
+use legion::{systems::CommandBuffer, world::SubWorld, *};
 use unnamed_rts::{
-    assets::Handle,
+    assets::{Assets, Handle},
+    components::{MoveTarget, Selectable, Transform, Velocity},
     input::{CursorPosition, MouseButtonState},
+    navigation::FlowField,
     rendering::{
         camera::Camera,
         drawable_tilemap::*,
+        gltf::GltfModel,
         ui::ui_resources::{UiContext, UiTexture},
     },
     resources::{Time, WindowSize},
@@ -65,7 +68,7 @@ pub struct UiState<'a> {
 
 #[system]
 #[allow(clippy::too_many_arguments)]
-// This system is a bit of spagettios but I will clean it up later. Features more important atm!
+// TODO: This system is a bit of spagettios but I will clean it up later. Features more important atm!
 pub fn editor_ui(
     #[state] state: &mut UiState<'static>,
     #[resource] ui_context: &UiContext,
@@ -125,7 +128,7 @@ pub fn editor_ui(
                         }
                         ui.separator();
                         let (tile_x, tile_y) = settings.current_tile.into();
-                        if let Some(tile_type) = tilemap.tile(tile_x,tile_y ).map(|tile| tile.tile_type) {
+                        if let Some(tile_type) = tilemap.tile(tile_x as i32,tile_y as i32).map(|tile| tile.tile_type) {
                             ui.label(format!("Current tile_type: {:?}", tile_type));
                         }
                         ui.checkbox(&mut settings.draw_tile_types, "Debug Draw tile types");
@@ -244,8 +247,8 @@ pub fn tilemap_modification(
                 match tm_settings.mode {
                     TileEditMode::DisplacementMap => {
                         tilemap.set_tile_height(
-                            tile_coords.x,
-                            tile_coords.y,
+                            tile_coords.x as i32,
+                            tile_coords.y as i32,
                             tm_settings.tool_strenght,
                         );
                     }
@@ -296,4 +299,117 @@ pub fn tilemap_modification(
             }
         }
     }
+}
+// TODO Move everything below to common systems --------------------------------
+
+fn intesercts(origin: Vec3A, dirfrac: Vec3A, aabb_min: Vec3A, aabb_max: Vec3A) -> bool {
+    let t1 = (aabb_min - origin) * dirfrac;
+    let t2 = (aabb_max - origin) * dirfrac;
+
+    let tmin = t1.min(t2);
+    let tmin = tmin.max_element();
+
+    let tmax = t1.max(t2);
+    let tmax = tmax.min_element();
+
+    !(tmax < 0.0 || tmax < tmin)
+}
+
+#[system]
+pub fn selection(
+    world: &mut SubWorld,
+    #[resource] camera: &Camera,
+    #[resource] mouse_button_state: &MouseButtonState,
+    #[resource] mouse_pos: &CursorPosition,
+    #[resource] asset_storage: &Assets<GltfModel>,
+    #[resource] window_size: &WindowSize,
+    query: &mut Query<(&Transform, &Handle<GltfModel>, &mut Selectable)>,
+) {
+    if mouse_button_state.pressed_current_frame(&MouseButton::Left) {
+        let ray = camera.raycast(mouse_pos, window_size);
+        let dirfrac = ray.direction.recip();
+        query.par_for_each_mut(world, |(transform, handle, mut selectable)| {
+            let model = asset_storage.get(&handle).unwrap();
+            let (min, max) = (model.min_vertex, model.max_vertex);
+            let world_min = transform.get_model_matrix() * Vec4::new(min.x, min.y, min.z, 1.0);
+            let world_max = transform.get_model_matrix() * Vec4::new(max.x, max.y, max.z, 1.0);
+            selectable.is_selected = intesercts(
+                camera.get_position(),
+                dirfrac,
+                world_min.xyz().into(),
+                world_max.xyz().into(),
+            );
+        })
+    }
+}
+//TODO: Associate each selected entity with a group which in turn gets assigned a flowfield
+#[system]
+pub fn move_action(
+    world: &mut SubWorld,
+    command_buffer: &mut CommandBuffer,
+    #[resource] camera: &Camera,
+    #[resource] mouse_button_state: &MouseButtonState,
+    #[resource] mouse_pos: &CursorPosition,
+    #[resource] window_size: &WindowSize,
+    #[resource] tilemap: &DrawableTileMap,
+    query: &mut Query<(Entity, &Selectable)>,
+) {
+    if mouse_button_state.pressed_current_frame(&MouseButton::Right) {
+        query.for_each(world, |(entity, selectable)| {
+            if selectable.is_selected {
+                let ray = camera.raycast(mouse_pos, window_size);
+                // check intersection with the regular ground plan
+                let normal = Vec3A::Y;
+                let denominator = normal.dot(ray.direction);
+                if denominator.abs() > 0.0001 {
+                    // it isn't parallel to the plane
+                    // (camera can still theoretically be within the plane but don't care about that)
+                    let t = -(normal.dot(ray.origin)) / denominator;
+                    if t >= 0.0 {
+                        // there was an intersection
+                        let target = (t * ray.direction) + ray.origin;
+                        info!("Move target: {}", target);
+                        // här borde man få en path istället
+                        command_buffer.add_component(
+                            *entity,
+                            FlowField::new(target.x as i32, target.z as i32, &tilemap.tile_map()),
+                        );
+                    }
+                }
+            }
+        });
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct DebugFlow {
+    current_target: Option<IVec2>,
+}
+
+#[system]
+pub fn movement(
+    #[state] redraw_flow: &mut DebugFlow,
+    world: &mut SubWorld,
+    _command_buffer: &mut CommandBuffer,
+    #[resource] tilemap: &mut DrawableTileMap,
+    query: &mut Query<(Entity, &FlowField)>,
+) {
+    query.for_each(world, |(entity, flow_field)| {
+        if redraw_flow.current_target != Some(flow_field.target) {
+            redraw_flow.current_target = Some(flow_field.target);
+            tilemap.reset_debug_layer();
+            for y in 0..tilemap.size() as i32 {
+                for x in 0..tilemap.size() as i32 {
+                    let idx = tilemap.temp_idx_calc(x, y).unwrap();
+                    let flow_tile = flow_field.tiles[idx];
+                    tilemap.modify_tile_debug_texels(x as u32,y as u32, |_,_,buffer | {
+                        buffer[1] = std::cmp::max(255_i32 - flow_tile.distance as i32, 41) as u8;
+                        buffer[2] = std::cmp::max(127_i32 - flow_tile.distance as i32, 56) as u8;
+                        buffer[3] = 255;
+                        buffer[0] = 255 - buffer[1];
+                    });
+                }
+            }
+        } 
+    });
 }

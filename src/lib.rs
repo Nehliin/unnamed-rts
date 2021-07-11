@@ -14,3 +14,4 @@ pub mod resources;
 #[cfg(feature = "graphics")]
 pub mod states;
 pub mod tilemap;
+pub mod navigation;

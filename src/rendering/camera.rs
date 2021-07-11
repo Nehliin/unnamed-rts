@@ -40,7 +40,7 @@ impl From<&Camera> for CameraUniform {
     }
 }
 
-pub const CAMERA_SPEED: f32 = 4.5;
+pub const CAMERA_SPEED: f32 = 10.5;
 
 pub struct Ray {
     pub origin: Vec3A,

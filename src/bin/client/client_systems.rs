@@ -55,7 +55,7 @@ pub fn move_action(
             if selectable.is_selected {
                 let ray = camera.raycast(mouse_pos, window_size);
                 // check intersection with the regular ground plan
-                let normal = Vec3A::new(0.0, 1.0, 0.0);
+                let normal = Vec3A::Y;
                 let denominator = normal.dot(ray.direction);
                 if denominator.abs() > 0.0001 {
                     // it isn't parallel to the plane

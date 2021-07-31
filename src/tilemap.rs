@@ -1,4 +1,4 @@
-use crate::components::Transform;
+use crate::{components::Transform, grid_graph::TileGrid};
 use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
 use glam::{IVec2, Vec2, Vec3};
@@ -90,9 +90,9 @@ pub struct Tile {
 }
 
 impl Tile {
-    pub fn new(top_left_corner: Vec3, start_idx: u32, size: u32) -> Self {
-        let height = size as f32 * TILE_HEIGHT;
-        let width = size as f32 * TILE_WIDTH;
+    pub fn new(top_left_corner: Vec3, start_idx: u32, grid_size: u32) -> Self {
+        let height = grid_size as f32 * TILE_HEIGHT;
+        let width = grid_size as f32 * TILE_WIDTH;
         // TODO change order of this to make indices closer to each other
         let verticies = [
             // Top left
@@ -209,40 +209,30 @@ impl Tile {
     }
 }
 
-pub fn generate_tiles(size: u32) -> Vec<Tile> {
-    let mut tiles = Vec::with_capacity((size * size) as usize);
-    let mut index = 0;
-    // TODO: Change to row based?
-    for x in 0..size {
-        for z in 0..size {
-            tiles.push(Tile::new(
-                Vec3::new(TILE_WIDTH * x as f32, 0.0, TILE_HEIGHT * z as f32),
-                index,
-                size,
-            ));
-            index += VERTECIES_PER_TILE as u32;
-        }
-    }
-    tiles
+pub fn generate_grid(size: u32, transform: Transform) -> TileGrid<Tile> {
+    let grid = TileGrid::new(size, transform, |x, y| {
+        let tile = Tile::new(
+            Vec3::new(TILE_WIDTH * x as f32, 0.0, TILE_HEIGHT * y as f32),
+            (y * size + x) * VERTECIES_PER_TILE as u32,
+            size,
+        );
+        tile
+    });
+    grid
 }
 
 // Use const generics here for size perhaps
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TileMap {
-    name: String,
-    tiles: Vec<Tile>,
-    size: u32,
-    transform: Transform,
+    pub name: String,
+    pub grid: TileGrid<Tile>,
 }
 
 impl TileMap {
     pub fn new(name: String, size: u32, transform: Transform) -> Self {
-        let tiles = generate_tiles(size);
         TileMap {
             name,
-            tiles,
-            size,
-            transform,
+            grid: generate_grid(size, transform),
         }
     }
 
@@ -252,29 +242,12 @@ impl TileMap {
         Ok(map)
     }
 
-    /// Get a reference to the tile map's name.
-    #[inline(always)]
-    pub fn name(&self) -> &str {
-        self.name.as_str()
-    }
-
-    /// Get the tile map's size.
-    #[inline(always)]
-    pub fn size(&self) -> u32 {
-        self.size
-    }
-
-    /// Get a reference to the tile map's transform.
-    #[inline(always)]
-    pub fn transform(&self) -> &Transform {
-        &self.transform
-    }
-
     fn determine_corner_height(&self, adjacent: &[EdgeAdjacentTile], lowered: bool) -> f32 {
         adjacent
             .iter()
             .filter_map(|adj| {
-                self.tile(adj.pos.x, adj.pos.y)
+                self.grid
+                    .tile(adj.pos.x, adj.pos.y)
                     .map(|tile| tile.verticies[adj.adj_edge as usize].position.y)
             })
             .max_by(|x, y| {
@@ -442,7 +415,10 @@ impl TileMap {
 
     // marching squares func
     fn smooth_edges(&mut self, adjacent: &EdgeAdjacentList, lowered: bool) {
-        adjacent.list.iter().for_each(|adj| {
+        for adj in adjacent.list.iter() {
+            if !self.grid.valid_position(adj.pos.x, adj.pos.y) {
+                continue;
+            }
             // 1. get all corer height cmp with min and max
             // 2. marching squares
             let top_left_height = self.determine_corner_height(
@@ -514,7 +490,7 @@ impl TileMap {
             ];
 
             let new_height = self.determine_corner_height(&adjacent.list, lowered);
-            if let Some(tile) = self.tile_mut(adj.pos.x, adj.pos.y) {
+            if let Some(tile) = self.grid.tile_mut(adj.pos.x, adj.pos.y) {
                 tile.verticies[adj.adj_edge as usize].position.y = new_height;
                 tile.tile_type = tile_type[index];
                 tile.height_diff = max_height - min_height;
@@ -524,13 +500,13 @@ impl TileMap {
                     adj.pos
                 );
             }
-        })
+        }
     }
 
     pub fn set_tile_height(&mut self, x: i32, y: i32, height: f32) {
         // Update
         let is_lowered;
-        if let Some(tile) = self.tile_mut(x, y) {
+        if let Some(tile) = self.grid.tile_mut(x, y) {
             is_lowered = height < tile.middle_height();
             tile.set_height(height);
         } else {
@@ -548,54 +524,5 @@ impl TileMap {
             &self.edge_adj_list(TileEdge::BottomMiddle, x, y),
             is_lowered,
         );
-    }
-
-    // TODO: Both of these are dumb, better to create a EXt trait on the vec to index by x,y or
-    // just a grid type
-    // Even better create a GridType which solves most of thease issues
-    #[inline]
-    pub fn tile_mut(&mut self, x: i32, y: i32) -> Option<&mut Tile> {
-        // SAFETY: The tile index is checked to be inbounds
-        if let Some(idx) = self.tile_index(x, y) {
-            Some(unsafe { self.tiles.get_unchecked_mut(idx) })
-        } else {
-            None
-        }
-    }
-
-    #[inline]
-    pub fn tile(&self, x: i32, y: i32) -> Option<&Tile> {
-        // SAFETY: The tile index is checked to be inbounds
-        self.tile_index(x, y)
-            .map(|idx| unsafe { self.tiles.get_unchecked(idx) })
-    }
-
-    /// Returns the index to the given tile where (0,0) corresponds to the top left corner
-    #[inline]
-    pub fn tile_index(&self, x: i32, y: i32) -> Option<usize> {
-        let size = self.size as i32;
-        if x < 0 || y < 0 || size <= x || size <= y {
-            None
-        } else {
-            // tiles are column ordered
-            Some((x * size + y) as usize)
-        }
-    }
-
-    /// Get a reference to the tile map's tiles.
-    #[inline(always)]
-    pub fn tiles(&self) -> &[Tile] {
-        self.tiles.as_slice()
-    }
-
-    /// Get mutable a reference to the tile map's tiles.
-    #[inline(always)]
-    pub fn tiles_mut(&mut self) -> &mut [Tile] {
-        &mut self.tiles
-    }
-
-    #[inline(always)]
-    pub fn set_tiles(&mut self, tiles: Vec<Tile>) {
-        self.tiles = tiles;
     }
 }

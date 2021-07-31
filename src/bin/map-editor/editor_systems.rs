@@ -192,7 +192,7 @@ pub fn editor_ui(
                 columns[1].label(format!(
                     "Map editor: {}, size: {}",
                     tilemap.name(),
-                    tilemap.size(),
+                    tilemap.tile_grid().size(),
                 ));
             })
         });
@@ -228,7 +228,7 @@ pub fn tilemap_modification(
     if denominator.abs() > 0.0001 {
         // it isn't parallel to the plane
         // (camera can still theoretically be within the height_map but don't care about that)
-        let height_map_pos: Vec3A = tilemap.transform().translation.into();
+        let height_map_pos: Vec3A = tilemap.tile_grid().transform().translation.into();
         let t = (height_map_pos - ray.origin).dot(normal) / denominator;
         if t >= 0.0 {
             // there was an intersection
@@ -372,7 +372,7 @@ pub fn move_action(
                         // här borde man få en path istället
                         command_buffer.add_component(
                             *entity,
-                            FlowField::new(target.x as i32, target.z as i32, &tilemap.tile_map()),
+                            FlowField::new(target.x as i32, target.z as i32, &tilemap.tile_grid()),
                         );
                     }
                 }
@@ -398,11 +398,10 @@ pub fn movement(
         if redraw_flow.current_target != Some(flow_field.target) {
             redraw_flow.current_target = Some(flow_field.target);
             tilemap.reset_debug_layer();
-            for y in 0..tilemap.size() as i32 {
-                for x in 0..tilemap.size() as i32 {
-                    let idx = tilemap.temp_idx_calc(x, y).unwrap();
-                    let flow_tile = flow_field.tiles[idx];
-                    tilemap.modify_tile_debug_texels(x as u32,y as u32, |_,_,buffer | {
+            for y in 0..tilemap.tile_grid().size() as i32 {
+                for x in 0..tilemap.tile_grid().size() as i32 {
+                    let flow_tile = flow_field.grid.tile(x, y).unwrap();
+                    tilemap.modify_tile_debug_texels(x as u32, y as u32, |_, _, buffer| {
                         buffer[1] = std::cmp::max(255_i32 - flow_tile.distance as i32, 41) as u8;
                         buffer[2] = std::cmp::max(127_i32 - flow_tile.distance as i32, 56) as u8;
                         buffer[3] = 255;
@@ -410,6 +409,6 @@ pub fn movement(
                     });
                 }
             }
-        } 
+        }
     });
 }

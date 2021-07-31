@@ -1,5 +1,5 @@
 use crate::{
-    components::Transform,
+    grid_graph::TileGrid,
     rendering::{pass::tilemap_pass, *},
     tilemap::*,
 };
@@ -61,40 +61,36 @@ impl<'a> TileMapRenderData<'a> {
 }
 
 impl<'a> TileMapRenderData<'a> {
-    fn new(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        tiles: &[Tile],
-        size: u32,
-        transform: &Transform,
-    ) -> Self {
+    fn new(device: &wgpu::Device, queue: &wgpu::Queue, grid: &TileGrid<Tile>) -> Self {
         let resolution = 16;
         let color_layer_content =
-            texture::TextureContent::new(size * resolution, size * resolution);
+            texture::TextureContent::new(grid.size() * resolution, grid.size() * resolution);
         let color_layer_texture =
             texture::allocate_simple_texture(device, queue, &color_layer_content, true);
         let decal_layer_content =
-            texture::TextureContent::new(size * resolution, size * resolution);
+            texture::TextureContent::new(grid.size() * resolution, grid.size() * resolution);
         let decal_layer_texture =
             texture::allocate_simple_texture(device, queue, &decal_layer_content, false);
         let debug_layer_content =
-            texture::TextureContent::new(size * resolution, size * resolution);
+            texture::TextureContent::new(grid.size() * resolution, grid.size() * resolution);
         let debug_layer_texture =
             texture::allocate_simple_texture(device, queue, &decal_layer_content, false);
         //TODO: improve this
-        let verticies = tiles
+        let verticies = grid
+            .tiles()
             .into_par_iter()
             .map(|tile| tile.verticies.into_par_iter())
             .flatten()
-            .copied()
+            //.copied()
             .collect::<Vec<TileVertex>>();
         let vertex_buffer =
             vertex_buffers::VertexBuffer::allocate_mutable_buffer(device, &verticies);
-        let indicies = tiles
+        let indicies = grid
+            .tiles()
             .into_par_iter()
             .map(|tile| tile.indicies.into_par_iter())
             .flatten()
-            .copied()
+            //.copied()
             .collect::<Vec<u32>>();
         use wgpu::util::DeviceExt;
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -105,7 +101,7 @@ impl<'a> TileMapRenderData<'a> {
         let num_indexes = indicies.len() as u32;
         let instance_buffer = vertex_buffers::VertexBuffer::allocate_mutable_buffer(
             device,
-            &[gltf::InstanceData::new(transform.get_model_matrix())],
+            &[gltf::InstanceData::new(grid.transform().get_model_matrix())],
         );
         let color_view = color_layer_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let decal_layer_view =
@@ -178,14 +174,8 @@ pub struct DrawableTileMap<'a> {
 #[cfg(feature = "graphics")]
 impl<'a> DrawableTileMap<'a> {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, tilemap: TileMap) -> Self {
-        let map_size = tilemap.size();
-        let render_data = TileMapRenderData::new(
-            device,
-            queue,
-            &tilemap.tiles(),
-            tilemap.size(),
-            &tilemap.transform(),
-        );
+        let map_size = tilemap.grid.size();
+        let render_data = TileMapRenderData::new(device, queue, &tilemap.grid);
         let mut drawable_map = DrawableTileMap {
             map: tilemap,
             render_data,
@@ -208,28 +198,16 @@ impl<'a> DrawableTileMap<'a> {
         drawable_map
     }
 
-    // TODO: not clean
+    /// Get a reference to the underlying TileGrid.
     #[inline]
-    pub fn tile_map(&self) -> &TileMap {
-        &self.map
+    pub fn tile_grid(&self) -> &TileGrid<Tile> {
+        &self.map.grid
     }
 
     /// Get a reference to the tile map's name.
     #[inline(always)]
     pub fn name(&self) -> &str {
-        &self.map.name()
-    }
-
-    /// Get the tile map's size.
-    #[inline]
-    pub fn size(&self) -> u32 {
-        self.map.size()
-    }
-
-    /// Get a reference to the tile map's transform.
-    #[inline]
-    pub fn transform(&self) -> &Transform {
-        &self.map.transform()
+        &self.map.name
     }
 
     #[inline]
@@ -242,7 +220,7 @@ impl<'a> DrawableTileMap<'a> {
 
     #[inline]
     pub fn reset_displacment(&mut self) {
-        self.map.set_tiles(generate_tiles(self.map.size()));
+        self.map.grid = generate_grid(self.tile_grid().size(), *self.tile_grid().transform());
         self.render_data.needs_vertex_update = true;
     }
 
@@ -250,8 +228,8 @@ impl<'a> DrawableTileMap<'a> {
         let (_, buffer) = self.render_data.color_buffer_mut();
         buffer.fill(0);
         // Generate checkered default texture
-        for y in 0..self.size() {
-            for x in 0..self.size() {
+        for y in 0..self.tile_grid().size() {
+            for x in 0..self.tile_grid().size() {
                 if (x + y) % 2 == 0 {
                     self.modify_tile_color_texels(x, y, |_, _, buffer| buffer.fill(128));
                 } else {
@@ -277,13 +255,12 @@ impl<'a> DrawableTileMap<'a> {
     }
 
     pub fn fill_debug_layer(&mut self) {
+        let size = self.tile_grid().size();
         let height_resolution = self.render_data.tile_height_resultion;
         let width_resolution = self.render_data.tile_width_resultion;
-        let (stride, buffer) = self.render_data.debug_buffer_mut();
-        let size = self.map.size();
-        for x in 0..size  {
+        for x in 0..size {
             for y in 0..size {
-                if let Some(tile) = self.map.tile(x as i32, y as i32) {
+                if let Some(tile) = self.tile_grid().tile(x as i32, y as i32) {
                     match tile.tile_type {
                         TileType::Flat => {}
                         TileType::RampTop
@@ -292,6 +269,7 @@ impl<'a> DrawableTileMap<'a> {
                         | TileType::RampLeft => {
                             if tile.height_diff.abs() < 2 {
                                 {
+                                    let (stride, buffer) = self.render_data.debug_buffer_mut();
                                     Self::modify_tile_texels(
                                         x,
                                         y,
@@ -309,6 +287,7 @@ impl<'a> DrawableTileMap<'a> {
                             }
                         }
                         _ => {
+                            let (stride, buffer) = self.render_data.debug_buffer_mut();
                             Self::modify_tile_texels(
                                 x,
                                 y,
@@ -338,19 +317,19 @@ impl<'a> DrawableTileMap<'a> {
 
     #[inline]
     pub fn tile(&self, x: i32, y: i32) -> Option<&Tile> {
-        self.map.tile(x, y)
-    }
-
-    pub fn temp_idx_calc(&self, x: i32, y: i32) -> Option<usize> {
-        self.map.tile_index(x,y )
+        self.map.grid.tile(x, y)
     }
 
     pub fn to_tile_coords(&self, world_coords: Vec3A) -> Option<UVec2> {
-        let local_coords = self.transform().get_model_matrix().inverse() * world_coords.extend(1.0);
+        let local_coords =
+            self.tile_grid().transform().get_model_matrix().inverse() * world_coords.extend(1.0);
         let map_coords = Vec2::new(local_coords.x / TILE_WIDTH, local_coords.z / TILE_HEIGHT);
         if map_coords.cmplt(Vec2::ZERO).any()
             || map_coords
-                .cmpgt(Vec2::new(self.size() as f32, self.size() as f32))
+                .cmpgt(Vec2::new(
+                    self.tile_grid().size() as f32,
+                    self.tile_grid().size() as f32,
+                ))
                 .any()
         {
             None
@@ -407,7 +386,7 @@ impl<'a> DrawableTileMap<'a> {
         Self::modify_tile_texels(
             tile_x,
             tile_y,
-            self.map.size(),
+            self.map.grid.size(),
             width_resolution,
             height_resolution,
             stride,
@@ -426,7 +405,7 @@ impl<'a> DrawableTileMap<'a> {
         Self::modify_tile_texels(
             tile_x,
             tile_y,
-            self.map.size(),
+            self.map.grid.size(),
             width_resolution,
             height_resolution,
             stride,
@@ -445,7 +424,7 @@ impl<'a> DrawableTileMap<'a> {
         Self::modify_tile_texels(
             tile_x,
             tile_y,
-            self.map.size(),
+            self.map.grid.size(),
             width_resolution,
             height_resolution,
             stride,
@@ -486,7 +465,7 @@ impl<'a> DrawableTileMap<'a> {
     {
         let width_resolution = self.render_data.tile_width_resultion;
         let (stride, buffer) = self.render_data.decal_buffer_mut();
-        Self::modify_texels(self.map.size(), width_resolution, stride, buffer, func);
+        Self::modify_texels(self.map.grid.size(), width_resolution, stride, buffer, func);
     }
 
     pub fn modify_color_texels<F>(&mut self, func: F)
@@ -495,7 +474,7 @@ impl<'a> DrawableTileMap<'a> {
     {
         let width_resolution = self.render_data.tile_width_resultion;
         let (stride, buffer) = self.render_data.color_buffer_mut();
-        Self::modify_texels(self.map.size(), width_resolution, stride, buffer, func);
+        Self::modify_texels(self.map.grid.size(), width_resolution, stride, buffer, func);
     }
 
     //TODO: This doesn't serialize the color texture
@@ -516,6 +495,7 @@ impl<'a> DrawableTileMap<'a> {
         if self.render_data.needs_vertex_update {
             let data = self
                 .map
+                .grid
                 .tiles()
                 .iter()
                 .flat_map(|tile| tile.verticies.iter().copied())

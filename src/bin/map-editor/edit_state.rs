@@ -2,7 +2,10 @@ use std::time::Instant;
 
 use glam::{Quat, Vec3};
 use legion::*;
-use unnamed_rts::{assets::{self, Assets, Handle}, components::{Selectable, Transform, Velocity}, rendering::{
+use unnamed_rts::{
+    assets::{self, Assets, Handle},
+    components::{Selectable, Transform, Velocity},
+    rendering::{
         camera::{self, Camera},
         common::DepthTexture,
         drawable_tilemap::*,
@@ -10,7 +13,11 @@ use unnamed_rts::{assets::{self, Assets, Handle}, components::{Selectable, Trans
         lights::{self, LightUniformBuffer},
         pass::*,
         ui::ui_resources::UiTexture,
-    }, resources::{DebugRenderSettings, WindowSize}, states::{State, StateTransition}, tilemap::TileMap};
+    },
+    resources::{DebugRenderSettings, WindowSize},
+    states::{State, StateTransition},
+    tilemap::TileMap,
+};
 use wgpu::{Device, Queue};
 
 use crate::editor_systems::{self, EditorSettings, LastTileMapUpdate, UiState};
@@ -77,9 +84,7 @@ impl State for EditState {
                 velocity: Vec3::splat(0.0),
             },
             unit,
-            Selectable {
-                is_selected: false
-            },
+            Selectable { is_selected: false },
         )]);
         // render resources
         let depth_texture = DepthTexture::new(&device, size.physical_width, size.physical_height);

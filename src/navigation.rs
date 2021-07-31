@@ -2,11 +2,11 @@ use std::{cmp::Reverse, collections::BinaryHeap};
 
 use glam::{IVec2, Vec3A};
 
-use crate::tilemap::TileMap;
+use crate::{grid_graph::TileGrid, tilemap::Tile};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct FlowTile {
-    pub distance: u8,
+    pub distance: u32,
     direction: Vec3A,
     pos: IVec2,
 }
@@ -33,88 +33,68 @@ impl Ord for FlowTile {
 
 #[derive(Debug)]
 pub struct FlowField {
-    pub tiles: Vec<FlowTile>,
+    pub grid: TileGrid<FlowTile>,
     pub target: IVec2,
 }
 
 impl FlowField {
-    pub fn new(x: i32, y: i32, tilemap: &TileMap) -> Self {
-        // Flood fill alogrithm
-        let mut flow_tiles = vec![None; (tilemap.size() * tilemap.size()) as usize];
-        let mut to_visit = BinaryHeap::new();
-        to_visit.push(Reverse(FlowTile {
-            distance: 0,
-            direction: Vec3A::ZERO,
-            pos: IVec2::new(x, y),
-        }));
-        while let Some(flow_tile) = to_visit.pop() {
-            let neighbours = [
-                IVec2::new(flow_tile.0.pos.x - 1, flow_tile.0.pos.y),
-                IVec2::new(flow_tile.0.pos.x, flow_tile.0.pos.y - 1),
-                IVec2::new(flow_tile.0.pos.x, flow_tile.0.pos.y + 1),
-                IVec2::new(flow_tile.0.pos.x + 1, flow_tile.0.pos.y),
-            ];
+    pub fn new(x: i32, y: i32, tilemap: &TileGrid<Tile>) -> Self {
+        let distance_grid = generate_distance_field(tilemap, IVec2::new(x, y));
+        let flow_grid = generate_flow_direction(&distance_grid);
 
-            neighbours.iter().for_each(|pos| {
-                if let Some(idx) = tilemap.tile_index(pos.x, pos.y) {
-                    // SAFETY: The index is always within bounds if the flow tiles matches the
-                    // tilemap size
-                    let neighbour = unsafe { flow_tiles.get_unchecked_mut(idx) };
-                    if neighbour.is_none() {
-                        let new_tile = FlowTile {
-                            distance: flow_tile.0.distance + 1,
-                            direction: Vec3A::ZERO,
-                            pos: *pos,
-                        };
-                        *neighbour = Some(new_tile);
-                        to_visit.push(Reverse(new_tile));
-                    }
-                }
-            });
-        }
-        let tiles: Vec<FlowTile> = flow_tiles
-            .iter()
-            .filter_map(|flow_tile| flow_tile.as_ref())
-            .map(|flow_tile| {
-                let neighbours = [
-                    IVec2::new(flow_tile.pos.x - 1, flow_tile.pos.y - 1),
-                    IVec2::new(flow_tile.pos.x - 1, flow_tile.pos.y),
-                    IVec2::new(flow_tile.pos.x - 1, flow_tile.pos.y + 1),
-                    IVec2::new(flow_tile.pos.x, flow_tile.pos.y - 1),
-                    IVec2::new(flow_tile.pos.x, flow_tile.pos.y + 1),
-                    IVec2::new(flow_tile.pos.x + 1, flow_tile.pos.y - 1),
-                    IVec2::new(flow_tile.pos.x + 1, flow_tile.pos.y),
-                    IVec2::new(flow_tile.pos.x + 1, flow_tile.pos.y + 1),
-                ];
-                let (_, min_pos) = neighbours
-                    .iter()
-                    .filter_map(|n_pos| {
-                        if let Some(idx) = tilemap.tile_index(n_pos.x, n_pos.y) {
-                            let n_tile = unsafe { flow_tiles.get_unchecked(idx).unwrap() };
-                            Some((n_tile.distance, n_tile.pos))
-                        } else {
-                            None
-                        }
-                    })
-                    .min_by_key(|(n_dist, _)| std::cmp::max(*n_dist as i16 - flow_tile.distance as i16, 0) as u8)
-                    .unwrap();
-                let tmp = min_pos - flow_tile.pos;
-                let direction = Vec3A::new(tmp.x as f32, 0.0, tmp.y as f32);
-                FlowTile {
-                    direction,
-                    ..*flow_tile
-                }
-            })
-            .collect();
-        assert_eq!(
-            tiles.len(),
-            (tilemap.size() * tilemap.size()) as usize,
-            "Failed to construct flow field"
-        );
-        info!("Target: {}", IVec2::new(x, y));
         FlowField {
-            tiles,
+            grid: flow_grid,
             target: IVec2::new(x, y),
         }
     }
+}
+
+fn generate_distance_field(source_tilemap: &TileGrid<Tile>, target: IVec2) -> TileGrid<FlowTile> {
+    // Flood fill alogrithm
+    let mut flow_tiles: TileGrid<FlowTile> = TileGrid::new(
+        source_tilemap.size(),
+        *source_tilemap.transform(),
+        |x, y| FlowTile {
+            distance: u32::MAX,
+            direction: Vec3A::ZERO,
+            pos: IVec2::new(x as i32, y as i32),
+        },
+    );
+    let mut to_visit = BinaryHeap::new();
+    to_visit.push(Reverse(FlowTile {
+        distance: 0,
+        direction: Vec3A::ZERO,
+        pos: target,
+    }));
+    while let Some(flow_tile) = to_visit.pop() {
+        let neighbours = flow_tiles.strict_neighbours(flow_tile.0.pos.x, flow_tile.0.pos.y);
+        neighbours.iter().for_each(|neighbour| {
+            let n_tile = flow_tiles.tile_mut_from_index(*neighbour);
+            if n_tile.distance == u32::MAX {
+                n_tile.distance = flow_tile.0.distance + 1;
+                to_visit.push(Reverse(*n_tile));
+            }
+        });
+    }
+    flow_tiles
+}
+
+fn generate_flow_direction(source_grid: &TileGrid<FlowTile>) -> TileGrid<FlowTile> {
+    let tiles = source_grid
+        .iter()
+        .map(|tile| {
+            let n_tiles = source_grid.all_neighbours(tile.pos.x, tile.pos.y);
+            let min_n = n_tiles
+                .iter()
+                .map(|n_idx| source_grid.tile_from_index(*n_idx))
+                .min_by_key(|n_tile| {
+                    std::cmp::max(n_tile.distance as i32 - tile.distance as i32, 0)
+                })
+                .unwrap();
+            let direction = min_n.pos - tile.pos;
+            let direction = Vec3A::new(direction.x as f32, 0.0, direction.y as f32);
+            FlowTile { direction, ..*tile }
+        })
+        .collect::<Vec<FlowTile>>();
+    TileGrid::from_parts(source_grid.size(), tiles, *source_grid.transform())
 }

@@ -5,7 +5,7 @@ use glam::{IVec2, UVec2, Vec2, Vec3A, Vec4, Vec4Swizzles};
 use legion::{systems::CommandBuffer, world::SubWorld, *};
 use unnamed_rts::{
     assets::{Assets, Handle},
-    components::{MoveTarget, Selectable, Transform, Velocity},
+    components::{ Selectable, Transform },
     input::{CursorPosition, MouseButtonState},
     navigation::FlowField,
     rendering::{
@@ -388,13 +388,13 @@ pub struct DebugFlow {
 
 #[system]
 pub fn movement(
-    #[state] redraw_flow: &mut DebugFlow,
     world: &mut SubWorld,
     _command_buffer: &mut CommandBuffer,
     #[resource] tilemap: &mut DrawableTileMap,
+    #[resource] redraw_flow: &mut DebugFlow,
     query: &mut Query<(Entity, &FlowField)>,
 ) {
-    query.for_each(world, |(entity, flow_field)| {
+    query.for_each(world, |(_entity, flow_field)| {
         if redraw_flow.current_target != Some(flow_field.target) {
             redraw_flow.current_target = Some(flow_field.target);
             tilemap.reset_debug_layer();

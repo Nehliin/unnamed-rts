@@ -20,7 +20,7 @@ use unnamed_rts::{
 };
 use wgpu::{Device, Queue};
 
-use crate::editor_systems::{self, EditorSettings, LastTileMapUpdate, UiState};
+use crate::editor_systems::{self, DebugFlow, EditorSettings, LastTileMapUpdate, UiState};
 
 #[derive(Debug, Default)]
 pub struct EditState {
@@ -109,6 +109,7 @@ impl State for EditState {
         resources.insert(tilemap);
         resources.insert(light_uniform);
         resources.insert(camera);
+        resources.insert(DebugFlow::default());
     }
 
     fn on_resize(&mut self, resources: &Resources, new_size: &WindowSize) {
@@ -155,7 +156,7 @@ impl State for EditState {
             .add_system(debug_lines_pass::draw_system())
             .add_system(editor_systems::selection_system())
             .add_system(editor_systems::move_action_system())
-            .add_system(editor_systems::movement_system(Default::default()))
+            .add_system(editor_systems::movement_system())
             .add_system(editor_systems::editor_ui_system(UiState {
                 img: self.test_img.unwrap(),
                 show_load_popup: false,

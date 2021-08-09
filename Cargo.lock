@@ -2370,6 +2370,7 @@ dependencies = [
  "glam",
  "gltf",
  "image",
+ "itertools",
  "laminar",
  "legion",
  "log",

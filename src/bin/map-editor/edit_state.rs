@@ -77,6 +77,7 @@ impl State for EditState {
 
         let mut model_assets = Assets::<GltfModel>::default();
         let unit = model_assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
+        let debug_arrow = model_assets.load("arrow.glb").unwrap();
         world.extend(vec![(
             //Transform::new(Vec3::ZERO, Vec3::new(0.5, 0.5, 0.5), Quat::IDENTITY),
             Transform::new(Vec3::ZERO, Vec3::ONE, Quat::IDENTITY),
@@ -109,7 +110,10 @@ impl State for EditState {
         resources.insert(tilemap);
         resources.insert(light_uniform);
         resources.insert(camera);
-        resources.insert(DebugFlow::default());
+        resources.insert(DebugFlow {
+            current_target: None,
+            arrow_handle: debug_arrow,
+        });
     }
 
     fn on_resize(&mut self, resources: &Resources, new_size: &WindowSize) {
@@ -152,8 +156,8 @@ impl State for EditState {
             .add_system(tilemap_pass::update_system())
             .add_system(tilemap_pass::draw_system())
             .add_system(grid_pass::draw_system())
-            .add_system(debug_lines_pass::update_bounding_boxes_system())
-            .add_system(debug_lines_pass::draw_system())
+            //.add_system(debug_lines_pass::update_bounding_boxes_system())
+            //.add_system(debug_lines_pass::draw_system())
             .add_system(editor_systems::selection_system())
             .add_system(editor_systems::move_action_system())
             .add_system(editor_systems::movement_system())

@@ -1,21 +1,21 @@
-use std::{path::Path, time::Instant};
-
 use egui::CollapsingHeader;
-use glam::{IVec2, UVec2, Vec2, Vec3A, Vec4, Vec4Swizzles};
+use glam::{Affine3A, IVec2, Quat, UVec2, Vec2, Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
+use itertools::Itertools;
 use legion::{systems::CommandBuffer, world::SubWorld, *};
+use std::{f32::consts::PI, path::Path, time::Instant};
 use unnamed_rts::{
     assets::{Assets, Handle},
-    components::{ Selectable, Transform },
+    components::{Selectable, Transform},
     input::{CursorPosition, MouseButtonState},
     navigation::FlowField,
     rendering::{
         camera::Camera,
         drawable_tilemap::*,
-        gltf::GltfModel,
+        gltf::{GltfModel, InstanceData},
         ui::ui_resources::{UiContext, UiTexture},
     },
     resources::{Time, WindowSize},
-    tilemap::TileMap,
+    tilemap::{TileMap, TILE_HEIGHT, TILE_WIDTH},
 };
 use winit::event::MouseButton;
 #[derive(Debug, Default)]
@@ -167,7 +167,7 @@ pub fn editor_ui(
                                 if ui.button("Load").clicked() {
                                     match TileMap::load(Path::new(&settings.load_path)) {
                                         Ok(loaded_map) => {
-                                            *tilemap = DrawableTileMap::new(&device, &queue, loaded_map);
+                                            *tilemap = DrawableTileMap::new(device, queue, loaded_map);
                                             *load_error_label = None;
                                         },
                                         Err(err) => {
@@ -228,7 +228,7 @@ pub fn tilemap_modification(
     if denominator.abs() > 0.0001 {
         // it isn't parallel to the plane
         // (camera can still theoretically be within the height_map but don't care about that)
-        let height_map_pos: Vec3A = tilemap.tile_grid().transform().translation.into();
+        let height_map_pos: Vec3A = tilemap.tile_grid().transform().matrix.translation;
         let t = (height_map_pos - ray.origin).dot(normal) / denominator;
         if t >= 0.0 {
             // there was an intersection
@@ -329,15 +329,19 @@ pub fn selection(
         let ray = camera.raycast(mouse_pos, window_size);
         let dirfrac = ray.direction.recip();
         query.par_for_each_mut(world, |(transform, handle, mut selectable)| {
-            let model = asset_storage.get(&handle).unwrap();
+            let model = asset_storage.get(handle).unwrap();
             let (min, max) = (model.min_vertex, model.max_vertex);
-            let world_min = transform.get_model_matrix() * Vec4::new(min.x, min.y, min.z, 1.0);
-            let world_max = transform.get_model_matrix() * Vec4::new(max.x, max.y, max.z, 1.0);
+            let world_min = transform
+                .matrix
+                .transform_point3a(min.into());
+            let world_max = transform
+                .matrix
+                .transform_point3a(max.into());
             selectable.is_selected = intesercts(
                 camera.get_position(),
                 dirfrac,
-                world_min.xyz().into(),
-                world_max.xyz().into(),
+                world_min.xyz(),
+                world_max.xyz(),
             );
         })
     }
@@ -381,25 +385,40 @@ pub fn move_action(
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct DebugFlow {
-    current_target: Option<IVec2>,
+    pub current_target: Option<IVec2>,
+    pub arrow_handle: Handle<GltfModel>,
+}
+
+fn look_at(direction: Vec3A) -> Quat {
+    let mut rotation_axis = Vec3A::Z.cross(direction).normalize_or_zero();
+    if rotation_axis.length_squared() < 0.001 {
+        rotation_axis = Vec3A::Y;
+    }
+    let dot = Vec3A::Z.dot(direction);
+    let angle = dot.acos();
+    Quat::from_axis_angle(rotation_axis.into(), angle)
 }
 
 #[system]
 pub fn movement(
     world: &mut SubWorld,
-    _command_buffer: &mut CommandBuffer,
+    command_buffer: &mut CommandBuffer,
     #[resource] tilemap: &mut DrawableTileMap,
     #[resource] redraw_flow: &mut DebugFlow,
     query: &mut Query<(Entity, &FlowField)>,
 ) {
+    let size = tilemap.tile_grid().size() as i32;
     query.for_each(world, |(_entity, flow_field)| {
         if redraw_flow.current_target != Some(flow_field.target) {
             redraw_flow.current_target = Some(flow_field.target);
             tilemap.reset_debug_layer();
-            for y in 0..tilemap.tile_grid().size() as i32 {
-                for x in 0..tilemap.tile_grid().size() as i32 {
+            let transform = *tilemap.tile_grid().transform();
+            let debug_arrows = (0..size)
+                .cartesian_product(0..size)
+                .into_iter()
+                .map(|(y, x)| {
                     let flow_tile = flow_field.grid.tile(x, y).unwrap();
                     tilemap.modify_tile_debug_texels(x as u32, y as u32, |_, _, buffer| {
                         buffer[1] = std::cmp::max(255_i32 - flow_tile.distance as i32, 41) as u8;
@@ -407,8 +426,28 @@ pub fn movement(
                         buffer[3] = 255;
                         buffer[0] = 255 - buffer[1];
                     });
-                }
-            }
+                    let height = tilemap.tile_grid().tile(x, y).unwrap().middle_height();
+                    // 1. calc offset for arrow
+                    let translation =
+                        Vec3::new(x as f32 * TILE_WIDTH + 0.5, height + 0.7, y as f32 * TILE_HEIGHT + 0.5);
+                    let scale = Vec3::splat(0.1);
+                    // 2. create Transform for it by providing pos, rotation, scale
+                    let arrow_transform = Affine3A::from_scale_rotation_translation(
+                        scale,
+                        look_at(flow_tile.direction),
+                        translation,
+                    );
+                    // 3. multiply transforms
+                    (
+                        redraw_flow.arrow_handle,
+                        Transform {
+                            matrix: transform.matrix * arrow_transform,
+                        },
+                    )
+                })
+                .collect::<Vec<_>>();
+            // TODO: SPAWN THE ARROWS SOMEHOW AND THEN ALSO RENDER THEM WHEN NECESSARY
+            command_buffer.extend(debug_arrows);
         }
     });
 }

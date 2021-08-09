@@ -1,6 +1,5 @@
 pub mod camera;
 pub mod common;
-pub mod drawable_flowfield;
 pub mod drawable_tilemap;
 pub mod gltf;
 pub mod lights;

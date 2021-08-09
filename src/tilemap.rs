@@ -195,7 +195,7 @@ impl Tile {
     }
 
     #[inline]
-    fn middle_height(&self) -> f32 {
+    pub fn middle_height(&self) -> f32 {
         self.verticies[TILE_MIDDLE_VERTEX_INDEX].position.y
     }
 

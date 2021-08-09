@@ -14,10 +14,12 @@ pub fn movement(
     query
         .iter_mut(world)
         .for_each(|(entity, move_target, velocity, transform)| {
-            if !transform.translation.abs_diff_eq(move_target.target, 0.01) {
+            let target = move_target.target.into();
+            if !transform.matrix.translation.abs_diff_eq(target, 0.01) {
                 // very temporary fix here
-                velocity.velocity = (move_target.target - transform.translation).normalize() * 3.0;
-                transform.translation += velocity.velocity * time.delta_time;
+                let tmp_vel = (target - transform.matrix.translation).normalize() * 3.0;
+                velocity.velocity = tmp_vel.into();
+                transform.matrix.translation += tmp_vel * time.delta_time;
             } else {
                 velocity.velocity = Vec3::splat(0.0);
                 command_buffer.remove_component::<MoveTarget>(*entity)

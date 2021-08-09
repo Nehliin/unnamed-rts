@@ -101,7 +101,7 @@ impl<'a> TileMapRenderData<'a> {
         let num_indexes = indicies.len() as u32;
         let instance_buffer = vertex_buffers::VertexBuffer::allocate_mutable_buffer(
             device,
-            &[gltf::InstanceData::new(grid.transform().get_model_matrix())],
+            &[gltf::InstanceData::new(grid.transform())],
         );
         let color_view = color_layer_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let decal_layer_view =
@@ -164,14 +164,12 @@ impl<'a> TileMapRenderData<'a> {
     }
 }
 
-#[cfg(feature = "graphics")]
 #[derive(Debug)]
 pub struct DrawableTileMap<'a> {
     map: TileMap,
     render_data: TileMapRenderData<'a>,
 }
 
-#[cfg(feature = "graphics")]
 impl<'a> DrawableTileMap<'a> {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, tilemap: TileMap) -> Self {
         let map_size = tilemap.grid.size();
@@ -321,8 +319,12 @@ impl<'a> DrawableTileMap<'a> {
     }
 
     pub fn to_tile_coords(&self, world_coords: Vec3A) -> Option<UVec2> {
-        let local_coords =
-            self.tile_grid().transform().get_model_matrix().inverse() * world_coords.extend(1.0);
+        let local_coords = self
+            .tile_grid()
+            .transform()
+            .matrix
+            .inverse()
+            .transform_point3a(world_coords.extend(1.0).into());
         let map_coords = Vec2::new(local_coords.x / TILE_WIDTH, local_coords.z / TILE_HEIGHT);
         if map_coords.cmplt(Vec2::ZERO).any()
             || map_coords

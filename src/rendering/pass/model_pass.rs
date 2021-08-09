@@ -31,7 +31,7 @@ pub fn update(
             // DON'T USE A VEC HERE FOR GODS SAKE
             let model_matrices = transforms
                 .iter()
-                .map(|trans| InstanceData::new(trans.get_model_matrix()))
+                .map(|trans| InstanceData::new(trans))
                 .collect::<Vec<InstanceData>>();
             let instance_buffer = &asset_storage.get(model).unwrap().instance_buffer;
             instance_buffer.update(queue, &model_matrices);

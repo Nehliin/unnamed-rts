@@ -9,7 +9,7 @@ use crate::rendering::{
     vertex_buffers::{MutableVertexData, VertexBuffer},
 };
 use crossbeam_channel::Sender;
-use glam::{Mat4, Vec3};
+use glam::{Affine3A, Vec3};
 use legion::{world::SubWorld, *};
 
 use crate::rendering::common::DepthTexture;
@@ -36,7 +36,9 @@ pub fn draw(
             .zip(selectable)
             .filter(|(_, selectable)| selectable.is_selected)
             .map(|(trans, _)| {
-                InstanceData::new(trans.get_model_matrix() * Mat4::from_scale(Vec3::splat(1.01)))
+                InstanceData::new(&Transform {
+                    matrix: trans.matrix * Affine3A::from_scale(Vec3::splat(1.01)),
+                })
             })
             .collect::<Vec<InstanceData>>();
 

@@ -1,5 +1,6 @@
 use super::texture::*;
 use crate::assets::AssetLoader;
+use crate::components::Transform;
 use crate::rendering::vertex_buffers::*;
 use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
@@ -85,11 +86,11 @@ pub struct InstanceData {
 }
 
 impl InstanceData {
-    pub fn new(model: Mat4) -> Self {
-        let sub_mat = Mat3::from_mat4(model);
-        let normal_matrix = sub_mat.inverse().transpose();
+    pub fn new(model: &Transform) -> Self {
+        let sub_mat = model.matrix.matrix3;
+        let normal_matrix = sub_mat.inverse().transpose().into();
         InstanceData {
-            model,
+            model: model.matrix.into(),
             normal_matrix,
             _pad: Vec3::ZERO,
         }

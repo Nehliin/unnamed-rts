@@ -24,33 +24,19 @@ pub enum EntityType {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 pub struct Transform {
-    pub rotation: Quat,
-    pub scale: Vec3,
-    pub translation: Vec3,
+    pub matrix: Affine3A,
 }
 // TODO: implement buildar macro or by hand (new builder struct)
 impl Transform {
     pub fn from_position(position: Vec3) -> Self {
-        let rotation = Quat::IDENTITY;
-        let scale = Vec3::splat(1.0);
         Transform {
-            translation: position,
-            rotation,
-            scale,
+            matrix: Affine3A::from_translation(position),
         }
     }
 
     pub fn new(translation: Vec3, scale: Vec3, rotation: Quat) -> Self {
         Transform {
-            rotation,
-            scale,
-            translation,
+            matrix: Affine3A::from_scale_rotation_translation(scale, rotation, translation),
         }
-    }
-
-    // Maybe use affine matrix here but I dobut it will make a difference since everything
-    // happens gpu side anyways
-    pub fn get_model_matrix(&self) -> Mat4 {
-        Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.translation)
     }
 }

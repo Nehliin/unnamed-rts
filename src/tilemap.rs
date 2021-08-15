@@ -1,4 +1,7 @@
-use crate::{components::Transform, grid_graph::TileGrid};
+use crate::{
+    components::Transform,
+    map_chunk::{ChunkIndex, MapChunk, CHUNK_SIZE},
+};
 use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
 use glam::{IVec2, Vec2, Vec3};
@@ -33,6 +36,26 @@ impl Default for TileType {
         TileType::Flat
     }
 }
+
+// Used for marching squares
+const TILE_TYPE_LIST: [TileType; 16] = [
+    TileType::Flat,
+    TileType::CornerConcaveLT,
+    TileType::CornerConcaveRT,
+    TileType::RampBottom,
+    TileType::CornerConcaveLB,
+    TileType::RampRight,
+    TileType::RampRight,
+    TileType::CornerConvexLT,
+    TileType::CornerConcaveRB,
+    TileType::RampLeft,
+    TileType::RampLeft,
+    TileType::CornerConvexRT,
+    TileType::RampTop,
+    TileType::CornerConvexRB,
+    TileType::CornerConvexLB,
+    TileType::Flat,
+];
 
 const VERTECIES_PER_TILE: usize = 9;
 const INDICIES_PER_TILE: usize = 24;
@@ -90,9 +113,9 @@ pub struct Tile {
 }
 
 impl Tile {
-    pub fn new(top_left_corner: Vec3, start_idx: u32, grid_size: u32) -> Self {
-        let height = grid_size as f32 * TILE_HEIGHT;
-        let width = grid_size as f32 * TILE_WIDTH;
+    pub fn new(top_left_corner: Vec3, start_idx: u32) -> Self {
+        let height = CHUNK_SIZE as f32 * TILE_HEIGHT;
+        let width = CHUNK_SIZE as f32 * TILE_WIDTH;
         // TODO change order of this to make indices closer to each other
         let verticies = [
             // Top left
@@ -209,30 +232,28 @@ impl Tile {
     }
 }
 
-pub fn generate_grid(size: u32, transform: Transform) -> TileGrid<Tile> {
-    let grid = TileGrid::new(size, transform, |x, y| {
-        let tile = Tile::new(
+pub fn generate_grid(transform: Transform) -> MapChunk<Tile> {
+    MapChunk::new(transform, |x, y| {
+        Tile::new(
             Vec3::new(TILE_WIDTH * x as f32, 0.0, TILE_HEIGHT * y as f32),
-            (y * size + x) * VERTECIES_PER_TILE as u32,
-            size,
-        );
-        tile
-    });
-    grid
+            (y * CHUNK_SIZE as u32 + x) * VERTECIES_PER_TILE as u32,
+        )
+    })
 }
 
 // Use const generics here for size perhaps
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TileMap {
     pub name: String,
-    pub grid: TileGrid<Tile>,
+    pub chunk: MapChunk<Tile>,
 }
 
 impl TileMap {
-    pub fn new(name: String, size: u32, transform: Transform) -> Self {
+    // TODO: size should represent number of chunks
+    pub fn new(name: String, _size: u32, transform: Transform) -> Self {
         TileMap {
             name,
-            grid: generate_grid(size, transform),
+            chunk: generate_grid(transform),
         }
     }
 
@@ -246,9 +267,11 @@ impl TileMap {
         adjacent
             .iter()
             .filter_map(|adj| {
-                self.grid
-                    .tile(adj.pos.x, adj.pos.y)
-                    .map(|tile| tile.verticies[adj.adj_edge as usize].position.y)
+                ChunkIndex::new(adj.pos.x, adj.pos.y).ok().map(|index| {
+                    self.chunk.tile(index).verticies[adj.adj_edge as usize]
+                        .position
+                        .y
+                })
             })
             .max_by(|x, y| {
                 if lowered {
@@ -416,9 +439,10 @@ impl TileMap {
     // marching squares func
     fn smooth_edges(&mut self, adjacent: &EdgeAdjacentList, lowered: bool) {
         for adj in adjacent.list.iter() {
-            if !self.grid.valid_position(adj.pos.x, adj.pos.y) {
-                continue;
-            }
+            let chunk_index = match ChunkIndex::new(adj.pos.x, adj.pos.y) {
+                Ok(index) => index,
+                Err(_) => continue,
+            };
             // 1. get all corer height cmp with min and max
             // 2. marching squares
             let top_left_height = self.determine_corner_height(
@@ -455,64 +479,39 @@ impl TileMap {
             // unwrap because iter isn't empty
             let max_height = *heights.iter().max().unwrap();
             let min_height = *heights.iter().min().unwrap();
-            // TODO Clean it up
-            let heights = heights
-                .iter_mut()
-                .map(|height| {
-                    if *height != max_height {
-                        *height = min_height;
-                    }
-                    *height
-                })
-                .collect::<Vec<_>>();
+
+            heights.iter_mut().for_each(|height| {
+                if *height != max_height {
+                    *height = min_height;
+                }
+            });
 
             let index = if heights[0] == max_height { 1 << 3 } else { 0 }
                 | if heights[1] == max_height { 1 << 2 } else { 0 }
                 | if heights[2] == max_height { 1 << 1 } else { 0 }
                 | if heights[3] == max_height { 1 << 0 } else { 0 };
-            let tile_type = [
-                TileType::Flat,
-                TileType::CornerConcaveLT,
-                TileType::CornerConcaveRT,
-                TileType::RampBottom,
-                TileType::CornerConcaveLB,
-                TileType::RampRight,
-                TileType::RampRight,
-                TileType::CornerConvexLT,
-                TileType::CornerConcaveRB,
-                TileType::RampLeft,
-                TileType::RampLeft,
-                TileType::CornerConvexRT,
-                TileType::RampTop,
-                TileType::CornerConvexRB,
-                TileType::CornerConvexLB,
-                TileType::Flat,
-            ];
 
             let new_height = self.determine_corner_height(&adjacent.list, lowered);
-            if let Some(tile) = self.grid.tile_mut(adj.pos.x, adj.pos.y) {
-                tile.verticies[adj.adj_edge as usize].position.y = new_height;
-                tile.tile_type = tile_type[index];
-                tile.height_diff = max_height - min_height;
-            } else {
-                error!(
-                    "Tile index for adjacent tile isn't valid, index: {}",
-                    adj.pos
-                );
-            }
+            let tile = self.chunk.tile_mut(chunk_index);
+            tile.verticies[adj.adj_edge as usize].position.y = new_height;
+            tile.tile_type = TILE_TYPE_LIST[index];
+            tile.height_diff = max_height - min_height;
         }
     }
 
     pub fn set_tile_height(&mut self, x: i32, y: i32, height: f32) {
         // Update
         let is_lowered;
-        if let Some(tile) = self.grid.tile_mut(x, y) {
-            is_lowered = height < tile.middle_height();
-            tile.set_height(height);
-        } else {
-            error!("Invalid tile coordinates given to set_tile_height");
-            return;
-        }
+        let index = match ChunkIndex::new(x, y) {
+            Ok(index) => index,
+            Err(err) => {
+                error!("Invalid tile coordinates given to set_tile_height {}", err);
+                return;
+            }
+        };
+        let tile = self.chunk.tile_mut(index);
+        is_lowered = height < tile.middle_height();
+        tile.set_height(height);
         self.smooth_edges(&self.edge_adj_list(TileEdge::TopLeft, x, y), is_lowered);
         self.smooth_edges(&self.edge_adj_list(TileEdge::TopRight, x, y), is_lowered);
         self.smooth_edges(&self.edge_adj_list(TileEdge::BottomLeft, x, y), is_lowered);

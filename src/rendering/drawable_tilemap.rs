@@ -1,8 +1,4 @@
-use crate::{
-    grid_graph::TileGrid,
-    rendering::{pass::tilemap_pass, *},
-    tilemap::*,
-};
+use crate::{map_chunk::{CHUNK_SIZE, ChunkIndex, MapChunk}, rendering::{pass::tilemap_pass, *}, tilemap::*};
 use anyhow::Result;
 use glam::{UVec2, Vec2, Vec3A};
 use rayon::{
@@ -61,18 +57,18 @@ impl<'a> TileMapRenderData<'a> {
 }
 
 impl<'a> TileMapRenderData<'a> {
-    fn new(device: &wgpu::Device, queue: &wgpu::Queue, grid: &TileGrid<Tile>) -> Self {
+    fn new(device: &wgpu::Device, queue: &wgpu::Queue, grid: &MapChunk<Tile>) -> Self {
         let resolution = 16;
         let color_layer_content =
-            texture::TextureContent::new(grid.size() * resolution, grid.size() * resolution);
+            texture::TextureContent::new(CHUNK_SIZE as u32 * resolution, CHUNK_SIZE as u32 * resolution);
         let color_layer_texture =
             texture::allocate_simple_texture(device, queue, &color_layer_content, true);
         let decal_layer_content =
-            texture::TextureContent::new(grid.size() * resolution, grid.size() * resolution);
+            texture::TextureContent::new(CHUNK_SIZE as u32 * resolution, CHUNK_SIZE as u32 * resolution);
         let decal_layer_texture =
             texture::allocate_simple_texture(device, queue, &decal_layer_content, false);
         let debug_layer_content =
-            texture::TextureContent::new(grid.size() * resolution, grid.size() * resolution);
+            texture::TextureContent::new(CHUNK_SIZE as u32 * resolution, CHUNK_SIZE as u32 * resolution);
         let debug_layer_texture =
             texture::allocate_simple_texture(device, queue, &decal_layer_content, false);
         //TODO: improve this
@@ -172,8 +168,7 @@ pub struct DrawableTileMap<'a> {
 
 impl<'a> DrawableTileMap<'a> {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, tilemap: TileMap) -> Self {
-        let map_size = tilemap.grid.size();
-        let render_data = TileMapRenderData::new(device, queue, &tilemap.grid);
+        let render_data = TileMapRenderData::new(device, queue, &tilemap.chunk);
         let mut drawable_map = DrawableTileMap {
             map: tilemap,
             render_data,
@@ -183,8 +178,8 @@ impl<'a> DrawableTileMap<'a> {
         // This creates somewhat of an optical illusion (everything looks smaller) which might be
         // undesirable. It's also pretty slow but that can be improved if absolute necessary
         // Also the checkered pattern can in reality be a 4x4 texture that's repeated
-        for y in 0..map_size {
-            for x in 0..map_size {
+        for y in 0..CHUNK_SIZE as u32 {
+            for x in 0..CHUNK_SIZE as u32 {
                 if (x + y) % 2 == 0 {
                     drawable_map.modify_tile_color_texels(x, y, |_, _, buffer| buffer.fill(128));
                 } else {
@@ -196,10 +191,10 @@ impl<'a> DrawableTileMap<'a> {
         drawable_map
     }
 
-    /// Get a reference to the underlying TileGrid.
+    /// Get a reference to the underlying MapChunk.
     #[inline]
-    pub fn tile_grid(&self) -> &TileGrid<Tile> {
-        &self.map.grid
+    pub fn tile_grid(&self) -> &MapChunk<Tile> {
+        &self.map.chunk
     }
 
     /// Get a reference to the tile map's name.
@@ -218,7 +213,7 @@ impl<'a> DrawableTileMap<'a> {
 
     #[inline]
     pub fn reset_displacment(&mut self) {
-        self.map.grid = generate_grid(self.tile_grid().size(), *self.tile_grid().transform());
+        self.map.chunk = generate_grid(*self.tile_grid().transform());
         self.render_data.needs_vertex_update = true;
     }
 
@@ -226,8 +221,8 @@ impl<'a> DrawableTileMap<'a> {
         let (_, buffer) = self.render_data.color_buffer_mut();
         buffer.fill(0);
         // Generate checkered default texture
-        for y in 0..self.tile_grid().size() {
-            for x in 0..self.tile_grid().size() {
+        for y in 0..CHUNK_SIZE as u32 {
+            for x in 0..CHUNK_SIZE as u32 {
                 if (x + y) % 2 == 0 {
                     self.modify_tile_color_texels(x, y, |_, _, buffer| buffer.fill(128));
                 } else {
@@ -253,12 +248,12 @@ impl<'a> DrawableTileMap<'a> {
     }
 
     pub fn fill_debug_layer(&mut self) {
-        let size = self.tile_grid().size();
         let height_resolution = self.render_data.tile_height_resultion;
         let width_resolution = self.render_data.tile_width_resultion;
-        for x in 0..size {
-            for y in 0..size {
-                if let Some(tile) = self.tile_grid().tile(x as i32, y as i32) {
+        for x in 0..CHUNK_SIZE {
+            for y in 0..CHUNK_SIZE {
+                let index = ChunkIndex::new(x, y).expect("For loops doesn't match grid size");
+                let tile = self.tile_grid().tile(index);
                     match tile.tile_type {
                         TileType::Flat => {}
                         TileType::RampTop
@@ -269,9 +264,8 @@ impl<'a> DrawableTileMap<'a> {
                                 {
                                     let (stride, buffer) = self.render_data.debug_buffer_mut();
                                     Self::modify_tile_texels(
-                                        x,
-                                        y,
-                                        size,
+                                        x as u32,
+                                        y as u32,
                                         width_resolution,
                                         height_resolution,
                                         stride,
@@ -287,9 +281,8 @@ impl<'a> DrawableTileMap<'a> {
                         _ => {
                             let (stride, buffer) = self.render_data.debug_buffer_mut();
                             Self::modify_tile_texels(
-                                x,
-                                y,
-                                size,
+                                x as u32,
+                                y as u32,
                                 width_resolution,
                                 height_resolution,
                                 stride,
@@ -300,7 +293,6 @@ impl<'a> DrawableTileMap<'a> {
                                 },
                             );
                         }
-                    }
                 }
             }
         }
@@ -315,7 +307,7 @@ impl<'a> DrawableTileMap<'a> {
 
     #[inline]
     pub fn tile(&self, x: i32, y: i32) -> Option<&Tile> {
-        self.map.grid.tile(x, y)
+        ChunkIndex::new(x, y).ok().map(|idx| self.map.chunk.tile(idx))
     }
 
     pub fn to_tile_coords(&self, world_coords: Vec3A) -> Option<UVec2> {
@@ -329,8 +321,8 @@ impl<'a> DrawableTileMap<'a> {
         if map_coords.cmplt(Vec2::ZERO).any()
             || map_coords
                 .cmpgt(Vec2::new(
-                    self.tile_grid().size() as f32,
-                    self.tile_grid().size() as f32,
+                    CHUNK_SIZE as f32,
+                    CHUNK_SIZE as f32,
                 ))
                 .any()
         {
@@ -345,7 +337,6 @@ impl<'a> DrawableTileMap<'a> {
     fn modify_tile_texels<F>(
         tile_x: u32,
         tile_y: u32,
-        map_size: u32,
         width_resolution: u32,
         height_resolution: u32,
         stride: u32,
@@ -355,7 +346,7 @@ impl<'a> DrawableTileMap<'a> {
         F: Fn(u32, u32, &mut [u8]) + Send + Sync,
     {
         // texel row size
-        let row_size = stride * map_size * width_resolution;
+        let row_size = stride * CHUNK_SIZE as u32 * width_resolution;
         // only go through the relevant _tile_ row
         let texel_start = (tile_y * row_size * height_resolution) as usize;
         let texel_end = ((tile_y + 1) * row_size * height_resolution) as usize;
@@ -388,7 +379,6 @@ impl<'a> DrawableTileMap<'a> {
         Self::modify_tile_texels(
             tile_x,
             tile_y,
-            self.map.grid.size(),
             width_resolution,
             height_resolution,
             stride,
@@ -407,7 +397,6 @@ impl<'a> DrawableTileMap<'a> {
         Self::modify_tile_texels(
             tile_x,
             tile_y,
-            self.map.grid.size(),
             width_resolution,
             height_resolution,
             stride,
@@ -426,7 +415,6 @@ impl<'a> DrawableTileMap<'a> {
         Self::modify_tile_texels(
             tile_x,
             tile_y,
-            self.map.grid.size(),
             width_resolution,
             height_resolution,
             stride,
@@ -438,7 +426,6 @@ impl<'a> DrawableTileMap<'a> {
     /// Modify a tilemap texutre by providing a closure which modifies the texel at the
     /// provided coordinates
     fn modify_texels<F>(
-        map_size: u32,
         width_resolution: u32,
         stride: u32,
         texel_buffer: &mut [u8],
@@ -447,7 +434,7 @@ impl<'a> DrawableTileMap<'a> {
         F: Fn(u32, u32, &mut [u8]) + Send + Sync,
     {
         // texel row size
-        let row_size = stride * map_size * width_resolution;
+        let row_size = stride * CHUNK_SIZE as u32 * width_resolution;
         texel_buffer
             .par_chunks_exact_mut(row_size as usize)
             .enumerate()
@@ -467,7 +454,7 @@ impl<'a> DrawableTileMap<'a> {
     {
         let width_resolution = self.render_data.tile_width_resultion;
         let (stride, buffer) = self.render_data.decal_buffer_mut();
-        Self::modify_texels(self.map.grid.size(), width_resolution, stride, buffer, func);
+        Self::modify_texels(width_resolution, stride, buffer, func);
     }
 
     pub fn modify_color_texels<F>(&mut self, func: F)
@@ -476,7 +463,7 @@ impl<'a> DrawableTileMap<'a> {
     {
         let width_resolution = self.render_data.tile_width_resultion;
         let (stride, buffer) = self.render_data.color_buffer_mut();
-        Self::modify_texels(self.map.grid.size(), width_resolution, stride, buffer, func);
+        Self::modify_texels(width_resolution, stride, buffer, func);
     }
 
     //TODO: This doesn't serialize the color texture
@@ -497,7 +484,7 @@ impl<'a> DrawableTileMap<'a> {
         if self.render_data.needs_vertex_update {
             let data = self
                 .map
-                .grid
+                .chunk
                 .tiles()
                 .iter()
                 .flat_map(|tile| tile.verticies.iter().copied())

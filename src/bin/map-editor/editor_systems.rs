@@ -1,17 +1,18 @@
 use egui::CollapsingHeader;
-use glam::{Affine3A, IVec2, Quat, UVec2, Vec2, Vec3, Vec3A, Vec3Swizzles, Vec4, Vec4Swizzles};
+use glam::{Affine3A, Quat, UVec2, Vec2, Vec3, Vec3A, Vec3Swizzles};
 use itertools::Itertools;
 use legion::{systems::CommandBuffer, world::SubWorld, *};
-use std::{f32::consts::PI, path::Path, time::Instant};
+use std::{path::Path, time::Instant};
 use unnamed_rts::{
     assets::{Assets, Handle},
     components::{Selectable, Transform},
     input::{CursorPosition, MouseButtonState},
+    map_chunk::{ChunkIndex, CHUNK_SIZE},
     navigation::FlowField,
     rendering::{
         camera::Camera,
         drawable_tilemap::*,
-        gltf::{GltfModel, InstanceData},
+        gltf::GltfModel,
         ui::ui_resources::{UiContext, UiTexture},
     },
     resources::{Time, WindowSize},
@@ -190,9 +191,9 @@ pub fn editor_ui(
         ui.horizontal(|ui| {
             ui.columns(3, |columns| {
                 columns[1].label(format!(
-                    "Map editor: {}, size: {}",
+                    "Map editor: {}, chunk size: {}",
                     tilemap.name(),
-                    tilemap.tile_grid().size(),
+                    CHUNK_SIZE,
                 ));
             })
         });
@@ -331,12 +332,8 @@ pub fn selection(
         query.par_for_each_mut(world, |(transform, handle, mut selectable)| {
             let model = asset_storage.get(handle).unwrap();
             let (min, max) = (model.min_vertex, model.max_vertex);
-            let world_min = transform
-                .matrix
-                .transform_point3a(min.into());
-            let world_max = transform
-                .matrix
-                .transform_point3a(max.into());
+            let world_min = transform.matrix.transform_point3a(min.into());
+            let world_max = transform.matrix.transform_point3a(max.into());
             selectable.is_selected = intesercts(
                 camera.get_position(),
                 dirfrac,
@@ -348,6 +345,7 @@ pub fn selection(
 }
 //TODO: Associate each selected entity with a group which in turn gets assigned a flowfield
 #[system]
+#[allow(clippy::too_many_arguments)]
 pub fn move_action(
     world: &mut SubWorld,
     command_buffer: &mut CommandBuffer,
@@ -373,11 +371,12 @@ pub fn move_action(
                         // there was an intersection
                         let target = (t * ray.direction) + ray.origin;
                         info!("Move target: {}", target);
-                        // här borde man få en path istället
-                        command_buffer.add_component(
-                            *entity,
-                            FlowField::new(target.x as i32, target.z as i32, &tilemap.tile_grid()),
-                        );
+                        if let Ok(index) = ChunkIndex::new(target.x as i32, target.y as i32) {
+                            command_buffer.add_component(
+                                *entity,
+                                FlowField::new(index, tilemap.tile_grid()),
+                            );
+                        }
                     }
                 }
             }
@@ -387,7 +386,7 @@ pub fn move_action(
 
 #[derive(Debug)]
 pub struct DebugFlow {
-    pub current_target: Option<IVec2>,
+    pub current_target: Option<ChunkIndex>,
     pub arrow_handle: Handle<GltfModel>,
 }
 
@@ -409,27 +408,32 @@ pub fn movement(
     #[resource] redraw_flow: &mut DebugFlow,
     query: &mut Query<(Entity, &FlowField)>,
 ) {
-    let size = tilemap.tile_grid().size() as i32;
     query.for_each(world, |(_entity, flow_field)| {
         if redraw_flow.current_target != Some(flow_field.target) {
             redraw_flow.current_target = Some(flow_field.target);
             tilemap.reset_debug_layer();
             let transform = *tilemap.tile_grid().transform();
-            let debug_arrows = (0..size)
-                .cartesian_product(0..size)
+            let debug_arrows = (0..CHUNK_SIZE)
+                .cartesian_product(0..CHUNK_SIZE)
                 .into_iter()
                 .map(|(y, x)| {
-                    let flow_tile = flow_field.grid.tile(x, y).unwrap();
+                    let flow_tile = flow_field.grid.tile(ChunkIndex::new(x, y).unwrap());
                     tilemap.modify_tile_debug_texels(x as u32, y as u32, |_, _, buffer| {
                         buffer[1] = std::cmp::max(255_i32 - flow_tile.distance as i32, 41) as u8;
                         buffer[2] = std::cmp::max(127_i32 - flow_tile.distance as i32, 56) as u8;
                         buffer[3] = 255;
                         buffer[0] = 255 - buffer[1];
                     });
-                    let height = tilemap.tile_grid().tile(x, y).unwrap().middle_height();
+                    let height = tilemap
+                        .tile_grid()
+                        .tile(ChunkIndex::new(x, y).unwrap())
+                        .middle_height();
                     // 1. calc offset for arrow
-                    let translation =
-                        Vec3::new(x as f32 * TILE_WIDTH + 0.5, height + 0.7, y as f32 * TILE_HEIGHT + 0.5);
+                    let translation = Vec3::new(
+                        x as f32 * TILE_WIDTH + 0.5,
+                        height + 0.7,
+                        y as f32 * TILE_HEIGHT + 0.5,
+                    );
                     let scale = Vec3::splat(0.1);
                     // 2. create Transform for it by providing pos, rotation, scale
                     let arrow_transform = Affine3A::from_scale_rotation_translation(

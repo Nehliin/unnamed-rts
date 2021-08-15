@@ -113,6 +113,7 @@ impl State for EditState {
         resources.insert(DebugFlow {
             current_target: None,
             arrow_handle: debug_arrow,
+            spawned_arrows: None,
         });
     }
 

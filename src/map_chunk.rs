@@ -120,8 +120,12 @@ impl<T: Debug + Send> MapChunk<T> {
     }
 
     #[inline]
+    pub fn indicies() -> impl Iterator<Item = ChunkIndex> {
+        (0..(CHUNK_SIZE * CHUNK_SIZE) as usize).map(ChunkIndex)
+    }
+
+    #[inline]
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.tiles.iter_mut()
     }
-    
 }

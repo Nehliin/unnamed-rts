@@ -371,11 +371,9 @@ pub fn move_action(
                         // there was an intersection
                         let target = (t * ray.direction) + ray.origin;
                         info!("Move target: {}", target);
-                        if let Ok(index) = ChunkIndex::new(target.x as i32, target.y as i32) {
-                            command_buffer.add_component(
-                                *entity,
-                                FlowField::new(index, tilemap.tile_grid()),
-                            );
+                        if let Ok(index) = ChunkIndex::new(target.x as i32, target.z as i32) {
+                            command_buffer
+                                .add_component(*entity, FlowField::new(index, tilemap.tile_grid()));
                         }
                     }
                 }
@@ -388,6 +386,7 @@ pub fn move_action(
 pub struct DebugFlow {
     pub current_target: Option<ChunkIndex>,
     pub arrow_handle: Handle<GltfModel>,
+    pub spawned_arrows: Option<Vec<Entity>>,
 }
 
 fn look_at(direction: Vec3A) -> Quat {
@@ -411,19 +410,17 @@ pub fn movement(
     query.for_each(world, |(_entity, flow_field)| {
         if redraw_flow.current_target != Some(flow_field.target) {
             redraw_flow.current_target = Some(flow_field.target);
-            tilemap.reset_debug_layer();
+            if let Some(arrows) = redraw_flow.spawned_arrows.as_ref() {
+                for entity in arrows.iter() {
+                    command_buffer.remove(*entity);
+                }
+            }
             let transform = *tilemap.tile_grid().transform();
             let debug_arrows = (0..CHUNK_SIZE)
                 .cartesian_product(0..CHUNK_SIZE)
                 .into_iter()
                 .map(|(y, x)| {
                     let flow_tile = flow_field.grid.tile(ChunkIndex::new(x, y).unwrap());
-                    tilemap.modify_tile_debug_texels(x as u32, y as u32, |_, _, buffer| {
-                        buffer[1] = std::cmp::max(255_i32 - flow_tile.distance as i32, 41) as u8;
-                        buffer[2] = std::cmp::max(127_i32 - flow_tile.distance as i32, 56) as u8;
-                        buffer[3] = 255;
-                        buffer[0] = 255 - buffer[1];
-                    });
                     let height = tilemap
                         .tile_grid()
                         .tile(ChunkIndex::new(x, y).unwrap())
@@ -450,8 +447,8 @@ pub fn movement(
                     )
                 })
                 .collect::<Vec<_>>();
-            // TODO: SPAWN THE ARROWS SOMEHOW AND THEN ALSO RENDER THEM WHEN NECESSARY
-            command_buffer.extend(debug_arrows);
+            let spawned_arrows = command_buffer.extend(debug_arrows);
+            redraw_flow.spawned_arrows = Some(spawned_arrows.to_vec());
         }
     });
 }

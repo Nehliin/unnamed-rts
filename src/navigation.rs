@@ -4,7 +4,7 @@ use glam::Vec3A;
 
 use crate::{
     map_chunk::{ChunkIndex, MapChunk, CHUNK_SIZE},
-    tilemap::Tile,
+    tilemap::{Tile, TileType},
 };
 
 /// Contains positional info + distance so it can be stored in a BinaryHeap
@@ -58,11 +58,14 @@ impl FlowField {
     }
 }
 
-// TODO: more sofistication here
-fn temp_cost(n_tile: &Tile, current_tile: &Tile) -> u32 {
-    // check tile type etc
+fn calc_distance(n_tile: &Tile, current_tile: &Tile) -> Option<u32> {
+    // TODO: Middle height is incorrectly set for ramps
     let height_diff = (n_tile.middle_height() - current_tile.middle_height()).abs();
-    height_diff as u32 + 1
+    if height_diff > 1.0 {
+        return None;
+    }
+    // need to get direction to be able to look at tile types
+    Some(height_diff as u32 + 1)
 }
 
 fn generate_distance_field(source_tilemap: &MapChunk<Tile>, target: ChunkIndex) -> DistanceField {
@@ -83,13 +86,14 @@ fn generate_distance_field(source_tilemap: &MapChunk<Tile>, target: ChunkIndex) 
         for neighbour in prev_tile.pos.strict_neighbours() {
             // Distance from neighbour to target
             let n_distance = distance_field.tile_mut(neighbour);
-            if n_distance.is_none() {
+            let dist_to_n = calc_distance(
+                source_tilemap.tile(neighbour),
+                source_tilemap.tile(prev_tile.pos),
+            );
+            // If the tile previously hasn't been visited + there exists a path between them
+            if let (None, Some(dist_to_n)) = (&n_distance, dist_to_n) {
                 // Previously not visited node
-                let new_distance = prev_tile.distance
-                    + temp_cost(
-                        source_tilemap.tile(neighbour),
-                        source_tilemap.tile(prev_tile.pos),
-                    );
+                let new_distance = prev_tile.distance + dist_to_n;
                 // Update distance field
                 *n_distance = Some(new_distance);
                 // Continue fill algo based on distance cost
@@ -107,8 +111,7 @@ fn generate_flow_direction(
     distance_field: &DistanceField,
     source_tilemap: &MapChunk<Tile>,
 ) -> MapChunk<FlowTile> {
-    let tiles = 
-        DistanceField::indicies()
+    let tiles = DistanceField::indicies()
         .map(|current_idx| {
             // For each tile find neighbour index with lowest cost to target
             if let Some(n_closest) = current_idx

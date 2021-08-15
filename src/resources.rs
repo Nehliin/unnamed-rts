@@ -147,7 +147,7 @@ impl NetworkSerialization {
     pub fn deserialize_new_world(&self, world_bytes: &[u8]) -> Result<World> {
         let new_world = self.registry.as_deserialize(&self.canon).deserialize(
             &mut Deserializer::from_slice(
-                &world_bytes,
+                world_bytes,
                 DefaultOptions::new()
                     .with_fixint_encoding()
                     .allow_trailing_bytes(),

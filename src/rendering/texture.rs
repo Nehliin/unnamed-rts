@@ -201,7 +201,7 @@ pub fn allocate_simple_texture(
         bytes_per_row: NonZeroU32::new(stride * size.width),
         rows_per_image: NonZeroU32::new(size.height),
     };
-    queue.write_texture(texutre_copy_view, &bytes, texture_data_layout, *size);
+    queue.write_texture(texutre_copy_view, bytes, texture_data_layout, *size);
     texture
 }
 

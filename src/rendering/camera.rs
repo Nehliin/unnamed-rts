@@ -113,7 +113,7 @@ impl Camera {
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Camera bindgroup"),
-            layout: &Self::get_or_create_layout(device),
+            layout: Self::get_or_create_layout(device),
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {

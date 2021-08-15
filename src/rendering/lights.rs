@@ -74,7 +74,7 @@ impl LightUniformBuffer {
         });
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Light uniform bindgroup"),
-            layout: &Self::get_or_create_layout(&device),
+            layout: Self::get_or_create_layout(device),
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,

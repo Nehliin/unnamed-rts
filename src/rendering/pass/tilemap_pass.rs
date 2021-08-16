@@ -155,7 +155,7 @@ pub fn draw(
         label: Some("Tilemap pass encoder"),
     });
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-       label: Some("Tilemap render pass"),
+        label: Some("Tilemap render pass"),
         color_attachments: &[wgpu::RenderPassColorAttachment {
             view: &current_frame.view,
             resolve_target: None,

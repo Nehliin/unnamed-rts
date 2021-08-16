@@ -6,9 +6,9 @@ pub mod assets;
 pub mod components;
 #[cfg(feature = "graphics")]
 pub mod engine;
-pub mod map_chunk;
 #[cfg(feature = "graphics")]
 pub mod input;
+pub mod map_chunk;
 pub mod navigation;
 #[cfg(feature = "graphics")]
 pub mod rendering;

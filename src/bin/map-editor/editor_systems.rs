@@ -446,7 +446,6 @@ fn debug_draw_flow_field(
     }
 }
 
-
 #[system]
 pub fn movement(
     world: &mut SubWorld,

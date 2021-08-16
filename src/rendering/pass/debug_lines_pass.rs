@@ -25,8 +25,8 @@ pub struct BoundingBoxMap {
     vertex_info_map: FxHashMap<Handle<GltfModel>, ImmutableVertexData<BoxVert>>,
 }
 
-#[system]
 // maybe handle rotation here at some point, currently just using AABB
+#[system]
 pub fn update_bounding_boxes(
     world: &SubWorld,
     #[resource] bounding_box_map: &mut BoundingBoxMap,
@@ -37,12 +37,12 @@ pub fn update_bounding_boxes(
     query.for_each_chunk(world, |chunk| {
         let (_, models) = chunk.get_components();
         if let Some(model_handle) = models.get(0) {
-            let model = asset_storage.get(&model_handle).unwrap();
-            if !bounding_box_map.vertex_info_map.contains_key(&model_handle) {
+            let model = asset_storage.get(model_handle).unwrap();
+            if !bounding_box_map.vertex_info_map.contains_key(model_handle) {
                 let buffer = calc_buffer(&model.min_vertex, &model.max_vertex);
                 bounding_box_map.vertex_info_map.insert(
                     *model_handle,
-                    VertexBuffer::allocate_immutable_buffer(&device, &buffer),
+                    VertexBuffer::allocate_immutable_buffer(device, &buffer),
                 );
             }
         }
@@ -90,13 +90,13 @@ pub fn draw(
     });
     render_pass.push_debug_group("Debug lines debug group");
     render_pass.set_pipeline(pipeline);
-    render_pass.set_bind_group(0, &camera.bind_group(), &[]);
+    render_pass.set_bind_group(0, camera.bind_group(), &[]);
     if debug_settings.show_bounding_boxes {
         query.for_each_chunk(world, |chunk| {
             let (transforms, models) = chunk.get_components();
             if let Some(model_handle) = models.get(0) {
-                let model = asset_storage.get(&model_handle).unwrap();
-                let buffer = bounding_box_map.vertex_info_map.get(&model_handle).unwrap();
+                let model = asset_storage.get(model_handle).unwrap();
+                let buffer = bounding_box_map.vertex_info_map.get(model_handle).unwrap();
                 render_pass.set_vertex_buffer(0, model.instance_buffer.slice(..));
                 render_pass.set_vertex_buffer(1, buffer.slice(..));
                 render_pass.draw(0..24, 0..transforms.len() as u32);

@@ -55,7 +55,7 @@ pub fn move_action(
             if selectable.is_selected {
                 let ray = camera.raycast(mouse_pos, window_size);
                 // check intersection with the regular ground plan
-                let normal = Vec3A::new(0.0, 1.0, 0.0);
+                let normal = Vec3A::Y;
                 let denominator = normal.dot(ray.direction);
                 if denominator.abs() > 0.0001 {
                     // it isn't parallel to the plane
@@ -96,15 +96,19 @@ pub fn selection(
         let ray = camera.raycast(mouse_pos, window_size);
         let dirfrac = ray.direction.recip();
         query.par_for_each_mut(world, |(transform, handle, mut selectable)| {
-            let model = asset_storage.get(&handle).unwrap();
+            let model = asset_storage.get(handle).unwrap();
             let (min, max) = (model.min_vertex, model.max_vertex);
-            let world_min = transform.get_model_matrix() * Vec4::new(min.x, min.y, min.z, 1.0);
-            let world_max = transform.get_model_matrix() * Vec4::new(max.x, max.y, max.z, 1.0);
+            let world_min = transform
+                .matrix
+                .transform_point3a(Vec3A::new(min.x, min.y, min.z));
+            let world_max = transform
+                .matrix
+                .transform_point3a(Vec3A::new(max.x, max.y, max.z));
             selectable.is_selected = intesercts(
                 camera.get_position(),
                 dirfrac,
-                world_min.xyz().into(),
-                world_max.xyz().into(),
+                world_min.xyz(),
+                world_max.xyz(),
             );
         })
     }

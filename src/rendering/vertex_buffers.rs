@@ -50,7 +50,7 @@ impl<T: VertexBuffer> VertexBufferData for MutableVertexData<T> {
 impl<T: VertexBuffer> MutableVertexData<T> {
     #[allow(dead_code)]
     pub fn update(&self, queue: &wgpu::Queue, buffer_data: &[T]) {
-        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&buffer_data));
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(buffer_data));
     }
 }
 
@@ -66,7 +66,7 @@ pub trait VertexBuffer: Pod + Zeroable {
             buffer: device.create_buffer_init(&BufferInitDescriptor {
                 label: Some(&format!("Immutable buffer of: {}", type_name::<Self>())),
                 usage: wgpu::BufferUsage::VERTEX,
-                contents: bytemuck::cast_slice(&buffer_data),
+                contents: bytemuck::cast_slice(buffer_data),
             }),
         }
     }
@@ -80,7 +80,7 @@ pub trait VertexBuffer: Pod + Zeroable {
             buffer: device.create_buffer_init(&BufferInitDescriptor {
                 label: Some(&format!("Mutable buffer of: {}", type_name::<Self>())),
                 usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
-                contents: bytemuck::cast_slice(&buffer_data),
+                contents: bytemuck::cast_slice(buffer_data),
             }),
         }
     }

@@ -60,7 +60,7 @@ pub fn add_client_components(
     model: &Handle<GltfModel>,
 ) {
     let mut query = <(Entity, Read<EntityType>)>::query();
-    let mut command_buffer = CommandBuffer::new(&world);
+    let mut command_buffer = CommandBuffer::new(world);
     for (entity, _entity_type) in query.iter(world) {
         command_buffer.add_component(*entity, *model);
         command_buffer.add_component(*entity, Selectable { is_selected: false });
@@ -98,7 +98,7 @@ pub fn server_update(
         match event {
             SocketEvent::Packet(packet) => {
                 let ServerUpdate::State { transforms } =
-                    net_serialization.deserialize_server_update(&packet.payload());
+                    net_serialization.deserialize_server_update(packet.payload());
                 // Safety: there must be a unique entity id per element in the update which is currently
                 // guarenteed by the server query that creates the transform vec
                 transforms

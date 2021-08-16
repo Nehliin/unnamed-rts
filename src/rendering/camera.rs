@@ -40,7 +40,7 @@ impl From<&Camera> for CameraUniform {
     }
 }
 
-pub const CAMERA_SPEED: f32 = 4.5;
+pub const CAMERA_SPEED: f32 = 10.5;
 
 pub struct Ray {
     pub origin: Vec3A,
@@ -113,7 +113,7 @@ impl Camera {
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Camera bindgroup"),
-            layout: &Self::get_or_create_layout(device),
+            layout: Self::get_or_create_layout(device),
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {

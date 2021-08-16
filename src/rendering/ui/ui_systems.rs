@@ -187,15 +187,15 @@ pub fn end_ui_frame(
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
         label: Some("Ui command encoder"),
     });
-    pass.update_texture(&device, &queue, &context.texture());
-    pass.update_buffers(&device, &queue, &paint_jobs, &window_size);
+    pass.update_texture(device, queue, &context.texture());
+    pass.update_buffers(device, queue, &paint_jobs, window_size);
     // Record all render passes.
     pass.draw(
         &mut encoder,
         &current_frame.view,
         &paint_jobs,
         ui_textures,
-        &window_size,
+        window_size,
     );
     pass.command_sender
         .send(encoder.finish())

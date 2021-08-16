@@ -1,5 +1,6 @@
 use super::texture::*;
 use crate::assets::AssetLoader;
+use crate::components::Transform;
 use crate::rendering::vertex_buffers::*;
 use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
@@ -85,11 +86,11 @@ pub struct InstanceData {
 }
 
 impl InstanceData {
-    pub fn new(model: Mat4) -> Self {
-        let sub_mat = Mat3::from_mat4(model);
-        let normal_matrix = sub_mat.inverse().transpose();
+    pub fn new(model: &Transform) -> Self {
+        let sub_mat = model.matrix.matrix3;
+        let normal_matrix = sub_mat.inverse().transpose().into();
         InstanceData {
-            model,
+            model: model.matrix.into(),
             normal_matrix,
             _pad: Vec3::ZERO,
         }
@@ -157,7 +158,7 @@ impl PbrMaterialTexture {
         sampler_info: &gltf::texture::Sampler,
         srgb: bool,
     ) -> Self {
-        let texture = allocate_simple_texture(device, queue, &texture_content, srgb);
+        let texture = allocate_simple_texture(device, queue, texture_content, srgb);
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("PbrMaterial texture sampler"),
             address_mode_u: match sampler_info.wrap_s() {
@@ -292,7 +293,7 @@ impl PbrMaterial {
         let placeholder = get_white_placeholder_texture(device, queue);
         let normal_map_placeholder = get_normal_placeholder_texture(device, queue);
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &Self::get_or_create_layout(device),
+            layout: Self::get_or_create_layout(device),
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,

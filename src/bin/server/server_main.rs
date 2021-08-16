@@ -26,7 +26,11 @@ struct ConnectedClients {
     addrs: Vec<SocketAddrV4>,
 }
 
-fn setup_world(world: &mut World, net_serilization: &NetworkSerialization) -> Vec<u8> {
+fn setup_world(
+    world: &mut World,
+    _resources: &mut Resources,
+    net_serilization: &NetworkSerialization,
+) -> Vec<u8> {
     world.extend(vec![
         (
             EntityType::BasicUnit,
@@ -47,6 +51,9 @@ fn setup_world(world: &mut World, net_serilization: &NetworkSerialization) -> Ve
             },
         ),*/
     ]);
+    // This must be synced with the clients
+    //    let map = TileMap::load(std::path::Path::new("assets/Tilemap.map")).unwrap();
+    //    resources.insert(map);
     net_serilization.serialize_world(world, any())
 }
 
@@ -61,7 +68,7 @@ fn start_game(
     for event in socket.receiver.iter() {
         match event {
             SocketEvent::Packet(packet) => {
-                match net_serilization.deserialize_client_update(&packet.payload()) {
+                match net_serilization.deserialize_client_update(packet.payload()) {
                     ClientUpdate::StartGame { ip, port } => {
                         let addr = SocketAddrV4::new(ip.into(), port);
                         if !connected_clients.addrs.contains(&addr) {
@@ -116,7 +123,7 @@ fn main() {
 
     let mut world = World::default();
     let mut resources = Resources::default();
-    let initial_state = setup_world(&mut world, &net_serilization);
+    let initial_state = setup_world(&mut world, &mut resources, &net_serilization);
     let mut connected_clients = ConnectedClients::default();
     start_game(
         &network_socket,
@@ -166,7 +173,7 @@ fn client_input(
     for event in network.receiver.try_iter() {
         match event {
             SocketEvent::Packet(packet) => {
-                match net_serilization.deserialize_client_update(&packet.payload()) {
+                match net_serilization.deserialize_client_update(packet.payload()) {
                     ClientUpdate::Move { entity, target } => {
                         info!("Successfully deserialized packet!");
                         command_buffer.add_component(

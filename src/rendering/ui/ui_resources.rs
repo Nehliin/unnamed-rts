@@ -60,7 +60,7 @@ impl<'a> UiTexture<'a> {
         label: &str,
         content: TextureContent<'a>,
     ) -> Self {
-        let texture = allocate_simple_texture(&device, &queue, &content, true);
+        let texture = allocate_simple_texture(device, queue, &content, true);
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some(format!("{}_texture_bind_group", label).as_str()),

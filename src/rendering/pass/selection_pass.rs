@@ -72,7 +72,7 @@ pub fn draw(
     });
     render_pass.push_debug_group("Selection pass");
     render_pass.set_pipeline(&pass.render_pipeline);
-    render_pass.set_bind_group(0, &camera.bind_group(), &[]);
+    render_pass.set_bind_group(0, camera.bind_group(), &[]);
     let mut query = <(Read<Transform>, Read<Selectable>, Read<Handle<GltfModel>>)>::query();
     query.for_each_chunk(world, |chunk| {
         let (_, selectable, models) = chunk.get_components();

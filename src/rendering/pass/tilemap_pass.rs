@@ -96,7 +96,7 @@ impl TileMapPass {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Tilemap pipeline layout"),
                 bind_group_layouts: &[
-                    &get_or_create_tilemap_layout(device),
+                    get_or_create_tilemap_layout(device),
                     Camera::get_or_create_layout(device),
                 ],
                 push_constant_ranges: &[],
@@ -175,7 +175,7 @@ pub fn draw(
     });
     render_pass.push_debug_group("Tilemap pass");
     render_pass.set_pipeline(&pass.render_pipeline);
-    render_pass.set_bind_group(1, &camera.bind_group(), &[]);
+    render_pass.set_bind_group(1, camera.bind_group(), &[]);
     tile_map.draw(&mut render_pass);
     render_pass.pop_debug_group();
     drop(render_pass);

@@ -84,7 +84,7 @@ pub fn draw(
     });
     render_pass.push_debug_group("Model pass");
     render_pass.set_pipeline(&pass.render_pipeline);
-    render_pass.set_bind_group(0, &camera.bind_group(), &[]);
+    render_pass.set_bind_group(0, camera.bind_group(), &[]);
     render_pass.set_bind_group(2, &light_uniform.bind_group, &[]);
     query.for_each_chunk(world, |chunk| {
         let (transforms, models) = chunk.get_components();
@@ -114,9 +114,9 @@ impl ModelPass {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Model pipeline layout"),
                 bind_group_layouts: &[
-                    Camera::get_or_create_layout(&device),
-                    PbrMaterial::get_or_create_layout(&device),
-                    LightUniformBuffer::get_or_create_layout(&device),
+                    Camera::get_or_create_layout(device),
+                    PbrMaterial::get_or_create_layout(device),
+                    LightUniformBuffer::get_or_create_layout(device),
                 ],
                 push_constant_ranges: &[],
             });

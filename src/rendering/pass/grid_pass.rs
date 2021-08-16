@@ -42,7 +42,7 @@ pub fn draw(
     });
     render_pass.push_debug_group("Grid pass");
     render_pass.set_pipeline(&pass.render_pipeline);
-    render_pass.set_bind_group(0, &camera.bind_group(), &[]);
+    render_pass.set_bind_group(0, camera.bind_group(), &[]);
     // This is kindof hacky because the render pass isn't actually needed here
     // but the main loop expects an command encoder or it will freeze so until
     // that is changed this will have to do
@@ -71,7 +71,7 @@ impl GridPass {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Grid pass pipeline layout"),
-                bind_group_layouts: &[Camera::get_or_create_layout(&device)],
+                bind_group_layouts: &[Camera::get_or_create_layout(device)],
                 push_constant_ranges: &[],
             });
 

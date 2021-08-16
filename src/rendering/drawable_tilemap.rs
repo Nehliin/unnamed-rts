@@ -127,7 +127,7 @@ impl<'a> TileMapRenderData<'a> {
             ..Default::default()
         });
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &tilemap_pass::get_or_create_tilemap_layout(device),
+            layout: tilemap_pass::get_or_create_tilemap_layout(device),
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,

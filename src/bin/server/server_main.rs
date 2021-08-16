@@ -68,7 +68,7 @@ fn start_game(
     for event in socket.receiver.iter() {
         match event {
             SocketEvent::Packet(packet) => {
-                match net_serilization.deserialize_client_update(&packet.payload()) {
+                match net_serilization.deserialize_client_update(packet.payload()) {
                     ClientUpdate::StartGame { ip, port } => {
                         let addr = SocketAddrV4::new(ip.into(), port);
                         if !connected_clients.addrs.contains(&addr) {
@@ -173,7 +173,7 @@ fn client_input(
     for event in network.receiver.try_iter() {
         match event {
             SocketEvent::Packet(packet) => {
-                match net_serilization.deserialize_client_update(&packet.payload()) {
+                match net_serilization.deserialize_client_update(packet.payload()) {
                     ClientUpdate::Move { entity, target } => {
                         info!("Successfully deserialized packet!");
                         command_buffer.add_component(

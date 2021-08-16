@@ -14,7 +14,7 @@ pub struct TileVertex {
     uv: Vec2,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum TileType {
     Flat,
     RampTop,

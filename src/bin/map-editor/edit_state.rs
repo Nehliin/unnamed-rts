@@ -16,7 +16,7 @@ use unnamed_rts::{
     },
     resources::{DebugRenderSettings, WindowSize},
     states::{State, StateTransition},
-    tilemap::TileMap,
+    tilemap::{TileMap, TILE_WIDTH},
 };
 use wgpu::{Device, Queue};
 
@@ -80,7 +80,11 @@ impl State for EditState {
         let debug_arrow = model_assets.load("arrow.glb").unwrap();
         world.extend(vec![(
             //Transform::new(Vec3::ZERO, Vec3::new(0.5, 0.5, 0.5), Quat::IDENTITY),
-            Transform::new(Vec3::ZERO, Vec3::ONE, Quat::IDENTITY),
+            Transform::new(
+                Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_WIDTH / 2.0),
+                Vec3::ONE,
+                Quat::IDENTITY,
+            ),
             Velocity {
                 velocity: Vec3::splat(0.0),
             },

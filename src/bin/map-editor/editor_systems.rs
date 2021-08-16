@@ -5,9 +5,9 @@ use legion::{systems::CommandBuffer, world::SubWorld, *};
 use std::{path::Path, time::Instant};
 use unnamed_rts::{
     assets::{Assets, Handle},
-    components::{Selectable, Transform},
+    components::{Selectable, Transform, Velocity},
     input::{CursorPosition, MouseButtonState},
-    map_chunk::{ChunkIndex, CHUNK_SIZE},
+    map_chunk::{ChunkIndex, MapChunk, CHUNK_SIZE},
     navigation::FlowField,
     rendering::{
         camera::Camera,
@@ -16,7 +16,7 @@ use unnamed_rts::{
         ui::ui_resources::{UiContext, UiTexture},
     },
     resources::{Time, WindowSize},
-    tilemap::{TileMap, TILE_HEIGHT, TILE_WIDTH},
+    tilemap::{Tile, TileMap, TILE_HEIGHT, TILE_WIDTH},
 };
 use winit::event::MouseButton;
 #[derive(Debug, Default)]
@@ -399,56 +399,90 @@ fn look_at(direction: Vec3A) -> Quat {
     Quat::from_axis_angle(rotation_axis.into(), angle)
 }
 
+fn debug_draw_flow_field(
+    command_buffer: &mut CommandBuffer,
+    flow_field: &FlowField,
+    tilemap: &MapChunk<Tile>,
+    redraw_flow: &mut DebugFlow,
+) {
+    if redraw_flow.current_target != Some(flow_field.target) {
+        redraw_flow.current_target = Some(flow_field.target);
+        if let Some(arrows) = redraw_flow.spawned_arrows.as_ref() {
+            for entity in arrows.iter() {
+                command_buffer.remove(*entity);
+            }
+        }
+        let transform = *tilemap.transform();
+        let debug_arrows = (0..CHUNK_SIZE)
+            .cartesian_product(0..CHUNK_SIZE)
+            .into_iter()
+            .map(|(y, x)| {
+                let flow_tile = flow_field.chunk.tile(ChunkIndex::new(x, y).unwrap());
+                let height = tilemap.tile(ChunkIndex::new(x, y).unwrap()).middle_height();
+                // 1. calc offset for arrow
+                let translation = Vec3::new(
+                    x as f32 * TILE_WIDTH + 0.5,
+                    height + 0.7,
+                    y as f32 * TILE_HEIGHT + 0.5,
+                );
+                let scale = Vec3::splat(0.1);
+                // 2. create Transform for chunky providing pos, rotation, scale
+                let arrow_transform = Affine3A::from_scale_rotation_translation(
+                    scale,
+                    look_at(flow_tile.direction),
+                    translation,
+                );
+                // 3. multiply transforms
+                (
+                    redraw_flow.arrow_handle,
+                    Transform {
+                        matrix: transform.matrix * arrow_transform,
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        let spawned_arrows = command_buffer.extend(debug_arrows);
+        redraw_flow.spawned_arrows = Some(spawned_arrows.to_vec());
+    }
+}
+
+
 #[system]
 pub fn movement(
     world: &mut SubWorld,
     command_buffer: &mut CommandBuffer,
     #[resource] tilemap: &mut DrawableTileMap,
     #[resource] redraw_flow: &mut DebugFlow,
-    query: &mut Query<(Entity, &FlowField)>,
+    #[resource] time: &Time,
+    query: &mut Query<(
+        Entity,
+        &FlowField,
+        &Selectable,
+        &mut Transform,
+        &mut Velocity,
+    )>,
 ) {
-    query.for_each(world, |(_entity, flow_field)| {
-        if redraw_flow.current_target != Some(flow_field.target) {
-            redraw_flow.current_target = Some(flow_field.target);
-            if let Some(arrows) = redraw_flow.spawned_arrows.as_ref() {
-                for entity in arrows.iter() {
-                    command_buffer.remove(*entity);
+    query.for_each_mut(
+        world,
+        |(_entity, flow_field, selectable, transform, velocity)| {
+            if selectable.is_selected {
+                debug_draw_flow_field(command_buffer, flow_field, tilemap.tile_grid(), redraw_flow);
+            }
+            // Movement along the flow field
+            let position = transform.matrix.translation.floor();
+            if let Ok(chunk_pos) = ChunkIndex::new(position.x as i32, position.z as i32) {
+                if chunk_pos != flow_field.target {
+                    let flow_direction = flow_field.chunk.tile(chunk_pos);
+                    if flow_direction.direction != Vec3A::Y {
+                        // TODO: Fix direction and bilinear interpolation
+                        *velocity.velocity = *-flow_direction.direction;
+                    }
+                } else {
+                    *velocity.velocity = *Vec3::ZERO;
                 }
             }
-            let transform = *tilemap.tile_grid().transform();
-            let debug_arrows = (0..CHUNK_SIZE)
-                .cartesian_product(0..CHUNK_SIZE)
-                .into_iter()
-                .map(|(y, x)| {
-                    let flow_tile = flow_field.grid.tile(ChunkIndex::new(x, y).unwrap());
-                    let height = tilemap
-                        .tile_grid()
-                        .tile(ChunkIndex::new(x, y).unwrap())
-                        .middle_height();
-                    // 1. calc offset for arrow
-                    let translation = Vec3::new(
-                        x as f32 * TILE_WIDTH + 0.5,
-                        height + 0.7,
-                        y as f32 * TILE_HEIGHT + 0.5,
-                    );
-                    let scale = Vec3::splat(0.1);
-                    // 2. create Transform for it by providing pos, rotation, scale
-                    let arrow_transform = Affine3A::from_scale_rotation_translation(
-                        scale,
-                        look_at(flow_tile.direction),
-                        translation,
-                    );
-                    // 3. multiply transforms
-                    (
-                        redraw_flow.arrow_handle,
-                        Transform {
-                            matrix: transform.matrix * arrow_transform,
-                        },
-                    )
-                })
-                .collect::<Vec<_>>();
-            let spawned_arrows = command_buffer.extend(debug_arrows);
-            redraw_flow.spawned_arrows = Some(spawned_arrows.to_vec());
-        }
-    });
+            let offset: Vec3A = Vec3A::splat(2.0) * Vec3A::from(velocity.velocity);
+            transform.matrix.translation += offset * time.delta_time;
+        },
+    );
 }

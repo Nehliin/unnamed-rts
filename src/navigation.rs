@@ -38,12 +38,14 @@ type DistanceField = MapChunk<Option<u32>>;
 
 #[derive(Debug, Clone, Copy)]
 pub struct FlowTile {
+    // TODO: only use 2 dim direction and get Y dir from grid geometry
+    // It will allow Bilinear interpolation of the direction, have to fix the arrows though
     pub direction: Vec3A,
 }
 
 #[derive(Debug)]
 pub struct FlowField {
-    pub grid: MapChunk<FlowTile>,
+    pub chunk: MapChunk<FlowTile>,
     pub target: ChunkIndex,
 }
 
@@ -52,20 +54,19 @@ impl FlowField {
         let distance_grid = generate_distance_field(tilemap, target);
         let flow_grid = generate_flow_direction(&distance_grid, tilemap);
         FlowField {
-            grid: flow_grid,
+            chunk: flow_grid,
             target,
         }
     }
 }
 
-fn calc_distance(n_tile: &Tile, current_tile: &Tile) -> Option<u32> {
+fn calc_distance(n_tile: &Tile, _current_tile: &Tile) -> Option<u32> {
     // TODO: Middle height is incorrectly set for ramps
-    let height_diff = (n_tile.middle_height() - current_tile.middle_height()).abs();
-    if height_diff > 1.0 {
+    if n_tile.tile_type != TileType::Flat && n_tile.height_diff > 1 {
         return None;
     }
     // need to get direction to be able to look at tile types
-    Some(height_diff as u32 + 1)
+    Some(1)
 }
 
 fn generate_distance_field(source_tilemap: &MapChunk<Tile>, target: ChunkIndex) -> DistanceField {

@@ -12,7 +12,8 @@ Current goals:
 - [x] Ui support using egui
 - [ ] Animations
 - [ ] RTS game mechanics
-- [ ] Map editor
+  - [x] Flow field prototype implemented for navigation (map editor only currently)
+- [ ] Map editor (Recently switched to tilebased)
   - [x] Terrain editor (Coloring with custom textures not yet implemented)  
 -  Basic Online multiplayer support is in progress using laminar. Ambition and quality of this goal depends amount of time I spend on this project. 
    - [x] Server owns the player state and updates client at ~30hz
@@ -23,7 +24,7 @@ Current goals:
    - [ ] New unit creation  
    - ...and a lot more obviously 
 
-### Screenshots
+### Screenshots (Out of date)
 All graphical repos should have at least a one screenshot
 ![Alt text](rts.png?raw=true "PBR gltf model with normal mapping")
-![Alt text](map-editor.png?raw=true "Terrain editor")
+![Alt text](map-editor.png?raw=true "Old Terrain editor which was based on height maps")

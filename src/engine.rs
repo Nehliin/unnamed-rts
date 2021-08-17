@@ -15,8 +15,9 @@ use wgpu::{
     TextureFormat, TextureUsage,
 };
 use winit::{
-    event::Event,
-    window::{Window, WindowId},
+    dpi::PhysicalSize,
+    event::{self, Event},
+    window::Window,
 };
 
 pub struct Renderer {
@@ -88,14 +89,10 @@ impl Renderer {
         self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
     }
 
-    pub fn begin_frame(&self, resources: &mut Resources) {
+    pub fn begin_frame(&self, resources: &mut Resources) -> Result<(), wgpu::SwapChainError> {
         resources.remove::<SwapChainTexture>();
-        resources.insert(
-            self.swap_chain
-                .get_current_frame()
-                .expect("Expected frame to be available")
-                .output,
-        );
+        resources.insert(self.swap_chain.get_current_frame()?.output);
+        Ok(())
     }
 
     pub fn submit_frame(&self, resources: &mut Resources) {
@@ -212,13 +209,18 @@ impl Engine {
         self.resize(&old_size);
     }
 
-    pub fn event_handler(&mut self, event: &Event<()>, current_window: &WindowId) -> bool {
+    pub fn event_handler(&mut self, event: &Event<()>) -> bool {
         match event {
             Event::WindowEvent {
                 ref event,
-                window_id,
-            } if window_id == current_window => match event {
-                winit::event::WindowEvent::Resized(physical_size) => {
+                window_id: _,
+            } => match event {
+                // Window was minimized do nothing
+                event::WindowEvent::Resized(PhysicalSize {
+                    width: 0,
+                    height: 0,
+                }) => true,
+                event::WindowEvent::Resized(physical_size) => {
                     let mut window_size = self.resources.get_mut::<WindowSize>().unwrap();
                     window_size.physical_height = physical_size.height;
                     window_size.physical_width = physical_size.width;
@@ -227,7 +229,7 @@ impl Engine {
                     self.resize(&new_size);
                     true
                 }
-                winit::event::WindowEvent::ScaleFactorChanged {
+                event::WindowEvent::ScaleFactorChanged {
                     scale_factor,
                     new_inner_size,
                 } => {
@@ -240,14 +242,14 @@ impl Engine {
                     self.resize(&new_size);
                     true
                 }
-                winit::event::WindowEvent::ModifiersChanged(modifier_state) => {
+                event::WindowEvent::ModifiersChanged(modifier_state) => {
                     self.input_handler.handle_modifiers_changed(*modifier_state)
                 }
 
-                winit::event::WindowEvent::CursorMoved { position, .. } => self
+                event::WindowEvent::CursorMoved { position, .. } => self
                     .input_handler
                     .handle_cursor_moved(position, &self.resources),
-                winit::event::WindowEvent::ReceivedCharacter(char) => {
+                event::WindowEvent::ReceivedCharacter(char) => {
                     self.input_handler.handle_recived_char(*char)
                 }
                 //todo?
@@ -269,7 +271,7 @@ impl Engine {
         time.current_time = now;
         drop(time);
 
-        self.renderer.begin_frame(&mut self.resources);
+        self.renderer.begin_frame(&mut self.resources)?;
         self.schedule.execute(&mut self.world, &mut self.resources);
         if let Some(foreground) = self.state_stack.peek_mut() {
             match foreground.on_foreground_tick() {

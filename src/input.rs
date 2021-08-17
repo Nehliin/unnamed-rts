@@ -261,6 +261,11 @@ impl MouseButtonState {
         self.released_current_frame.clear();
     }
 
+    pub fn clear(&mut self) {
+        self.frame_update();
+        self.pressed.clear();
+    }
+
     pub fn is_pressed(&self, button: &MouseButton) -> bool {
         self.pressed.contains(button)
     }
@@ -294,7 +299,6 @@ impl KeyboardState {
     }
 
     pub fn set_released(&mut self, key: VirtualKeyCode) {
-        debug_assert!(self.pressed.is_set(key as u32));
         self.pressed.unset_bit(key as u32);
         self.pressed_current_frame.unset_bit(key as u32);
         self.released_current_frame.set_bit(key as u32);
@@ -303,6 +307,11 @@ impl KeyboardState {
     pub fn frame_update(&mut self) {
         self.pressed_current_frame.clear();
         self.released_current_frame.clear();
+    }
+
+    pub fn clear(&mut self) {
+        self.frame_update();
+        self.pressed.clear();
     }
 
     pub fn is_pressed(&self, key: VirtualKeyCode) -> bool {

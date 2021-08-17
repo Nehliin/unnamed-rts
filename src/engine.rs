@@ -89,14 +89,10 @@ impl Renderer {
         self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
     }
 
-    pub fn begin_frame(&self, resources: &mut Resources) {
+    pub fn begin_frame(&self, resources: &mut Resources) -> Result<(), wgpu::SwapChainError> {
         resources.remove::<SwapChainTexture>();
-        resources.insert(
-            self.swap_chain
-                .get_current_frame()
-                .expect("Expected frame to be available")
-                .output,
-        );
+        resources.insert(self.swap_chain.get_current_frame()?.output);
+        Ok(())
     }
 
     pub fn submit_frame(&self, resources: &mut Resources) {
@@ -219,13 +215,12 @@ impl Engine {
                 ref event,
                 window_id: _,
             } => match event {
-                // Window was minimized
+                // Window was minimized do nothing
                 event::WindowEvent::Resized(PhysicalSize {
                     width: 0,
                     height: 0,
                 }) => true,
                 event::WindowEvent::Resized(physical_size) => {
-                    // Is the window minimized? Do nothing
                     let mut window_size = self.resources.get_mut::<WindowSize>().unwrap();
                     window_size.physical_height = physical_size.height;
                     window_size.physical_width = physical_size.width;
@@ -276,7 +271,7 @@ impl Engine {
         time.current_time = now;
         drop(time);
 
-        self.renderer.begin_frame(&mut self.resources);
+        self.renderer.begin_frame(&mut self.resources)?;
         self.schedule.execute(&mut self.world, &mut self.resources);
         if let Some(foreground) = self.state_stack.peek_mut() {
             match foreground.on_foreground_tick() {

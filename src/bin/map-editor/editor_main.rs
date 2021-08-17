@@ -54,10 +54,14 @@ fn main() {
                         // Recreate the swap_chain if lost
                         Err(wgpu::SwapChainError::Lost) => app.recreate_swap_chain(),
                         // The system is out of memory, we should probably quit
-                        Err(wgpu::SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                        Err(wgpu::SwapChainError::OutOfMemory) => {
+                            error!("SwapChain out of memory!");
+                            *control_flow = ControlFlow::Exit
+                        }
                         // All other errors (Outdated, Timeout) should be resolved by the next frame
-                        Err(e) => warn!("{:?}", e),
+                        Err(e) => debug!("{:?}", e),
                     }
+                    *control_flow = ControlFlow::Poll;
                 }
                 Event::MainEventsCleared => {
                     // RedrawRequested will only trigger once, unless we manually

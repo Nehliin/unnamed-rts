@@ -50,8 +50,8 @@ pub fn update_ui(
     #[resource] mouse_scroll: &EventReader<MouseScrollDelta>,
     #[resource] mouse_motion: &EventReader<MouseMotion>,
     #[resource] text_input: &EventReader<Text>,
-    #[resource] mouse_input: &input::MouseButtonState,
-    #[resource] key_input: &input::KeyboardState,
+    #[resource] mouse_input: &mut input::MouseButtonState,
+    #[resource] key_input: &mut input::KeyboardState,
 ) {
     ui_ctx.raw_input.pixels_per_point = Some(window_size.scale_factor);
     ui_ctx.raw_input.screen_rect = Some(egui::Rect::from_min_max(
@@ -73,8 +73,7 @@ pub fn update_ui(
             current_cursor_pos.y,
         )));
     }
-    // Handle mouse input
-    // TODO: This will cause the ui to not capture mouse clicks, they will still be registered by systems "behind" the ui which is undesirable
+
     handle_mouse_input(
         mouse_input,
         &MouseButton::Left,
@@ -97,16 +96,22 @@ pub fn update_ui(
         ui_ctx,
     );
 
+    // Handle scroll events
     for scroll_delta in mouse_scroll.events() {
         match scroll_delta {
             MouseScrollDelta::LineDelta(x, y) => {
-                ui_ctx.raw_input.scroll_delta += vec2(*x, *y);
+                ui_ctx.raw_input.scroll_delta += vec2(*x, *y) * 8.0;
             }
             MouseScrollDelta::PixelDelta(delta) => {
                 // Actually point delta
                 ui_ctx.raw_input.scroll_delta += vec2(delta.x as f32, delta.y as f32);
             }
         }
+    }
+
+    if ui_ctx.context.wants_pointer_input() {
+        // Clear the mouse input to make sure no other system reacts on it
+        mouse_input.clear();
     }
 
     if let Some(modifier_state) = modifiers_changed.last_event() {
@@ -144,6 +149,11 @@ pub fn update_ui(
                 modifiers: ui_ctx.raw_input.modifiers,
             })
         }
+    }
+
+    if ui_ctx.context.wants_keyboard_input() {
+        // Clear keyboard input to make sure no other system reacts on it
+        key_input.clear();
     }
 }
 

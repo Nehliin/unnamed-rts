@@ -31,7 +31,7 @@ fn main() {
     let mut app = block_on(Engine::new(&window));
     app.push_state(Box::new(GameState {}) as Box<dyn State>);
     event_loop.run(move |event, _, control_flow| {
-        if !app.event_handler(&event, &window.id()) {
+        if !app.event_handler(&event) {
             match event {
                 Event::WindowEvent {
                     ref event,

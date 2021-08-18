@@ -19,7 +19,22 @@ pub trait State: Debug {
     );
     // Only called when in foreground
     fn on_foreground_tick(&mut self) -> StateTransition;
+
+    #[cfg(feature = "graphics")]
+    fn on_resize(&mut self, resources: &Resources, new_size: &WindowSize) {
+        let mut camera = resources.get_mut::<crate::rendering::camera::Camera>().unwrap();
+        let device = resources.get::<wgpu::Device>().unwrap();
+        camera.update_aspect_ratio(new_size.physical_width, new_size.physical_height);
+        resources.get_mut::<crate::rendering::common::DepthTexture>().unwrap().resize(
+            &device,
+            new_size.physical_width,
+            new_size.physical_height,
+        );
+    }
+
+    #[cfg(not(feature = "graphics"))]
     fn on_resize(&mut self, _resources: &Resources, _new_size: &WindowSize) {}
+
     // Todo: clean up command receivers?
     fn on_destroy(&mut self, world: &mut World, resources: &mut Resources);
     fn background_schedule(&self) -> Schedule;

@@ -1,12 +1,6 @@
 use glam::Vec3;
 use legion::*;
-use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Instant,
-};
+use std::time::Instant;
 use unnamed_rts::{
     assets::{self, Assets, Handle},
     components::Transform,
@@ -32,24 +26,20 @@ use crate::{
     playground_state::PlaygroundState,
 };
 
-#[derive(Debug, Default, Clone)]
-struct ShouldEnterPlayground(Arc<AtomicBool>);
-
 #[system]
 fn enter_playground(
-    #[resource] should_enter_playground: &ShouldEnterPlayground,
     #[resource] keyboard_input: &KeyboardState,
+    #[resource] state_transition: &mut StateTransition,
 ) {
     if keyboard_input.pressed_current_frame(VirtualKeyCode::P) {
         info!("Entering playground state!");
-        should_enter_playground.0.store(true, Ordering::Release);
+        *state_transition = StateTransition::Push(Box::new(PlaygroundState::default()));
     }
 }
 
 #[derive(Debug, Default)]
 pub struct EditState {
     test_img: Option<Handle<UiTexture<'static>>>,
-    should_enter_playground: ShouldEnterPlayground,
 }
 
 impl State for EditState {
@@ -59,8 +49,6 @@ impl State for EditState {
         resources: &mut legion::Resources,
         command_receivers: &mut Vec<crossbeam_channel::Receiver<wgpu::CommandBuffer>>,
     ) {
-        resources.insert(self.should_enter_playground.clone());
-
         let (debug_sender, debug_rc) = crossbeam_channel::bounded(1);
         let (model_sender, model_rc) = crossbeam_channel::bounded(1);
         let (tilemap_sender, tilemap_rc) = crossbeam_channel::bounded(1);
@@ -126,20 +114,6 @@ impl State for EditState {
         resources.insert(tilemap);
         resources.insert(light_uniform);
         resources.insert(camera);
-    }
-
-    fn on_foreground_tick(&mut self) -> unnamed_rts::states::StateTransition {
-        match self.should_enter_playground.0.compare_exchange(
-            true,
-            false,
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        ) {
-            Ok(true) => {
-                StateTransition::Push(Box::new(PlaygroundState::default()))
-            }
-            _ => StateTransition::Noop,
-        }
     }
 
     fn on_destroy(&mut self, _world: &mut legion::World, _resources: &mut legion::Resources) {

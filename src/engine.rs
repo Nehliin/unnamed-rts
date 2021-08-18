@@ -157,7 +157,7 @@ impl Engine {
         resources.insert(ui_pass);
         resources.insert(ui_context);
         resources.insert(window_size);
-
+        resources.insert(StateTransition::Noop);
         resources.insert(Time {
             current_time: std::time::Instant::now(),
             delta_time: 0.0,
@@ -273,24 +273,29 @@ impl Engine {
 
         self.renderer.begin_frame(&mut self.resources)?;
         self.schedule.execute(&mut self.world, &mut self.resources);
-        if let Some(foreground) = self.state_stack.peek_mut() {
-            match foreground.on_foreground_tick() {
-                StateTransition::Pop => {
-                    let mut new_steps = self.state_stack.pop(&mut self.world, &mut self.resources);
-                    self.schedule = construct_schedule(&mut new_steps);
-                }
-                StateTransition::Push(new_state) => {
-                    let mut new_steps = self.state_stack.push(
-                        new_state,
-                        &mut self.world,
-                        &mut self.resources,
-                        &mut self.renderer.state_command_receivers,
-                    );
-                    self.schedule = construct_schedule(&mut new_steps);
-                }
-                StateTransition::Noop => {}
+        // Check the current state transition
+        let state_transition = self
+            .resources
+            .remove::<StateTransition>()
+            .expect("No state transition found between frames");
+        match state_transition {
+            StateTransition::Pop => {
+                let mut new_steps = self.state_stack.pop(&mut self.world, &mut self.resources);
+                self.schedule = construct_schedule(&mut new_steps);
             }
+            StateTransition::Push(new_state) => {
+                let mut new_steps = self.state_stack.push(
+                    new_state,
+                    &mut self.world,
+                    &mut self.resources,
+                    &mut self.renderer.state_command_receivers,
+                );
+                self.schedule = construct_schedule(&mut new_steps);
+            }
+            StateTransition::Noop => {}
         }
+        // Reset the state transition between frames
+        self.resources.insert(StateTransition::Noop);
         self.renderer.submit_frame(&mut self.resources);
         Ok(())
     }

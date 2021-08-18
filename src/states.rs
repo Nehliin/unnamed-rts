@@ -10,26 +10,26 @@ pub enum StateTransition {
     Push(Box<dyn State>),
     Noop,
 }
-pub trait State: Debug {
+
+pub trait State: Debug + Send {
     fn on_init(
         &mut self,
         world: &mut World,
         resources: &mut Resources,
         command_receivers: &mut Vec<Receiver<CommandBuffer>>,
     );
-    // Only called when in foreground
-    fn on_foreground_tick(&mut self) -> StateTransition;
 
     #[cfg(feature = "graphics")]
     fn on_resize(&mut self, resources: &Resources, new_size: &WindowSize) {
-        let mut camera = resources.get_mut::<crate::rendering::camera::Camera>().unwrap();
+        let mut camera = resources
+            .get_mut::<crate::rendering::camera::Camera>()
+            .unwrap();
         let device = resources.get::<wgpu::Device>().unwrap();
         camera.update_aspect_ratio(new_size.physical_width, new_size.physical_height);
-        resources.get_mut::<crate::rendering::common::DepthTexture>().unwrap().resize(
-            &device,
-            new_size.physical_width,
-            new_size.physical_height,
-        );
+        resources
+            .get_mut::<crate::rendering::common::DepthTexture>()
+            .unwrap()
+            .resize(&device, new_size.physical_width, new_size.physical_height);
     }
 
     #[cfg(not(feature = "graphics"))]
@@ -46,10 +46,7 @@ pub trait State: Debug {
 pub struct StateStack {
     stack: Vec<Box<dyn State>>,
 }
-// option 1: run each schedule individually drawback, non optimal schedule execution (possible to parellalize more)
-// option 2: all passes are resources -> foreground/background can be called many times without constructing more gpu resourcs
-// benefits: optimizied scheduling, no extra resource allocation on state transitions,
-// option 2 is implemented here
+
 impl StateStack {
     #[must_use]
     pub fn push(
@@ -167,10 +164,6 @@ mod tests {
                     ) {
                         let mut res = resources.get_mut::<[<$state_name Resources>]>().unwrap();
                         res.on_init += 1;
-                    }
-
-                    fn on_foreground_tick(&mut self) -> StateTransition {
-                        StateTransition::Noop
                     }
 
                     fn on_destroy(&mut self, _world: &mut World, resources: &mut Resources) {

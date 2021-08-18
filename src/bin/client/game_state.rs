@@ -112,17 +112,6 @@ impl State for GameState {
         StateTransition::Noop
     }
 
-    fn on_resize(&mut self, resources: &Resources, window_size: &WindowSize) {
-        let mut camera = resources.get_mut::<Camera>().unwrap();
-        let device = resources.get::<Device>().unwrap();
-        camera.update_aspect_ratio(window_size.physical_width, window_size.physical_height);
-        resources.get_mut::<DepthTexture>().unwrap().resize(
-            &device,
-            window_size.physical_width,
-            window_size.physical_height,
-        );
-    }
-
     fn on_destroy(&mut self, _world: &mut World, _resources: &mut Resources) {
         todo!()
     }

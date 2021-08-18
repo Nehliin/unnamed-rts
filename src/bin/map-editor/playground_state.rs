@@ -32,6 +32,31 @@ fn exit(
     }
 }
 
+fn setup_render_resources(
+    resources: &mut Resources,
+    command_receivers: &mut Vec<Receiver<wgpu::CommandBuffer>>,
+) {
+    let (lines_sender, lines_rc) = crossbeam_channel::bounded(1);
+    let (selectable_sender, selectable_rc) = crossbeam_channel::bounded(1);
+
+    command_receivers.push(lines_rc);
+    command_receivers.push(selectable_rc);
+
+    let device = resources.get::<Device>().expect("Device to be present");
+
+    let start = Instant::now();
+    let selection_pass = selection_pass::SelectionPass::new(&device, selectable_sender);
+    let debug_lines_pass = debug_lines_pass::DebugLinesPass::new(&device, lines_sender);
+    info!(
+        "Playground Pipeline setup time: {}ms",
+        start.elapsed().as_millis()
+    );
+    drop(device);
+    resources.insert(selection_pass);
+    resources.insert(debug_lines_pass);
+    resources.insert(debug_lines_pass::BoundingBoxMap::default());
+}
+
 #[derive(Debug, Default)]
 pub struct PlaygroundState;
 
@@ -42,21 +67,7 @@ impl State for PlaygroundState {
         resources: &mut Resources,
         command_receivers: &mut Vec<Receiver<wgpu::CommandBuffer>>,
     ) {
-        let (lines_sender, lines_rc) = crossbeam_channel::bounded(1);
-        let (selectable_sender, selectable_rc) = crossbeam_channel::bounded(1);
-
-        command_receivers.push(lines_rc);
-        command_receivers.push(selectable_rc);
-
-        let device = resources.get::<Device>().expect("Device to be present");
-
-        let start = Instant::now();
-        let selection_pass = selection_pass::SelectionPass::new(&device, selectable_sender);
-        let debug_lines_pass = debug_lines_pass::DebugLinesPass::new(&device, lines_sender);
-        info!(
-            "Playground Pipeline setup time: {}ms",
-            start.elapsed().as_millis()
-        );
+        setup_render_resources(resources, command_receivers);
         let mut model_assets = resources
             .get_mut::<Assets<GltfModel>>()
             .expect("Model assets to be loaded");
@@ -76,13 +87,9 @@ impl State for PlaygroundState {
             Selectable { is_selected: false },
         )]);
 
-        drop(device);
         drop(model_assets);
 
         // set up resources
-        resources.insert(selection_pass);
-        resources.insert(debug_lines_pass);
-        resources.insert(debug_lines_pass::BoundingBoxMap::default());
         resources.insert(DebugFlow {
             current_target: None,
             arrow_handle: debug_arrow,

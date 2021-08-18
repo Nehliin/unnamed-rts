@@ -276,17 +276,17 @@ impl Engine {
         if let Some(foreground) = self.state_stack.peek_mut() {
             match foreground.on_foreground_tick() {
                 StateTransition::Pop => {
-                    let new_steps = self.state_stack.pop(&mut self.world, &mut self.resources);
-                    self.schedule = Schedule::from(new_steps);
+                    let mut new_steps = self.state_stack.pop(&mut self.world, &mut self.resources);
+                    self.schedule = construct_schedule(&mut new_steps);
                 }
                 StateTransition::Push(new_state) => {
-                    let new_steps = self.state_stack.push(
+                    let mut new_steps = self.state_stack.push(
                         new_state,
                         &mut self.world,
                         &mut self.resources,
                         &mut self.renderer.state_command_receivers,
                     );
-                    self.schedule = Schedule::from(new_steps);
+                    self.schedule = construct_schedule(&mut new_steps);
                 }
                 StateTransition::Noop => {}
             }

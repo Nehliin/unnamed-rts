@@ -14,6 +14,7 @@ use winit::{
 mod edit_state;
 mod editor_systems;
 mod playground_state;
+mod playground_systems;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;

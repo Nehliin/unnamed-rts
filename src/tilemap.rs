@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::Result;
 use bytemuck::{Pod, Zeroable};
-use glam::{IVec2, Vec2, Vec3};
+use glam::{IVec2, Vec2, Vec3, Vec4};
 use serde::{Deserialize, Serialize};
 
 #[repr(C)]
@@ -29,6 +29,18 @@ pub enum TileType {
     CornerConvexRB,
     CornerConcaveLB,
     CornerConvexLB,
+}
+
+impl TileType {
+    #[inline]
+    pub fn is_ramp(&self) -> bool {
+        match self {
+            TileType::RampTop | TileType::RampBottom | TileType::RampRight | TileType::RampLeft => {
+                true
+            }
+            _ => false,
+        }
+    }
 }
 
 impl Default for TileType {
@@ -222,6 +234,21 @@ impl Tile {
         self.verticies[TILE_MIDDLE_VERTEX_INDEX].position.y
     }
 
+    pub fn height_at(&self, tile_position: Vec2) -> f32 {
+        if self.tile_type == TileType::Flat {
+            return self.middle_height();
+        }
+        if self.tile_type.is_ramp() {
+            let f00 = self.verticies[TileEdge::BottomLeft as usize].position.y;
+            let f10 = self.verticies[TileEdge::BottomRight as usize].position.y;
+            let f11 = self.verticies[TileEdge::TopRight as usize].position.y;
+            let f01 = self.verticies[TileEdge::TopLeft as usize].position.y;
+            return bilinear_interpolation(f00, f10, f01, f11, tile_position.x, tile_position.y);
+        }
+        // TODO: handle these cases as well
+        0.0
+    }
+
     fn set_height(&mut self, height: f32) {
         // TODO: Don't set type here
         self.tile_type = TileType::Flat;
@@ -230,6 +257,12 @@ impl Tile {
             .iter_mut()
             .for_each(|vert| vert.position.y = height);
     }
+}
+
+fn bilinear_interpolation(f00: f32, f10: f32, f01: f32, f11: f32, x: f32, y: f32) -> f32 {
+    let known_values = Vec4::new(f00, f10, f01, f11);
+    let weights = Vec4::new((1.0 - x) * (1.0 - y), x * (1.0 - y), (1.0 - x) * y, x * y);
+    known_values.dot(weights)
 }
 
 pub fn generate_grid(transform: Transform) -> MapChunk<Tile> {

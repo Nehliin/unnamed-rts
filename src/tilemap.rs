@@ -225,14 +225,7 @@ impl Tile {
     pub fn height_at(&self, tile_position: Vec2) -> f32 {
         match self.tile_type {
             TileType::Flat => self.middle_height(),
-            TileType::RampTop => {
-                let f00 = self.verticies[TileEdge::TopLeft as usize].position.y;
-                let f10 = self.verticies[TileEdge::TopRight as usize].position.y;
-                let f11 = self.verticies[TileEdge::BottomRight as usize].position.y;
-                let f01 = self.verticies[TileEdge::BottomLeft as usize].position.y;
-                bilinear_interpolation(f00, f10, f01, f11, tile_position.x, tile_position.y)
-            }
-            TileType::RampBottom => {
+            TileType::RampTop | TileType::RampBottom => {
                 let f00 = self.verticies[TileEdge::TopLeft as usize].position.y;
                 let f10 = self.verticies[TileEdge::TopRight as usize].position.y;
                 let f11 = self.verticies[TileEdge::BottomRight as usize].position.y;

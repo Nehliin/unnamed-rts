@@ -1,6 +1,6 @@
 use std::{cmp::Reverse, collections::BinaryHeap};
 
-use glam::Vec3A;
+use glam::Vec2;
 
 use crate::{
     map_chunk::{ChunkIndex, MapChunk, CHUNK_SIZE},
@@ -38,9 +38,7 @@ type DistanceField = MapChunk<Option<u32>>;
 
 #[derive(Debug, Clone, Copy)]
 pub struct FlowTile {
-    // TODO: only use 2 dim direction and get Y dir from grid geometry
-    // It will allow Bilinear interpolation of the direction, have to fix the arrows though
-    pub direction: Vec3A,
+    pub direction: Vec2,
 }
 
 #[derive(Debug)]
@@ -52,7 +50,7 @@ pub struct FlowField {
 impl FlowField {
     pub fn new(target: ChunkIndex, tilemap: &MapChunk<Tile>) -> Self {
         let distance_grid = generate_distance_field(tilemap, target);
-        let flow_grid = generate_flow_direction(&distance_grid, tilemap);
+        let flow_grid = generate_flow_direction(&distance_grid);
         FlowField {
             chunk: flow_grid,
             target,
@@ -61,7 +59,6 @@ impl FlowField {
 }
 
 fn calc_distance(n_tile: &Tile, _current_tile: &Tile) -> Option<u32> {
-    // TODO: Middle height is incorrectly set for ramps
     if n_tile.tile_type != TileType::Flat && n_tile.height_diff > 1 {
         return None;
     }
@@ -108,10 +105,7 @@ fn generate_distance_field(source_tilemap: &MapChunk<Tile>, target: ChunkIndex) 
     distance_field
 }
 
-fn generate_flow_direction(
-    distance_field: &DistanceField,
-    source_tilemap: &MapChunk<Tile>,
-) -> MapChunk<FlowTile> {
+fn generate_flow_direction(distance_field: &DistanceField) -> MapChunk<FlowTile> {
     let tiles = DistanceField::indicies()
         .map(|current_idx| {
             // For each tile find neighbour index with lowest cost to target
@@ -121,20 +115,17 @@ fn generate_flow_direction(
                 .min_by_key(|(_, distance)| *distance)
                 .map(|(n_idx, _)| n_idx)
             {
-                let closest_n_height = source_tilemap.tile(n_closest).middle_height();
-                let current_height = source_tilemap.tile(current_idx).middle_height();
                 let (closest_n_x, closest_n_y) = n_closest.to_coords();
-                let closest_pos =
-                    Vec3A::new(closest_n_x as f32, closest_n_height, closest_n_y as f32);
+                let closest_pos = Vec2::new(closest_n_x as f32, closest_n_y as f32);
                 let (current_x, current_y) = current_idx.to_coords();
-                let current_pos = Vec3A::new(current_x as f32, current_height, current_y as f32);
+                let current_pos = Vec2::new(current_x as f32, current_y as f32);
                 let direction = current_pos - closest_pos;
                 let direction = direction.normalize_or_zero();
                 FlowTile { direction }
             } else {
                 // The tile doesn't have a path to the target
                 FlowTile {
-                    direction: Vec3A::Y,
+                    direction: Vec2::ZERO,
                 }
             }
         })

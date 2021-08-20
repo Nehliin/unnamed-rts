@@ -1,6 +1,6 @@
 use std::{cmp::Reverse, collections::BinaryHeap};
 
-use glam::{Vec2, Vec3A};
+use glam::Vec2;
 
 use crate::{
     map_chunk::{ChunkIndex, MapChunk, CHUNK_SIZE},
@@ -105,9 +105,7 @@ fn generate_distance_field(source_tilemap: &MapChunk<Tile>, target: ChunkIndex) 
     distance_field
 }
 
-fn generate_flow_direction(
-    distance_field: &DistanceField,
-) -> MapChunk<FlowTile> {
+fn generate_flow_direction(distance_field: &DistanceField) -> MapChunk<FlowTile> {
     let tiles = DistanceField::indicies()
         .map(|current_idx| {
             // For each tile find neighbour index with lowest cost to target
@@ -118,8 +116,7 @@ fn generate_flow_direction(
                 .map(|(n_idx, _)| n_idx)
             {
                 let (closest_n_x, closest_n_y) = n_closest.to_coords();
-                let closest_pos =
-                    Vec2::new(closest_n_x as f32,  closest_n_y as f32);
+                let closest_pos = Vec2::new(closest_n_x as f32, closest_n_y as f32);
                 let (current_x, current_y) = current_idx.to_coords();
                 let current_pos = Vec2::new(current_x as f32, current_y as f32);
                 let direction = current_pos - closest_pos;

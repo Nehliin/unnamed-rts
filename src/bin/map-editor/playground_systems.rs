@@ -1,4 +1,4 @@
-use glam::{Affine3A, Mat3A, Quat, Vec2, Vec3, Vec3A, Vec3Swizzles};
+use glam::{Affine3A, Quat, Vec2, Vec3, Vec3A, Vec3Swizzles};
 use itertools::Itertools;
 use legion::{systems::CommandBuffer, world::SubWorld, *};
 use unnamed_rts::{
@@ -226,7 +226,6 @@ pub fn movement(
                 );
             }
             // Set new position (if valid)
-            //let translation = &mut transform.matrix.translation;
             let offset: Vec3A = Vec3A::splat(4.0) * Vec3A::from(velocity.velocity);
             let new_pos: Vec3A = Vec3A::from(translation) + (offset * time.delta_time);
             let floored_new_pos = new_pos.floor();

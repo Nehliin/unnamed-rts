@@ -31,18 +31,6 @@ pub enum TileType {
     CornerConvexLB,
 }
 
-impl TileType {
-    #[inline]
-    pub fn is_ramp(&self) -> bool {
-        match self {
-            TileType::RampTop | TileType::RampBottom | TileType::RampRight | TileType::RampLeft => {
-                true
-            }
-            _ => false,
-        }
-    }
-}
-
 impl Default for TileType {
     fn default() -> Self {
         TileType::Flat
@@ -235,18 +223,32 @@ impl Tile {
     }
 
     pub fn height_at(&self, tile_position: Vec2) -> f32 {
-        if self.tile_type == TileType::Flat {
-            return self.middle_height();
+        match self.tile_type {
+            TileType::Flat => self.middle_height(),
+            TileType::RampTop => {
+                let f00 = self.verticies[TileEdge::TopLeft as usize].position.y;
+                let f10 = self.verticies[TileEdge::TopRight as usize].position.y;
+                let f11 = self.verticies[TileEdge::BottomRight as usize].position.y;
+                let f01 = self.verticies[TileEdge::BottomLeft as usize].position.y;
+                bilinear_interpolation(f00, f10, f01, f11, tile_position.x, tile_position.y)
+            }
+            TileType::RampBottom => {
+                let f00 = self.verticies[TileEdge::TopLeft as usize].position.y;
+                let f10 = self.verticies[TileEdge::TopRight as usize].position.y;
+                let f11 = self.verticies[TileEdge::BottomRight as usize].position.y;
+                let f01 = self.verticies[TileEdge::BottomLeft as usize].position.y;
+                bilinear_interpolation(f00, f10, f01, f11, tile_position.x, tile_position.y)
+            }
+            TileType::RampRight | TileType::RampLeft => {
+                let f00 = self.verticies[TileEdge::BottomLeft as usize].position.y;
+                let f10 = self.verticies[TileEdge::BottomRight as usize].position.y;
+                let f11 = self.verticies[TileEdge::TopRight as usize].position.y;
+                let f01 = self.verticies[TileEdge::TopLeft as usize].position.y;
+                bilinear_interpolation(f00, f10, f01, f11, tile_position.x, tile_position.y)
+            }
+            // TODO: handle these as well
+            _ => 0.0,
         }
-        if self.tile_type.is_ramp() {
-            let f00 = self.verticies[TileEdge::BottomLeft as usize].position.y;
-            let f10 = self.verticies[TileEdge::BottomRight as usize].position.y;
-            let f11 = self.verticies[TileEdge::TopRight as usize].position.y;
-            let f01 = self.verticies[TileEdge::TopLeft as usize].position.y;
-            return bilinear_interpolation(f00, f10, f01, f11, tile_position.x, tile_position.y);
-        }
-        // TODO: handle these cases as well
-        0.0
     }
 
     fn set_height(&mut self, height: f32) {

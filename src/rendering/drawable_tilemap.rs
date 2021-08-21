@@ -101,7 +101,7 @@ impl<'a> TileMapRenderData<'a> {
         use wgpu::util::DeviceExt;
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Tilemap Index buffer"),
-            usage: wgpu::BufferUsage::INDEX,
+            usage: wgpu::BufferUsages::INDEX,
             contents: bytemuck::cast_slice(&indicies),
         });
         let num_indexes = indicies.len() as u32;

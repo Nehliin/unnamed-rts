@@ -43,7 +43,7 @@ pub struct MeshVertex {
 }
 
 impl VertexBuffer for MeshVertex {
-    const STEP_MODE: wgpu::InputStepMode = wgpu::InputStepMode::Vertex;
+    const STEP_MODE: wgpu::VertexStepMode = wgpu::VertexStepMode::Vertex;
 
     fn get_attributes<'a>() -> &'a [wgpu::VertexAttribute] {
         &[
@@ -101,7 +101,7 @@ const SIZE_VEC4: BufferAddress = (std::mem::size_of::<Vec4>()) as BufferAddress;
 const SIZE_VEC3: BufferAddress = (std::mem::size_of::<Vec3>()) as BufferAddress;
 
 impl VertexBuffer for InstanceData {
-    const STEP_MODE: wgpu::InputStepMode = wgpu::InputStepMode::Instance;
+    const STEP_MODE: wgpu::VertexStepMode = wgpu::VertexStepMode::Instance;
 
     fn get_attributes<'a>() -> &'a [wgpu::VertexAttribute] {
         &[
@@ -288,7 +288,7 @@ impl PbrMaterial {
         let factor_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("PbrMaterial factor buffer"),
             contents: factors.as_std430().as_bytes(),
-            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
         let placeholder = get_white_placeholder_texture(device, queue);
         let normal_map_placeholder = get_normal_placeholder_texture(device, queue);
@@ -384,7 +384,7 @@ impl PbrMaterial {
                     // base color texture
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
                             view_dimension: wgpu::TextureViewDimension::D2,
                             sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -394,7 +394,7 @@ impl PbrMaterial {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler {
                             comparison: false,
                             filtering: true,
@@ -404,7 +404,7 @@ impl PbrMaterial {
                     // metallic roughness texture
                     wgpu::BindGroupLayoutEntry {
                         binding: 2,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
                             view_dimension: wgpu::TextureViewDimension::D2,
                             sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -414,7 +414,7 @@ impl PbrMaterial {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 3,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler {
                             comparison: false,
                             filtering: true,
@@ -424,7 +424,7 @@ impl PbrMaterial {
                     // occulusion texture
                     wgpu::BindGroupLayoutEntry {
                         binding: 4,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
                             view_dimension: wgpu::TextureViewDimension::D2,
                             sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -434,7 +434,7 @@ impl PbrMaterial {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 5,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler {
                             comparison: false,
                             filtering: true,
@@ -444,7 +444,7 @@ impl PbrMaterial {
                     // normal texture
                     wgpu::BindGroupLayoutEntry {
                         binding: 6,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
                             view_dimension: wgpu::TextureViewDimension::D2,
                             sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -454,7 +454,7 @@ impl PbrMaterial {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 7,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler {
                             comparison: false,
                             filtering: true,
@@ -464,7 +464,7 @@ impl PbrMaterial {
                     // material factors
                     wgpu::BindGroupLayoutEntry {
                         binding: 8,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -644,7 +644,7 @@ impl GltfModel {
                         .collect::<Vec<u32>>();
                     let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
                         label: Some("Index buffer"),
-                        usage: wgpu::BufferUsage::INDEX,
+                        usage: wgpu::BufferUsages::INDEX,
                         contents: bytemuck::cast_slice(&indicies),
                     });
                     GltfMesh {

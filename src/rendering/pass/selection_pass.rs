@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use crate::assets::*;
 use crate::components::{Selectable, Transform};
+use crate::engine::FrameTexture;
 use crate::rendering::{
     camera::Camera,
     common::DEPTH_FORMAT,
@@ -23,7 +24,7 @@ pub fn draw(
     #[resource] asset_storage: &Assets<GltfModel>,
     #[resource] depth_texture: &DepthTexture,
     #[resource] device: &wgpu::Device,
-    #[resource] current_frame: &wgpu::SwapChainTexture,
+    #[resource] current_frame: &FrameTexture,
     #[resource] camera: &Camera,
     query: &mut Query<(&Transform, &Selectable, &Handle<GltfModel>)>,
 ) {
@@ -110,7 +111,6 @@ impl SelectionPass {
         let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("Selection(model) shader"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/model.wgsl"))),
-            flags: wgpu::ShaderFlags::VALIDATION,
         });
 
         let render_pipeline_layout =

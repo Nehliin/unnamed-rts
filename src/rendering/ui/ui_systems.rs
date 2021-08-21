@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use crate::engine::FrameTexture;
 use crate::{
     assets::Assets,
     input::MouseMotion,
@@ -9,7 +10,7 @@ use crate::{
 use egui::{pos2, vec2, Pos2};
 use input::{CursorPosition, Text};
 use legion::*;
-use wgpu::{CommandEncoderDescriptor, Device, Queue, SwapChainTexture};
+use wgpu::{CommandEncoderDescriptor, Device, Queue};
 use winit::event::{ModifiersState, MouseButton, MouseScrollDelta};
 
 use crate::input::{self, EventReader};
@@ -187,7 +188,7 @@ pub fn end_ui_frame(
     #[resource] ui_context: &mut UiContext,
     #[resource] device: &Device,
     #[resource] queue: &Queue,
-    #[resource] current_frame: &SwapChainTexture,
+    #[resource] current_frame: &FrameTexture,
     #[resource] ui_textures: &Assets<UiTexture>,
     #[resource] window_size: &WindowSize,
 ) {

@@ -54,9 +54,9 @@ fn main() {
                     match app.render() {
                         Ok(_) => {}
                         // Recreate the swap_chain if lost
-                        Err(wgpu::SwapChainError::Lost) => app.recreate_swap_chain(),
+                        Err(wgpu::SurfaceError::Lost) => app.recreate_swap_chain(),
                         // The system is out of memory, we should probably quit
-                        Err(wgpu::SwapChainError::OutOfMemory) => {
+                        Err(wgpu::SurfaceError::OutOfMemory) => {
                             error!("SwapChain out of memory!");
                             *control_flow = ControlFlow::Exit
                         }

@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use crate::engine::FrameTexture;
 use crossbeam_channel::Sender;
 use glam::Vec3;
 use legion::*;
@@ -13,7 +14,7 @@ use crate::{
 use crate::rendering::{common::DepthTexture, vertex_buffers::VertexBuffer};
 
 impl VertexBuffer for TileVertex {
-    const STEP_MODE: wgpu::InputStepMode = wgpu::InputStepMode::Vertex;
+    const STEP_MODE: wgpu::VertexStepMode = wgpu::VertexStepMode::Vertex;
 
     fn get_attributes<'a>() -> &'a [wgpu::VertexAttribute] {
         &[
@@ -38,7 +39,7 @@ pub fn get_or_create_tilemap_layout(device: &wgpu::Device) -> &'static wgpu::Bin
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         view_dimension: wgpu::TextureViewDimension::D2,
                         sample_type: wgpu::TextureSampleType::Float { filterable: false },
@@ -48,7 +49,7 @@ pub fn get_or_create_tilemap_layout(device: &wgpu::Device) -> &'static wgpu::Bin
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         view_dimension: wgpu::TextureViewDimension::D2,
                         sample_type: wgpu::TextureSampleType::Float { filterable: false },
@@ -58,7 +59,7 @@ pub fn get_or_create_tilemap_layout(device: &wgpu::Device) -> &'static wgpu::Bin
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 2,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         view_dimension: wgpu::TextureViewDimension::D2,
                         sample_type: wgpu::TextureSampleType::Float { filterable: false },
@@ -68,7 +69,7 @@ pub fn get_or_create_tilemap_layout(device: &wgpu::Device) -> &'static wgpu::Bin
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 3,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler {
                         comparison: false,
                         filtering: false,
@@ -90,7 +91,6 @@ impl TileMapPass {
         let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("Tilemap shader"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/tilemap.wgsl"))),
-            flags: wgpu::ShaderFlags::VALIDATION,
         });
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -145,7 +145,7 @@ pub fn update(#[resource] queue: &wgpu::Queue, #[resource] tilemap: &mut Drawabl
 #[system]
 pub fn draw(
     #[resource] pass: &TileMapPass,
-    #[resource] current_frame: &wgpu::SwapChainTexture,
+    #[resource] current_frame: &FrameTexture,
     #[resource] device: &wgpu::Device,
     #[resource] depth_texture: &DepthTexture,
     #[resource] camera: &Camera,

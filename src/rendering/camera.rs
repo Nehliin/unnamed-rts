@@ -107,7 +107,7 @@ impl Camera {
         let gpu_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Camera buffer"),
             size: CameraUniform::std430_size_static() as u64,
-            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -174,7 +174,7 @@ impl Camera {
                 label: Some("Camera layout"),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStage::VERTEX,
+                    visibility: wgpu::ShaderStages::VERTEX,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,

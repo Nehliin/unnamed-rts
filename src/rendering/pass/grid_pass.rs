@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use crate::resources::DebugRenderSettings;
 
+use crate::engine::FrameTexture;
 use crate::rendering::{
     camera::Camera,
     common::{DepthTexture, DEPTH_FORMAT},
@@ -16,7 +17,7 @@ pub fn draw(
     #[resource] device: &wgpu::Device,
     #[resource] depth_texture: &DepthTexture,
     #[resource] camera: &Camera,
-    #[resource] current_frame: &wgpu::SwapChainTexture,
+    #[resource] current_frame: &FrameTexture,
 ) {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Grid pass encoder"),
@@ -65,7 +66,6 @@ impl GridPass {
         let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("Grid shader"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/grid.wgsl"))),
-            flags: wgpu::ShaderFlags::VALIDATION,
         });
 
         let render_pipeline_layout =
@@ -100,7 +100,7 @@ impl GridPass {
                             operation: wgpu::BlendOperation::Add,
                         },
                     }),
-                    write_mask: wgpu::ColorWrite::ALL,
+                    write_mask: wgpu::ColorWrites::ALL,
                 }],
             }),
             primitive: wgpu::PrimitiveState {

@@ -1,8 +1,8 @@
-use glam::{Affine3A, Quat, Vec2, Vec3, Vec3A, Vec3Swizzles};
+use glam::{Affine3A, Quat, Vec2, Vec3, Vec3A};
 use itertools::Itertools;
 use legion::{systems::CommandBuffer, world::SubWorld, *};
 use unnamed_rts::{
-    assets::{Assets, Handle},
+    assets::Handle,
     components::{Selectable, Transform, Velocity},
     input::{CursorPosition, MouseButtonState},
     map_chunk::{ChunkIndex, MapChunk, CHUNK_SIZE},
@@ -12,48 +12,6 @@ use unnamed_rts::{
     tilemap::{Tile, TILE_HEIGHT, TILE_WIDTH},
 };
 use winit::event::MouseButton;
-
-// TODO Move everything below to common systems?? --------------------------------
-fn intesercts(origin: Vec3A, dirfrac: Vec3A, aabb_min: Vec3A, aabb_max: Vec3A) -> bool {
-    let t1 = (aabb_min - origin) * dirfrac;
-    let t2 = (aabb_max - origin) * dirfrac;
-
-    let tmin = t1.min(t2);
-    let tmin = tmin.max_element();
-
-    let tmax = t1.max(t2);
-    let tmax = tmax.min_element();
-
-    !(tmax < 0.0 || tmax < tmin)
-}
-
-#[system]
-pub fn selection(
-    world: &mut SubWorld,
-    #[resource] camera: &Camera,
-    #[resource] mouse_button_state: &MouseButtonState,
-    #[resource] mouse_pos: &CursorPosition,
-    #[resource] asset_storage: &Assets<GltfModel>,
-    #[resource] window_size: &WindowSize,
-    query: &mut Query<(&Transform, &Handle<GltfModel>, &mut Selectable)>,
-) {
-    if mouse_button_state.pressed_current_frame(&MouseButton::Left) {
-        let ray = camera.raycast(mouse_pos, window_size);
-        let dirfrac = ray.direction.recip();
-        query.par_for_each_mut(world, |(transform, handle, mut selectable)| {
-            let model = asset_storage.get(handle).unwrap();
-            let (min, max) = (model.min_vertex, model.max_vertex);
-            let world_min = transform.matrix.transform_point3a(min.into());
-            let world_max = transform.matrix.transform_point3a(max.into());
-            selectable.is_selected = intesercts(
-                camera.get_position(),
-                dirfrac,
-                world_min.xyz(),
-                world_max.xyz(),
-            );
-        })
-    }
-}
 
 //TODO: Associate each selected entity with a group which in turn gets assigned a flowfield
 #[system]

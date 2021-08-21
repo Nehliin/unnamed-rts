@@ -55,7 +55,7 @@ impl<T: VertexBuffer> MutableVertexData<T> {
 }
 
 pub trait VertexBuffer: Pod + Zeroable {
-    const STEP_MODE: wgpu::InputStepMode;
+    const STEP_MODE: wgpu::VertexStepMode;
 
     fn allocate_immutable_buffer(
         device: &wgpu::Device,
@@ -65,7 +65,7 @@ pub trait VertexBuffer: Pod + Zeroable {
             _marker: PhantomData::default(),
             buffer: device.create_buffer_init(&BufferInitDescriptor {
                 label: Some(&format!("Immutable buffer of: {}", type_name::<Self>())),
-                usage: wgpu::BufferUsage::VERTEX,
+                usage: wgpu::BufferUsages::VERTEX,
                 contents: bytemuck::cast_slice(buffer_data),
             }),
         }
@@ -79,7 +79,7 @@ pub trait VertexBuffer: Pod + Zeroable {
             _marker: PhantomData::default(),
             buffer: device.create_buffer_init(&BufferInitDescriptor {
                 label: Some(&format!("Mutable buffer of: {}", type_name::<Self>())),
-                usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 contents: bytemuck::cast_slice(buffer_data),
             }),
         }

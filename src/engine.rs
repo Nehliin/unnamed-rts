@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::{
     input::{self, InputHandler},
     rendering::pass::ui_pass,
@@ -8,11 +10,10 @@ use crate::{
 };
 use crossbeam_channel::Receiver;
 use legion::{systems::Step, *};
-use std::time::Instant;
 use wgpu::{
-    BackendBit, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits,
-    PowerPreference, Queue, Surface, SwapChain, SwapChainDescriptor, SwapChainTexture,
-    TextureFormat, TextureUsage,
+    Backends, CommandBuffer, Device, DeviceDescriptor, Features, Instance, Limits, PowerPreference,
+    PresentMode, Queue, Surface, SurfaceConfiguration, SurfaceTexture, TextureFormat,
+    TextureUsages, TextureView, TextureViewDescriptor,
 };
 use winit::{
     dpi::PhysicalSize,
@@ -21,21 +22,24 @@ use winit::{
 };
 
 pub struct Renderer {
-    swap_chain: SwapChain,
     surface: Surface,
-    sc_desc: SwapChainDescriptor,
+    surface_config: SurfaceConfiguration,
     state_command_receivers: Vec<Receiver<CommandBuffer>>,
     post_state_command_receivers: Vec<Receiver<CommandBuffer>>,
+}
+
+pub struct FrameTexture {
+    pub view: TextureView,
+    pub texture: SurfaceTexture,
 }
 
 impl Renderer {
     pub async fn init(window: &Window, resourcs: &mut Resources) -> Renderer {
         let size = window.inner_size();
-        #[cfg(target_os = "macos")]
-        let instance = Instance::new(BackendBit::METAL);
-        // DX12 have poor performance and crashes for whatever reason
         #[cfg(not(target_os = "macos"))]
-        let instance = Instance::new(BackendBit::VULKAN);
+        let instance = Instance::new(Backends::VULKAN);
+        #[cfg(target_os = "macos")]
+        let instance = Instance::new(Backends::METAL);
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -57,20 +61,20 @@ impl Renderer {
             .await
             .expect("Failed to find device");
 
-        let sc_desc = SwapChainDescriptor {
-            usage: TextureUsage::RENDER_ATTACHMENT,
+        let surface_config = SurfaceConfiguration {
+            usage: TextureUsages::RENDER_ATTACHMENT,
             format: TextureFormat::Bgra8UnormSrgb,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Immediate,
+            present_mode: PresentMode::Immediate,
         };
-        let swap_chain = device.create_swap_chain(&surface, &sc_desc);
+
+        surface.configure(&device, &surface_config);
         resourcs.insert(device);
         resourcs.insert(queue);
         Renderer {
-            swap_chain,
             surface,
-            sc_desc,
+            surface_config,
             state_command_receivers: Vec::default(),
             post_state_command_receivers: Vec::default(),
         }
@@ -81,17 +85,21 @@ impl Renderer {
     }
 
     pub fn resize(&mut self, new_size: &WindowSize, resources: &mut Resources) {
-        self.sc_desc.width = new_size.physical_width;
-        self.sc_desc.height = new_size.physical_height;
-        // Swapchain output needs to be dropped before the swapchain
-        let _ = resources.remove::<SwapChainTexture>();
+        self.surface_config.width = new_size.physical_width;
+        self.surface_config.height = new_size.physical_height;
+        let _ = resources.remove::<FrameTexture>();
         let device = resources.get::<Device>().expect("Device to be registerd");
-        self.swap_chain = device.create_swap_chain(&self.surface, &self.sc_desc);
+        self.surface.configure(&device, &self.surface_config);
     }
 
-    pub fn begin_frame(&self, resources: &mut Resources) -> Result<(), wgpu::SwapChainError> {
-        resources.remove::<SwapChainTexture>();
-        resources.insert(self.swap_chain.get_current_frame()?.output);
+    pub fn begin_frame(&self, resources: &mut Resources) -> Result<(), wgpu::SurfaceError> {
+        resources.remove::<FrameTexture>();
+        let frame = self.surface.get_current_frame()?.output;
+        let frame_view = frame.texture.create_view(&TextureViewDescriptor::default());
+        resources.insert(FrameTexture {
+            texture: frame,
+            view: frame_view,
+        });
         Ok(())
     }
 
@@ -263,7 +271,7 @@ impl Engine {
         }
     }
 
-    pub fn render(&mut self) -> Result<(), wgpu::SwapChainError> {
+    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         // move this somewhere else:
         let mut time = self.resources.get_mut::<Time>().unwrap();
         let now = Instant::now();

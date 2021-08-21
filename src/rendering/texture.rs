@@ -189,12 +189,13 @@ pub fn allocate_simple_texture(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: if srgb { to_srgb(*format) } else { *format },
-        usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
     });
     let texutre_copy_view = wgpu::ImageCopyTexture {
         texture: &texture,
         mip_level: 0,
         origin: wgpu::Origin3d::ZERO,
+        aspect: wgpu::TextureAspect::All,
     };
     let texture_data_layout = wgpu::ImageDataLayout {
         offset: 0,
@@ -219,6 +220,7 @@ pub fn update_texture_data(
         texture: allocated_texture,
         mip_level: 0,
         origin: wgpu::Origin3d::ZERO,
+        aspect: wgpu::TextureAspect::All,
     };
     queue.write_texture(
         texture_view,

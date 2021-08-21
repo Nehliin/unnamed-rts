@@ -43,14 +43,13 @@ impl UiPass {
         let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("Ui shader"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/ui.wgsl"))),
-            flags: wgpu::ShaderFlags::VALIDATION,
         });
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("ui_uniform_buffer"),
             contents: bytemuck::cast_slice(&[UniformBuffer {
                 screen_size: [0.0, 0.0],
             }]),
-            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
         let uniform_buffer = SizedBuffer {
             buffer: uniform_buffer,
@@ -70,7 +69,7 @@ impl UiPass {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStage::VERTEX,
+                        visibility: wgpu::ShaderStages::VERTEX,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -80,7 +79,7 @@ impl UiPass {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler {
                             comparison: false,
                             filtering: true,
@@ -126,7 +125,7 @@ impl UiPass {
                 entry_point: "vs_main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: 5 * 4,
-                    step_mode: wgpu::InputStepMode::Vertex,
+                    step_mode: wgpu::VertexStepMode::Vertex,
                     // 0: vec2 position
                     // 1: vec2 texture coordinates
                     // 2: uint color
@@ -150,7 +149,7 @@ impl UiPass {
                             operation: wgpu::BlendOperation::Add,
                         },
                     }),
-                    write_mask: wgpu::ColorWrite::ALL,
+                    write_mask: wgpu::ColorWrites::ALL,
                 }],
             }),
             primitive: wgpu::PrimitiveState::default(),
@@ -322,7 +321,7 @@ impl UiPass {
                 let buffer = device.create_buffer_init(&BufferInitDescriptor {
                     label: Some("egui_index_buffer"),
                     contents: data,
-                    usage: wgpu::BufferUsage::INDEX | wgpu::BufferUsage::COPY_DST,
+                    usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
                 });
                 self.index_buffers.push(SizedBuffer {
                     buffer,
@@ -337,7 +336,7 @@ impl UiPass {
                 let buffer = device.create_buffer_init(&BufferInitDescriptor {
                     label: Some("egui_vertex_buffer"),
                     contents: data,
-                    usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 });
 
                 self.vertex_buffers.push(SizedBuffer {
@@ -360,17 +359,17 @@ impl UiPass {
         let (buffer, storage, name) = match buffer_type {
             BufferType::Index => (
                 &mut self.index_buffers[index],
-                wgpu::BufferUsage::INDEX,
+                wgpu::BufferUsages::INDEX,
                 "index",
             ),
             BufferType::Vertex => (
                 &mut self.vertex_buffers[index],
-                wgpu::BufferUsage::VERTEX,
+                wgpu::BufferUsages::VERTEX,
                 "vertex",
             ),
             BufferType::Uniform => (
                 &mut self.uniform_buffer,
-                wgpu::BufferUsage::UNIFORM,
+                wgpu::BufferUsages::UNIFORM,
                 "uniform",
             ),
         };
@@ -380,7 +379,7 @@ impl UiPass {
             buffer.buffer = device.create_buffer_init(&BufferInitDescriptor {
                 label: Some(format!("egui_{}_buffer", name).as_str()),
                 contents: bytemuck::cast_slice(data),
-                usage: storage | wgpu::BufferUsage::COPY_DST,
+                usage: storage | wgpu::BufferUsages::COPY_DST,
             });
         } else {
             queue.write_buffer(&buffer.buffer, 0, data);

@@ -28,7 +28,7 @@ fn linear_from_srgb(srgb: vec3<f32>) -> vec3<f32> {
     let cutoff = srgb < CUTOFF;
     let lower = srgb / LOWER;
     let higher = pow((srgb + H1) / H2, H3);
-    return select(lower, higher, cutoff);
+    return select(higher, lower, cutoff);
 }
 
 [[stage(vertex)]]

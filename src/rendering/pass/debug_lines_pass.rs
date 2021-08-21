@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use crate::components::Transform;
+use crate::engine::FrameTexture;
 use crate::rendering::{
     camera::Camera,
     common::{DepthTexture, DEPTH_FORMAT},
@@ -16,7 +17,6 @@ use crossbeam_channel::Sender;
 use fxhash::FxHashMap;
 use glam::Vec3;
 use legion::*;
-use wgpu::SwapChainTexture;
 use world::SubWorld;
 
 #[derive(Debug, Default)]
@@ -58,7 +58,7 @@ pub fn draw(
     #[resource] device: &wgpu::Device,
     #[resource] depth_texture: &DepthTexture,
     #[resource] asset_storage: &Assets<GltfModel>,
-    #[resource] current_frame: &SwapChainTexture,
+    #[resource] current_frame: &FrameTexture,
     #[resource] debug_settings: &DebugRenderSettings,
     #[resource] camera: &Camera,
     query: &mut Query<(&Transform, &Handle<GltfModel>)>,
@@ -156,7 +156,7 @@ struct BoxVert {
 }
 
 impl VertexBuffer for BoxVert {
-    const STEP_MODE: wgpu::InputStepMode = wgpu::InputStepMode::Vertex;
+    const STEP_MODE: wgpu::VertexStepMode = wgpu::VertexStepMode::Vertex;
 
     fn get_attributes<'a>() -> &'a [wgpu::VertexAttribute] {
         &[wgpu::VertexAttribute {
@@ -182,7 +182,6 @@ impl DebugLinesPass {
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
                 "shaders/debug_lines.wgsl"
             ))),
-            flags: wgpu::ShaderFlags::VALIDATION,
         });
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -215,7 +214,7 @@ impl DebugLinesPass {
                             operation: wgpu::BlendOperation::Add,
                         },
                     }),
-                    write_mask: wgpu::ColorWrite::ALL,
+                    write_mask: wgpu::ColorWrites::ALL,
                 }],
             }),
             primitive: wgpu::PrimitiveState {

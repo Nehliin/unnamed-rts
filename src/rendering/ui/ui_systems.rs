@@ -175,7 +175,7 @@ pub fn begin_ui_frame(
     #[resource] ui_context: &mut UiContext,
 ) {
     ui_context.raw_input.time = Some(time_since_start.elapsed().as_secs_f64());
-    ui_context.raw_input.predicted_dt = time.delta_time;
+    ui_context.raw_input.predicted_dt = time.delta_time();
     ui_context.context.begin_frame(ui_context.raw_input.take());
 }
 

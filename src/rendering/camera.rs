@@ -58,17 +58,17 @@ pub fn free_flying_camera(
 ) {
     if keyboard_state.is_pressed(VirtualKeyCode::A) {
         camera.position +=
-            camera.direction.cross(Vec3A::Y).normalize() * -CAMERA_SPEED * time.delta_time;
+            camera.direction.cross(Vec3A::Y).normalize() * -CAMERA_SPEED * time.delta_time();
     }
     if keyboard_state.is_pressed(VirtualKeyCode::D) {
         camera.position +=
-            camera.direction.cross(Vec3A::Y).normalize() * CAMERA_SPEED * time.delta_time;
+            camera.direction.cross(Vec3A::Y).normalize() * CAMERA_SPEED * time.delta_time();
     }
     if keyboard_state.is_pressed(VirtualKeyCode::W) {
-        camera.position += camera.direction * CAMERA_SPEED * time.delta_time;
+        camera.position += camera.direction * CAMERA_SPEED * time.delta_time();
     }
     if keyboard_state.is_pressed(VirtualKeyCode::S) {
-        camera.position += camera.direction * -CAMERA_SPEED * time.delta_time;
+        camera.position += camera.direction * -CAMERA_SPEED * time.delta_time();
     }
     if mouse_button_state.is_pressed(&MouseButton::Right) {
         for delta in mouse_motion.events() {

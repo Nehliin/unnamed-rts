@@ -166,10 +166,7 @@ impl Engine {
         resources.insert(ui_context);
         resources.insert(window_size);
         resources.insert(StateTransition::Noop);
-        resources.insert(Time {
-            current_time: std::time::Instant::now(),
-            delta_time: 0.0,
-        });
+        resources.insert(Time::default());
         // Event readers and input
         let input_handler = InputHandler::init(&mut resources);
 
@@ -272,11 +269,9 @@ impl Engine {
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        // move this somewhere else:
+        // TODO: move this somewhere else:
         let mut time = self.resources.get_mut::<Time>().unwrap();
-        let now = Instant::now();
-        time.delta_time = (now - time.current_time).as_secs_f32();
-        time.current_time = now;
+        time.update();
         drop(time);
 
         self.renderer.begin_frame(&mut self.resources)?;

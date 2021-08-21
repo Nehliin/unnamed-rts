@@ -19,7 +19,7 @@ pub fn movement(
                 // very temporary fix here
                 let tmp_vel = (target - transform.matrix.translation).normalize() * 3.0;
                 velocity.velocity = tmp_vel.into();
-                transform.matrix.translation += tmp_vel * time.delta_time;
+                transform.matrix.translation += tmp_vel * time.delta_time();
             } else {
                 velocity.velocity = Vec3::splat(0.0);
                 command_buffer.remove_component::<MoveTarget>(*entity)

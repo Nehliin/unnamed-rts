@@ -2,14 +2,12 @@ use std::net::SocketAddr;
 
 use glam::*;
 use legion::{world::SubWorld, *};
-use unnamed_rts::components::*;
 use unnamed_rts::resources::*;
+use unnamed_rts::{components::Selectable, resources::FpsStats};
 use unnamed_rts::{
-    assets::{Assets, Handle},
     input::{CursorPosition, MouseButtonState},
-    rendering::{camera::Camera, gltf::GltfModel, ui::ui_resources::UiContext},
+    rendering::{camera::Camera, ui::ui_resources::UiContext},
 };
-use unnamed_rts::{components::Selectable, resources::Time};
 use winit::event::MouseButton;
 
 #[system]
@@ -17,15 +15,24 @@ pub fn draw_debug_ui(
     world: &SubWorld,
     #[resource] ui_context: &UiContext,
     #[resource] debug_settings: &mut DebugRenderSettings,
-    #[resource] time: &Time,
+    #[resource] fps: &FpsStats,
     query: &mut Query<&Selectable>,
 ) {
     egui::SidePanel::left("Debug menue")
         .resizable(false)
         .max_width(80.0)
         .show(&ui_context.context, |ui| {
-            let label = egui::Label::new(format!("FPS: {:.0}", 1.0 / time.delta_time))
-                .text_color(egui::Color32::WHITE);
+            let label = egui::Label::new(format!(
+                "FPS: Avg: {}, Min: {}, Max: {}",
+                fps.avg_fps, fps.min_fps, fps.max_fps
+            ))
+            .text_color(egui::Color32::WHITE);
+            ui.add(label);
+            let label = egui::Label::new(format!(
+                "Frame time: Avg: {}, Min: {}, Max: {}",
+                fps.avg_frame_time, fps.min_frame_time, fps.max_frame_time
+            ))
+            .text_color(egui::Color32::WHITE);
             ui.add(label);
             ui.checkbox(
                 &mut debug_settings.show_bounding_boxes,
@@ -80,49 +87,4 @@ pub fn move_action(
             }
         });
     }
-}
-
-#[system]
-pub fn selection(
-    world: &mut SubWorld,
-    #[resource] camera: &Camera,
-    #[resource] mouse_button_state: &MouseButtonState,
-    #[resource] mouse_pos: &CursorPosition,
-    #[resource] asset_storage: &Assets<GltfModel>,
-    #[resource] window_size: &WindowSize,
-    query: &mut Query<(&Transform, &Handle<GltfModel>, &mut Selectable)>,
-) {
-    if mouse_button_state.pressed_current_frame(&MouseButton::Left) {
-        let ray = camera.raycast(mouse_pos, window_size);
-        let dirfrac = ray.direction.recip();
-        query.par_for_each_mut(world, |(transform, handle, mut selectable)| {
-            let model = asset_storage.get(handle).unwrap();
-            let (min, max) = (model.min_vertex, model.max_vertex);
-            let world_min = transform
-                .matrix
-                .transform_point3a(Vec3A::new(min.x, min.y, min.z));
-            let world_max = transform
-                .matrix
-                .transform_point3a(Vec3A::new(max.x, max.y, max.z));
-            selectable.is_selected = intesercts(
-                camera.get_position(),
-                dirfrac,
-                world_min.xyz(),
-                world_max.xyz(),
-            );
-        })
-    }
-}
-
-fn intesercts(origin: Vec3A, dirfrac: Vec3A, aabb_min: Vec3A, aabb_max: Vec3A) -> bool {
-    let t1 = (aabb_min - origin) * dirfrac;
-    let t2 = (aabb_max - origin) * dirfrac;
-
-    let tmin = t1.min(t2);
-    let tmin = tmin.max_element();
-
-    let tmax = t1.max(t2);
-    let tmax = tmax.min_element();
-
-    !(tmax < 0.0 || tmax < tmin)
 }

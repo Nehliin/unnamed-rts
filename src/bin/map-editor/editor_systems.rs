@@ -11,7 +11,7 @@ use unnamed_rts::{
         drawable_tilemap::*,
         ui::ui_resources::{UiContext, UiTexture},
     },
-    resources::{Time, WindowSize},
+    resources::{FpsStats, Time, WindowSize},
     tilemap::TileMap,
 };
 use winit::event::MouseButton;
@@ -74,6 +74,7 @@ pub fn editor_ui(
     #[resource] window_size: &WindowSize,
     #[resource] device: &wgpu::Device,
     #[resource] queue: &wgpu::Queue,
+    #[resource] fps: &FpsStats,
 ) {
     if editor_settings.tm_settings.save_path.is_none() {
         let path = format!("assets/{}.map", tilemap.name());
@@ -84,6 +85,12 @@ pub fn editor_ui(
         .resizable(false)
         .max_width(120.0)
         .show(&ui_context.context, |ui| {
+        let label = egui::Label::new(format!(
+                "FPS Avg: {}, Avg Frame time: {}",
+                fps.avg_fps, fps.avg_frame_time
+            ))
+            .text_color(egui::Color32::WHITE);
+        ui.add(label);
         ui.vertical_centered(|ui| {
             let settings = &mut editor_settings.tm_settings;
             CollapsingHeader::new("Tilemap settings")
@@ -232,10 +239,10 @@ pub fn tilemap_modification(
             }
             let tile_coords = tile_coords.unwrap();
             *tm_settings.current_tile = *tile_coords;
-            if (time.current_time - last_update.last_update).as_secs_f32() <= MAX_UPDATE_FREQ {
+            if (*time.current_time() - last_update.last_update).as_secs_f32() <= MAX_UPDATE_FREQ {
                 return;
             }
-            last_update.last_update = time.current_time;
+            last_update.last_update = *time.current_time();
             if mouse_button_state.is_pressed(&MouseButton::Left) {
                 match tm_settings.mode {
                     TileEditMode::DisplacementMap => {

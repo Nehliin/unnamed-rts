@@ -185,7 +185,7 @@ pub fn movement(
             }
             // Set new position (if valid)
             let offset: Vec3A = Vec3A::splat(4.0) * Vec3A::from(velocity.velocity);
-            let new_pos: Vec3A = Vec3A::from(translation) + (offset * time.delta_time);
+            let new_pos: Vec3A = Vec3A::from(translation) + (offset * time.delta_time());
             let floored_new_pos = new_pos.floor();
             if let Ok(new_chunk_pos) =
                 ChunkIndex::new(floored_new_pos.x as i32, floored_new_pos.z as i32)

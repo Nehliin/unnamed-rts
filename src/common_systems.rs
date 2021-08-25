@@ -59,7 +59,7 @@ pub fn fps(#[resource] time: &Time, #[resource] fps_stats: &mut FpsStats) {
     fps_stats.max_fps = std::cmp::max(fps_stats.max_fps, current_fps as u32);
     fps_stats.min_fps = std::cmp::min(fps_stats.min_fps, current_fps as u32);
 
-    let time_since_last_avg = fps_stats.start_frame_time - *time.current_time();
+    let time_since_last_avg = *time.current_time() - fps_stats.start_frame_time;
 
     if time_since_last_avg >= Duration::from_secs(1) {
         fps_stats.avg_frame_time =

@@ -8,7 +8,10 @@ use crossbeam_channel::Receiver;
 use glam::Vec3;
 use legion::*;
 use std::{path::Path, time::Instant};
-use unnamed_rts::{assets::{self, Assets}, common_systems, rendering::{
+use unnamed_rts::{
+    assets::{self, Assets},
+    common_systems,
+    rendering::{
         camera::{self, Camera},
         common::DepthTexture,
         gltf::GltfModel,
@@ -19,7 +22,11 @@ use unnamed_rts::{assets::{self, Assets}, common_systems, rendering::{
         pass::selection_pass,
         pass::tilemap_pass,
         ui::ui_resources::UiTexture,
-    }, resources::{DebugRenderSettings, FpsStats}, states::State, tilemap::TileMap};
+    },
+    resources::{DebugRenderSettings, FpsStats},
+    states::State,
+    tilemap::TileMap,
+};
 use unnamed_rts::{
     rendering::drawable_tilemap::DrawableTileMap,
     resources::{NetworkSerialization, WindowSize},

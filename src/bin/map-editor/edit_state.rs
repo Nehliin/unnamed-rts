@@ -16,7 +16,6 @@ use unnamed_rts::{
         pass::*,
         ui::ui_resources::UiTexture,
     },
-    resources::{DebugRenderSettings, WindowSize},
     resources::{DebugRenderSettings, FpsStats, WindowSize},
     states::{State, StateTransition},
     tilemap::TileMap,

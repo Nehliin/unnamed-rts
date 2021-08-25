@@ -62,8 +62,8 @@ pub fn fps(#[resource] time: &Time, #[resource] fps_stats: &mut FpsStats) {
     let time_since_last_avg = *time.current_time() - fps_stats.start_frame_time;
 
     if time_since_last_avg >= Duration::from_secs(1) {
-        fps_stats.avg_frame_time =
-            time_since_last_avg.as_secs_f32() / (time.current_frame() - fps_stats.start_frame_number) as f32;
+        fps_stats.avg_frame_time = time_since_last_avg.as_secs_f32()
+            / (time.current_frame() - fps_stats.start_frame_number) as f32;
         fps_stats.avg_fps = (1.0 / fps_stats.avg_frame_time) as u32;
         fps_stats.start_frame_number = time.current_frame();
         fps_stats.start_frame_time = *time.current_time();

@@ -44,7 +44,7 @@ impl<'a> From<&'a egui::Texture> for TextureContent<'a> {
             depth_or_array_layers: 1,
         };
         let bytes: Vec<u8> = egui_texture
-            .srgba_pixels()
+            .srgba_pixels(0.5)
             .map(|px| std::array::IntoIter::new([px.r(), px.g(), px.b(), px.a()]))
             .flatten()
             .collect();

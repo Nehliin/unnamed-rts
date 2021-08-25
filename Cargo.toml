@@ -59,7 +59,7 @@ itertools = "0.10"
 image = {version = "0.23", optional = true }
 crevice = {version = "0.7.1", optional = true }
 wgpu = {version = "0.10", optional = true}
-egui = {version = "0.13", optional = true }
+egui = {version = "0.14", optional = true }
 gltf = {version = "0.16", optional = true }
 winit = {version = "0.25", optional = true} 
 

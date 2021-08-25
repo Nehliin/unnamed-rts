@@ -3,6 +3,8 @@ extern crate log;
 
 #[cfg(feature = "graphics")]
 pub mod assets;
+#[cfg(feature = "graphics")]
+pub mod common_systems;
 pub mod components;
 #[cfg(feature = "graphics")]
 pub mod engine;

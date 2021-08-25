@@ -132,10 +132,7 @@ fn main() {
         &mut connected_clients,
         1,
     );
-    resources.insert(Time {
-        current_time: Instant::now(),
-        delta_time: 0.0,
-    });
+    resources.insert(Time::default());
     resources.insert(net_serilization);
     resources.insert(network_socket);
     resources.insert(connected_clients);
@@ -149,11 +146,9 @@ fn main() {
     let mut last_update = Instant::now();
     loop {
         let mut time = resources.get_mut::<Time>().unwrap();
-        let now = Instant::now();
-        time.delta_time = (now - time.current_time).as_secs_f32();
-        time.current_time = now;
+        time.update();
+        let now = *time.current_time();
         drop(time);
-
         schedule.execute(&mut world, &mut resources);
         // TODO: this isn't fixed timestep
         // see: https://gafferongames.com/post/fix_your_timestep/

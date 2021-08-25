@@ -4,6 +4,7 @@ use legion::*;
 use std::time::Instant;
 use unnamed_rts::{
     assets::{self, Assets, Handle},
+    common_systems,
     components::Transform,
     input::KeyboardState,
     rendering::{
@@ -15,7 +16,7 @@ use unnamed_rts::{
         pass::*,
         ui::ui_resources::UiTexture,
     },
-    resources::{DebugRenderSettings, WindowSize},
+    resources::{DebugRenderSettings, FpsStats, WindowSize},
     states::{State, StateTransition},
     tilemap::TileMap,
 };
@@ -122,6 +123,7 @@ impl State for EditState {
         drop(queue);
         drop(device);
 
+        resources.insert(FpsStats::default());
         resources.insert(camera);
         resources.insert(tex_assets);
         resources.insert(Assets::<GltfModel>::default());
@@ -147,11 +149,13 @@ impl State for EditState {
             .add_system(tilemap_pass::update_system())
             .add_system(tilemap_pass::draw_system())
             .add_system(grid_pass::draw_system())
+            .add_system(common_systems::fps_system())
             .build()
     }
 
     fn foreground_schedule(&self) -> legion::Schedule {
         Schedule::builder()
+            .add_system(common_systems::fps_system())
             .add_system(assets::asset_load_system::<UiTexture>())
             .add_system(camera::free_flying_camera_system())
             .add_system(model_pass::update_system())

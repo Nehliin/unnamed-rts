@@ -4,6 +4,7 @@ use crossbeam_channel::Receiver;
 use glam::{Quat, Vec3};
 use unnamed_rts::{
     assets::{self, Assets},
+    common_systems,
     components::{Selectable, Transform, Velocity},
     input::KeyboardState,
     rendering::{
@@ -113,7 +114,7 @@ impl State for PlaygroundState {
             .add_system(selection_pass::draw_system())
             //.add_system(debug_lines_pass::update_bounding_boxes_system())
             //.add_system(debug_lines_pass::draw_system())
-            .add_system(playground_systems::selection_system())
+            .add_system(common_systems::selection_system())
             .add_system(playground_systems::move_action_system())
             .add_system(playground_systems::movement_system())
             .add_system(exit_system())

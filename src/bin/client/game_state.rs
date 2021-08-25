@@ -10,6 +10,7 @@ use legion::*;
 use std::{path::Path, time::Instant};
 use unnamed_rts::{
     assets::{self, Assets},
+    common_systems,
     rendering::{
         camera::{self, Camera},
         common::DepthTexture,
@@ -22,7 +23,7 @@ use unnamed_rts::{
         pass::tilemap_pass,
         ui::ui_resources::UiTexture,
     },
-    resources::DebugRenderSettings,
+    resources::{DebugRenderSettings, FpsStats},
     states::State,
     tilemap::TileMap,
 };
@@ -115,6 +116,7 @@ impl State for GameState {
         resources.insert(Assets::<UiTexture>::default());
         resources.insert(model_assets);
         resources.insert(tilemap);
+        resources.insert(FpsStats::default());
         resources.insert(BoundingBoxMap::default());
         resources.insert(NetworkSerialization::default());
 
@@ -139,6 +141,7 @@ impl State for GameState {
 
     fn foreground_schedule(&self) -> Schedule {
         Schedule::builder()
+            .add_system(common_systems::fps_system())
             .add_system(assets::asset_load_system::<GltfModel>())
             .add_system(camera::free_flying_camera_system())
             .add_system(model_pass::update_system())
@@ -146,7 +149,7 @@ impl State for GameState {
             .add_system(model_pass::draw_system())
             .add_system(selection_pass::draw_system())
             .add_system(tilemap_pass::draw_system())
-            .add_system(client_systems::selection_system())
+            .add_system(common_systems::selection_system())
             .add_system(grid_pass::draw_system())
             .add_system(debug_lines_pass::update_bounding_boxes_system())
             .add_system(debug_lines_pass::draw_system())

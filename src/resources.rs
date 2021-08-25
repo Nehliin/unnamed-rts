@@ -1,4 +1,5 @@
 use std::net::{IpAddr, Ipv4Addr, ToSocketAddrs};
+use std::time::Instant;
 
 use anyhow::Result;
 use bincode::de::Deserializer;
@@ -33,8 +34,73 @@ pub struct DebugRenderSettings {
 
 #[derive(Debug)]
 pub struct Time {
-    pub current_time: std::time::Instant,
-    pub delta_time: f32,
+    current_time: Instant,
+    delta_time: f32,
+    current_frame: u64,
+}
+
+impl Time {
+    pub fn update(&mut self) {
+        let now = Instant::now();
+        self.delta_time = (now - self.current_time).as_secs_f32();
+        self.current_time = now;
+        self.current_frame += 1;
+    }
+
+    /// Get the delta time.
+    #[inline]
+    pub fn delta_time(&self) -> f32 {
+        self.delta_time
+    }
+
+    /// Get the current frame number.
+    #[inline]
+    pub fn current_frame(&self) -> u64 {
+        self.current_frame
+    }
+
+    /// Get a reference to the currently stored time.
+    #[inline]
+    pub fn current_time(&self) -> &Instant {
+        &self.current_time
+    }
+}
+
+impl Default for Time {
+    fn default() -> Self {
+        Time {
+            current_time: Instant::now(),
+            delta_time: 0.0,
+            current_frame: 0,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FpsStats {
+    pub avg_fps: u32,
+    pub avg_frame_time: f32,
+    pub min_frame_time: f32,
+    pub max_frame_time: f32,
+    pub max_fps: u32,
+    pub min_fps: u32,
+    pub start_frame_time: Instant,
+    pub start_frame_number: u64,
+}
+
+impl Default for FpsStats {
+    fn default() -> Self {
+        FpsStats {
+            start_frame_time: std::time::Instant::now(),
+            avg_fps: 0,
+            avg_frame_time: 1.0,
+            min_frame_time: f32::MAX,
+            max_frame_time: f32::MIN,
+            max_fps: u32::MIN,
+            min_fps: u32::MAX,
+            start_frame_number: 0,
+        }
+    }
 }
 
 #[derive(Debug)]

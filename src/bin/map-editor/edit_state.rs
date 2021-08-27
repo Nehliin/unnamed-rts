@@ -169,6 +169,7 @@ impl State for EditState {
             .add_system(tilemap_pass::update_system())
             .add_system(tilemap_pass::draw_system())
             .add_system(grid_pass::draw_system())
+            .add_system(common_systems::fps_ui_system())
             .add_system(editor_systems::editor_ui_system(UiState {
                 img: self.test_img.unwrap(),
                 show_load_popup: false,

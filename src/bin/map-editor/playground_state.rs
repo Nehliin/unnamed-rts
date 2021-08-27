@@ -7,11 +7,7 @@ use unnamed_rts::{
     common_systems,
     components::{Selectable, Transform, Velocity},
     input::KeyboardState,
-    rendering::{
-        camera,
-        gltf::GltfModel,
-        pass::{debug_lines_pass, selection_pass},
-    },
+    rendering::{camera, gltf::GltfModel, pass::selection_pass},
     states::{State, StateTransition},
     tilemap::{TILE_HEIGHT, TILE_WIDTH},
 };
@@ -37,25 +33,20 @@ fn setup_render_resources(
     resources: &mut Resources,
     command_receivers: &mut Vec<Receiver<wgpu::CommandBuffer>>,
 ) {
-    let (lines_sender, lines_rc) = crossbeam_channel::bounded(1);
     let (selectable_sender, selectable_rc) = crossbeam_channel::bounded(1);
 
-    command_receivers.push(lines_rc);
     command_receivers.push(selectable_rc);
 
     let device = resources.get::<Device>().expect("Device to be present");
 
     let start = Instant::now();
     let selection_pass = selection_pass::SelectionPass::new(&device, selectable_sender);
-    let debug_lines_pass = debug_lines_pass::DebugLinesPass::new(&device, lines_sender);
     info!(
         "Playground Pipeline setup time: {}ms",
         start.elapsed().as_millis()
     );
     drop(device);
     resources.insert(selection_pass);
-    resources.insert(debug_lines_pass);
-    resources.insert(debug_lines_pass::BoundingBoxMap::default());
 }
 
 #[derive(Debug, Default)]
@@ -112,11 +103,10 @@ impl State for PlaygroundState {
             .add_system(assets::asset_load_system::<GltfModel>())
             .add_system(camera::free_flying_camera_system())
             .add_system(selection_pass::draw_system())
-            //.add_system(debug_lines_pass::update_bounding_boxes_system())
-            //.add_system(debug_lines_pass::draw_system())
             .add_system(common_systems::selection_system())
             .add_system(playground_systems::move_action_system())
             .add_system(playground_systems::movement_system())
+            .add_system(common_systems::fps_ui_system())
             .add_system(exit_system())
             .build()
     }

@@ -11,7 +11,7 @@ use unnamed_rts::{
         drawable_tilemap::*,
         ui::ui_resources::{UiContext, UiTexture},
     },
-    resources::{FpsStats, Time, WindowSize},
+    resources::{Time, WindowSize},
     tilemap::TileMap,
 };
 use winit::event::MouseButton;
@@ -74,7 +74,6 @@ pub fn editor_ui(
     #[resource] window_size: &WindowSize,
     #[resource] device: &wgpu::Device,
     #[resource] queue: &wgpu::Queue,
-    #[resource] fps: &FpsStats,
 ) {
     if editor_settings.tm_settings.save_path.is_none() {
         let path = format!("assets/{}.map", tilemap.name());
@@ -85,12 +84,6 @@ pub fn editor_ui(
         .resizable(false)
         .max_width(120.0)
         .show(&ui_context.context, |ui| {
-        let label = egui::Label::new(format!(
-                "FPS Avg: {}, Avg Frame time: {}",
-                fps.avg_fps, fps.avg_frame_time
-            ))
-            .text_color(egui::Color32::WHITE);
-        ui.add(label);
         ui.vertical_centered(|ui| {
             let settings = &mut editor_settings.tm_settings;
             CollapsingHeader::new("Tilemap settings")
@@ -255,7 +248,7 @@ pub fn tilemap_modification(
                     TileEditMode::ColorTexture => {
                         let radius = tm_settings.tool_size;
                         let center = tile_coords * tilemap.tile_texture_resolution();
-                        let center = center.as_f32();
+                        let center = center.as_vec2();
                         tilemap.modify_color_texels(|x, y, bytes| {
                             let distance = Vec2::new(x as f32, y as f32).distance(center);
                             if distance < radius {
@@ -285,7 +278,7 @@ pub fn tilemap_modification(
                 TileEditMode::ColorTexture => {
                     let radius = tm_settings.tool_size;
                     let center = tile_coords * tilemap.tile_texture_resolution();
-                    let center = center.as_f32();
+                    let center = center.as_vec2();
                     tilemap.modify_decal_texels(|x, y, bytes| {
                         let distance = Vec2::new(x as f32, y as f32).distance(center);
                         if (radius - 2.0) < distance && distance < radius {

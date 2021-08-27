@@ -40,7 +40,7 @@ debug-assertions = true
 futures = "0.3"
 env_logger = "0.9"
 mint = "0.5"
-glam = {version = "0.17", features = ["mint", "serde", "debug-glam-assert", "bytemuck"]}
+glam = {version = "0.18", features = ["mint", "serde", "debug-glam-assert", "bytemuck"]}
 log = "0.4"
 legion = {version = "0.4", features = ["extended-tuple-impls"]} 
 bytemuck = {version = "1.5", features = ["derive"] }

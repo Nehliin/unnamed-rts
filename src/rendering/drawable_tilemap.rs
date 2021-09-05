@@ -6,7 +6,7 @@ use crate::{
     rendering::{pass::tilemap_pass, *},
     tilemap::*,
 };
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use glam::{UVec2, Vec2, Vec3A};
 use rayon::{
     iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator},
@@ -564,7 +564,10 @@ impl AssetLoader for DrawableTileMap<'_> {
                 queue,
                 &loaded_map.map.chunk,
             );
-            Ok(DrawableTileMap::from_parts(loaded_map.map.into_owned(), render_data))
+            Ok(DrawableTileMap::from_parts(
+                loaded_map.map.into_owned(),
+                render_data,
+            ))
         } else {
             Err(anyhow!("Map: {:?} is missing color texture!", path))
         }

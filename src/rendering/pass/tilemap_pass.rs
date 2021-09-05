@@ -1,6 +1,9 @@
 use std::borrow::Cow;
 
-use crate::{assets::{Assets, Handle}, engine::FrameTexture};
+use crate::{
+    assets::{Assets, Handle},
+    engine::FrameTexture,
+};
 use crossbeam_channel::Sender;
 use glam::Vec3;
 use legion::*;
@@ -143,7 +146,9 @@ pub fn update(
     #[resource] assets: &mut Assets<DrawableTileMap<'static>>,
     #[resource] map_handle: &Handle<DrawableTileMap<'static>>,
 ) {
-    let tilemap = assets.get_mut(map_handle).expect("Map must be loaded before updating it");
+    let tilemap = assets
+        .get_mut(map_handle)
+        .expect("Map must be loaded before updating it");
     tilemap.update(queue);
 }
 
@@ -182,8 +187,10 @@ pub fn draw(
     render_pass.push_debug_group("Tilemap pass");
     render_pass.set_pipeline(&pass.render_pipeline);
     render_pass.set_bind_group(1, camera.bind_group(), &[]);
-    
-    let tilemap = assets.get(map_handle).expect("Map must be loaded before drawing it");
+
+    let tilemap = assets
+        .get(map_handle)
+        .expect("Map must be loaded before drawing it");
     tilemap.draw(&mut render_pass);
     render_pass.pop_debug_group();
     drop(render_pass);

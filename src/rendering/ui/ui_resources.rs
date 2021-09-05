@@ -42,7 +42,7 @@ impl UiContext {
     // This is needed to ensure thread safety for the context
     // egui does support multi threaded access to the context
     // via a feature flag but it's not well tested so it's better to enforce
-    // exclusive access here for now. Without this the system will crash when trying to 
+    // exclusive access here for now. Without this the system will crash when trying to
     // lock parts of the context internal
     pub fn context(&mut self) -> &CtxRef {
         &self.context

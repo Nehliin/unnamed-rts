@@ -25,7 +25,6 @@ use unnamed_rts::{
     },
     resources::{DebugRenderSettings, FpsStats},
     states::State,
-    tilemap::TileMap,
 };
 use unnamed_rts::{
     rendering::drawable_tilemap::DrawableTileMap,

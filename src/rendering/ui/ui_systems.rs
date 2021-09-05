@@ -13,8 +13,8 @@ use legion::*;
 use wgpu::{CommandEncoderDescriptor, Device, Queue};
 use winit::event::{ModifiersState, MouseButton, MouseScrollDelta};
 
-use crate::input::{self, EventReader};
 use super::ui_resources::{UiContext, UiTexture};
+use crate::input::{self, EventReader};
 
 fn handle_mouse_input(
     mouse_input: &input::MouseButtonState,

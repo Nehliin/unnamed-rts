@@ -105,12 +105,8 @@ impl State for EditState {
         let handle = tex_assets.load("moon.png").unwrap();
         self.test_img = Some(handle);
 
-        let transform = Transform::from_position(Vec3::ZERO);
-        let tilemap = TileMap::new("Tilemap".into(), 100, transform);
-
         let device = resources.get::<Device>().expect("Device to be present");
         let queue = resources.get::<Queue>().expect("Queue to be present");
-        let tilemap = DrawableTileMap::new(&device, &queue, tilemap);
 
         let camera = Camera::new(
             &device,
@@ -122,10 +118,25 @@ impl State for EditState {
 
         drop(queue);
         drop(device);
-
+        let mut map_assets = Assets::<DrawableTileMap>::default();
+        info!("Loading map");
+        let map_handle;
+        if let Ok(loaded_map_handle) = map_assets.load("Tilemap.map") {
+            map_handle = loaded_map_handle;
+        } else {
+            warn!("Map not found creating a new map");
+            let transform = Transform::from_position(Vec3::ZERO);
+            let tilemap = TileMap::new("Tilemap".into(), transform);
+            let device = resources.get::<Device>().expect("Device to be present");
+            let queue = resources.get::<Queue>().expect("Queue to be present");
+            let tilemap = DrawableTileMap::new(&device, &queue, tilemap);
+            map_handle = map_assets.insert(tilemap);
+        }
+        resources.insert(map_handle);
         resources.insert(FpsStats::default());
         resources.insert(camera);
         resources.insert(tex_assets);
+        resources.insert(map_assets);
         resources.insert(Assets::<GltfModel>::default());
         resources.insert(DebugRenderSettings {
             show_grid: false,
@@ -133,7 +144,6 @@ impl State for EditState {
         });
         let editor_settings = EditorSettings::default();
         resources.insert(editor_settings);
-        resources.insert(tilemap);
     }
 
     fn on_destroy(&mut self, _world: &mut legion::World, _resources: &mut legion::Resources) {
@@ -143,6 +153,7 @@ impl State for EditState {
     fn background_schedule(&self) -> legion::Schedule {
         Schedule::builder()
             .add_system(assets::asset_load_system::<UiTexture>())
+            .add_system(assets::asset_load_system::<DrawableTileMap<'static>>())
             .add_system(model_pass::update_system())
             .add_system(lights::update_system())
             .add_system(model_pass::draw_system())
@@ -157,6 +168,7 @@ impl State for EditState {
         Schedule::builder()
             .add_system(common_systems::fps_system())
             .add_system(assets::asset_load_system::<UiTexture>())
+            .add_system(assets::asset_load_system::<DrawableTileMap<'static>>())
             .add_system(camera::free_flying_camera_system())
             .add_system(model_pass::update_system())
             .add_system(lights::update_system())

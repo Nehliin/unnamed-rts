@@ -13,7 +13,7 @@ use winit::event::MouseButton;
 #[system]
 pub fn draw_debug_ui(
     world: &SubWorld,
-    #[resource] ui_context: &UiContext,
+    #[resource] ui_context: &mut UiContext,
     #[resource] debug_settings: &mut DebugRenderSettings,
     #[resource] fps: &FpsStats,
     query: &mut Query<&Selectable>,
@@ -21,7 +21,7 @@ pub fn draw_debug_ui(
     egui::SidePanel::left("Debug menue")
         .resizable(false)
         .max_width(80.0)
-        .show(&ui_context.context, |ui| {
+        .show(ui_context.context(), |ui| {
             let label = egui::Label::new(format!(
                 "FPS: Avg: {}, Min: {}, Max: {}",
                 fps.avg_fps, fps.min_fps, fps.max_fps

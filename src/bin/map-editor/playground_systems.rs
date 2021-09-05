@@ -2,7 +2,7 @@ use glam::{Affine3A, Quat, Vec2, Vec3, Vec3A};
 use itertools::Itertools;
 use legion::{systems::CommandBuffer, world::SubWorld, *};
 use unnamed_rts::{
-    assets::Handle,
+    assets::{Assets, Handle},
     components::{Selectable, Transform, Velocity},
     input::{CursorPosition, MouseButtonState},
     map_chunk::{ChunkIndex, MapChunk, CHUNK_SIZE},
@@ -23,7 +23,8 @@ pub fn move_action(
     #[resource] mouse_button_state: &MouseButtonState,
     #[resource] mouse_pos: &CursorPosition,
     #[resource] window_size: &WindowSize,
-    #[resource] tilemap: &DrawableTileMap,
+    #[resource] map_assets: &Assets<DrawableTileMap>,
+    #[resource] map_handle: &Handle<DrawableTileMap>,
     query: &mut Query<(Entity, &Selectable)>,
 ) {
     if mouse_button_state.pressed_current_frame(&MouseButton::Right) {
@@ -41,6 +42,7 @@ pub fn move_action(
                         // there was an intersection
                         let target = (t * ray.direction) + ray.origin;
                         info!("Move target: {}", target);
+                        let tilemap = map_assets.get(map_handle).expect("Map needs to be loaded");
                         if let Ok(index) = ChunkIndex::new(target.x as i32, target.z as i32) {
                             command_buffer
                                 .add_component(*entity, FlowField::new(index, tilemap.tile_grid()));
@@ -142,7 +144,8 @@ fn bilinear_interpolation(x: f32, y: f32, chunk: &MapChunk<FlowTile>) -> Vec2 {
 pub fn movement(
     world: &mut SubWorld,
     command_buffer: &mut CommandBuffer,
-    #[resource] tilemap: &mut DrawableTileMap,
+    #[resource] map_assets: &Assets<DrawableTileMap>,
+    #[resource] map_handle: &Handle<DrawableTileMap>,
     #[resource] redraw_flow: &mut DebugFlow,
     #[resource] time: &Time,
     query: &mut Query<(
@@ -156,6 +159,7 @@ pub fn movement(
     query.for_each_mut(
         world,
         |(_entity, flow_field, selectable, transform, velocity)| {
+            let tilemap = map_assets.get(map_handle).expect("Map needs to be loaded");
             if selectable.is_selected {
                 debug_draw_flow_field(command_buffer, flow_field, tilemap.tile_grid(), redraw_flow);
             }

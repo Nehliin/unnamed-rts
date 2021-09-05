@@ -103,11 +103,8 @@ impl State for GameState {
             size.physical_height,
         );
         // TODO: This must be synced with the server
-        let tilemap = DrawableTileMap::new(
-            &device,
-            &queue,
-            TileMap::load(Path::new("assets/Tilemap.map")).unwrap(),
-        );
+        let mut map_assets = Assets::<DrawableTileMap>::default();
+        let map_handle = map_assets.load(Path::new("Tilemap.map")).unwrap();
         let mut model_assets = Assets::<GltfModel>::default();
         let suit = model_assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
 
@@ -115,7 +112,8 @@ impl State for GameState {
         drop(queue);
         resources.insert(Assets::<UiTexture>::default());
         resources.insert(model_assets);
-        resources.insert(tilemap);
+        resources.insert(map_handle);
+        resources.insert(map_assets);
         resources.insert(FpsStats::default());
         resources.insert(BoundingBoxMap::default());
         resources.insert(NetworkSerialization::default());
@@ -143,6 +141,7 @@ impl State for GameState {
         Schedule::builder()
             .add_system(common_systems::fps_system())
             .add_system(assets::asset_load_system::<GltfModel>())
+            .add_system(assets::asset_load_system::<DrawableTileMap>())
             .add_system(camera::free_flying_camera_system())
             .add_system(model_pass::update_system())
             .add_system(lights::update_system())

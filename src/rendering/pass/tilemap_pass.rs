@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use crate::engine::FrameTexture;
+use crate::{assets::{Assets, Handle}, engine::FrameTexture};
 use crossbeam_channel::Sender;
 use glam::Vec3;
 use legion::*;
@@ -138,7 +138,12 @@ impl TileMapPass {
 }
 
 #[system]
-pub fn update(#[resource] queue: &wgpu::Queue, #[resource] tilemap: &mut DrawableTileMap) {
+pub fn update(
+    #[resource] queue: &wgpu::Queue,
+    #[resource] assets: &mut Assets<DrawableTileMap<'static>>,
+    #[resource] map_handle: &Handle<DrawableTileMap<'static>>,
+) {
+    let tilemap = assets.get_mut(map_handle).expect("Map must be loaded before updating it");
     tilemap.update(queue);
 }
 
@@ -149,7 +154,8 @@ pub fn draw(
     #[resource] device: &wgpu::Device,
     #[resource] depth_texture: &DepthTexture,
     #[resource] camera: &Camera,
-    #[resource] tile_map: &DrawableTileMap,
+    #[resource] assets: &Assets<DrawableTileMap<'static>>,
+    #[resource] map_handle: &Handle<DrawableTileMap<'static>>,
 ) {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Tilemap pass encoder"),
@@ -176,7 +182,9 @@ pub fn draw(
     render_pass.push_debug_group("Tilemap pass");
     render_pass.set_pipeline(&pass.render_pipeline);
     render_pass.set_bind_group(1, camera.bind_group(), &[]);
-    tile_map.draw(&mut render_pass);
+    
+    let tilemap = assets.get(map_handle).expect("Map must be loaded before drawing it");
+    tilemap.draw(&mut render_pass);
     render_pass.pop_debug_group();
     drop(render_pass);
     pass.command_sender.send(encoder.finish()).unwrap();

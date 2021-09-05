@@ -59,7 +59,7 @@ pub fn fps_ui(#[resource] ui_context: &UiContext, #[resource] fps: &FpsStats) {
         .anchor(egui::Align2::RIGHT_TOP, egui::Vec2::ZERO)
         .movable(false)
         .show(&ui_context.context, |ui| {
-            ui.colored_label(egui::Color32::WHITE, format!("Fps avg: {}", fps.avg_fps))
+            ui.colored_label(egui::Color32::WHITE, format!("Fps avg: {}", fps.avg_fps));
         });
 }
 

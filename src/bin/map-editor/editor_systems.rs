@@ -3,7 +3,7 @@ use glam::{UVec2, Vec2, Vec3A};
 use legion::*;
 use std::{path::Path, time::Instant};
 use unnamed_rts::{
-    assets::Handle,
+    assets::{Assets, Handle},
     input::{CursorPosition, MouseButtonState},
     map_chunk::CHUNK_SIZE,
     rendering::{
@@ -12,7 +12,6 @@ use unnamed_rts::{
         ui::ui_resources::{UiContext, UiTexture},
     },
     resources::{Time, WindowSize},
-    tilemap::TileMap,
 };
 use winit::event::MouseButton;
 
@@ -70,25 +69,39 @@ pub fn editor_ui(
     #[state] state: &mut UiState<'static>,
     #[resource] ui_context: &UiContext,
     #[resource] editor_settings: &mut EditorSettings,
-    #[resource] tilemap: &mut DrawableTileMap<'static>,
+    #[resource] tilemap_handle: &mut Handle<DrawableTileMap<'static>>,
     #[resource] window_size: &WindowSize,
-    #[resource] device: &wgpu::Device,
-    #[resource] queue: &wgpu::Queue,
+    #[resource] map_assets: &mut Assets<DrawableTileMap<'static>>,
 ) {
+    let tilemap_name = map_assets
+        .get(tilemap_handle)
+        .expect("Map isn't loaded")
+        .name();
     if editor_settings.tm_settings.save_path.is_none() {
-        let path = format!("assets/{}.map", tilemap.name());
+        let path = format!("assets/{}.map", tilemap_name);
         editor_settings.tm_settings.save_path = Some(path.clone());
         editor_settings.tm_settings.load_path = path;
     }
+    egui::TopBottomPanel::top("editor_top_panel").show(&ui_context.context, |ui| {
+        ui.horizontal(|ui| {
+            ui.columns(3, |columns| {
+                columns[1].label(format!(
+                    "Map editor: {}, chunk size: {}",
+                    tilemap_name, CHUNK_SIZE,
+                ));
+            })
+        });
+    });
     egui::SidePanel::left("editor_side_panel")
         .resizable(false)
         .max_width(120.0)
         .show(&ui_context.context, |ui| {
-        ui.vertical_centered(|ui| {
+        ui.vertical_centered_justified(|ui| {
             let settings = &mut editor_settings.tm_settings;
             CollapsingHeader::new("Tilemap settings")
                 .default_open(true)
                 .show(ui, |ui| {
+                    let tilemap = map_assets.get_mut(tilemap_handle).expect("Map isn't loaded");
                     egui::ComboBox::from_label("Edit mode")
                         .selected_text(format!("{:?}", settings.mode))
                         .show_ui(ui, |ui| {
@@ -144,9 +157,7 @@ pub fn editor_ui(
                      let save_path = settings.save_path.as_ref().expect("Name should be used as default value");
                      ui.label(format!("Path saved to: {}", save_path));
                         if ui.button("Save map").clicked() {
-                            use std::io::prelude::*;
-                            let mut file = std::fs::File::create(save_path).unwrap();
-                            file.write_all(&tilemap.serialize().unwrap()).unwrap();
+                           tilemap.save(Path::new(save_path)).expect("Failed to save map");
                         }
                         if ui.button("Load map").clicked() {
                             state.show_load_popup = true;
@@ -162,9 +173,9 @@ pub fn editor_ui(
                             .show(&ui_context.context, |ui| {
                                 ui.text_edit_singleline(&mut settings.load_path);
                                 if ui.button("Load").clicked() {
-                                    match TileMap::load(Path::new(&settings.load_path)) {
-                                        Ok(loaded_map) => {
-                                            *tilemap = DrawableTileMap::new(device, queue, loaded_map);
+                                    match map_assets.load(Path::new(&settings.load_path)) {
+                                        Ok(loaded_map_handle) => {
+                                            tilemap_handle = loaded_map_handle;
                                             *load_error_label = None;
                                         },
                                         Err(err) => {
@@ -180,17 +191,6 @@ pub fn editor_ui(
                         let handle = state.img.into();
                         ui.image(handle, [50.0, 50.0]);
                     });
-        });
-    });
-    egui::TopBottomPanel::top("editor_top_panel").show(&ui_context.context, |ui| {
-        ui.horizontal(|ui| {
-            ui.columns(3, |columns| {
-                columns[1].label(format!(
-                    "Map editor: {}, chunk size: {}",
-                    tilemap.name(),
-                    CHUNK_SIZE,
-                ));
-            })
         });
     });
 }
@@ -210,9 +210,13 @@ pub fn tilemap_modification(
     #[resource] mouse_pos: &CursorPosition,
     #[resource] window_size: &WindowSize,
     #[resource] time: &Time,
-    #[resource] tilemap: &mut DrawableTileMap,
+    #[resource] tilemap_handle: &Handle<DrawableTileMap<'static>>,
+    #[resource] map_assets: &mut Assets<DrawableTileMap<'static>>,
     #[resource] editor_settings: &mut EditorSettings,
 ) {
+    let tilemap = map_assets
+        .get_mut(tilemap_handle)
+        .expect("Map is not loaded yet");
     let ray = camera.raycast(mouse_pos, window_size);
     // check intersection with the heightmap
     let normal = Vec3A::new(0.0, 1.0, 0.0);

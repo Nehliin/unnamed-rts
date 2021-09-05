@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::{
     components::Transform,
     map_chunk::{ChunkIndex, MapChunk, CHUNK_SIZE},
@@ -270,15 +272,15 @@ pub fn generate_grid(transform: Transform) -> MapChunk<Tile> {
 }
 
 // Use const generics here for size perhaps
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TileMap {
     pub name: String,
     pub chunk: MapChunk<Tile>,
 }
 
 impl TileMap {
-    // TODO: size should represent number of chunks
-    pub fn new(name: String, _size: u32, transform: Transform) -> Self {
+    // TODO: Add size which should represent number of chunks
+    pub fn new(name: String, transform: Transform) -> Self {
         TileMap {
             name,
             chunk: generate_grid(transform),
@@ -286,9 +288,8 @@ impl TileMap {
     }
 
     pub fn load(path: &std::path::Path) -> Result<Self> {
-        let map_file = std::fs::File::open(path)?;
-        let map = bincode::deserialize_from(map_file)?;
-        Ok(map)
+        let loaded_map = LoadableMap::load(path)?;
+        Ok(loaded_map.map.into_owned())
     }
 
     fn determine_corner_height(&self, adjacent: &[EdgeAdjacentTile], lowered: bool) -> f32 {
@@ -551,5 +552,31 @@ impl TileMap {
             &self.edge_adj_list(TileEdge::BottomMiddle, x, y),
             is_lowered,
         );
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LoadableMap<'a> {
+    pub map: Cow<'a, TileMap>,
+    pub color_texture: Option<Vec<u8>>,
+}
+
+impl<'a> LoadableMap<'a> {
+    pub fn new(map: &'a TileMap, color_texture: Vec<u8>) -> Self {
+        LoadableMap {
+            map: Cow::Borrowed(map),
+            color_texture: Some(color_texture),
+        }
+    }
+
+    pub fn save(&self, path: &std::path::Path) -> anyhow::Result<()> {
+        let save_file = std::fs::File::create(path)?;
+        bincode::serialize_into(save_file, &self)?;
+        Ok(())
+    }
+
+    pub fn load(path: &std::path::Path) -> anyhow::Result<Self> {
+        let map_file = std::fs::File::open(path)?;
+        Ok(bincode::deserialize_from(map_file)?)
     }
 }

@@ -1,17 +1,30 @@
+use std::path::Path;
+
 use crate::{
+    assets::AssetLoader,
     map_chunk::{ChunkIndex, MapChunk, CHUNK_SIZE},
     rendering::{pass::tilemap_pass, *},
     tilemap::*,
 };
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use glam::{UVec2, Vec2, Vec3A};
 use rayon::{
     iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
+struct DirtyMapData {
+    decal_dirty: bool,
+    color_dirty: bool,
+    debug_dirty: bool,
+    vertex_dirty: bool,
+}
+
+const TILEMAP_TEXTURE_RES: u32 = 16;
+
 // This isn't really needed, could be merged with drawable map
+#[derive(Debug)]
 pub struct TileMapRenderData<'a> {
     vertex_buffer: vertex_buffers::MutableVertexData<TileVertex>,
     index_buffer: wgpu::Buffer,
@@ -25,18 +38,13 @@ pub struct TileMapRenderData<'a> {
     // TODO remove
     instance_buffer: vertex_buffers::MutableVertexData<gltf::InstanceData>,
     bind_group: wgpu::BindGroup,
-    needs_decal_update: bool,
-    needs_color_update: bool,
-    needs_debug_update: bool,
-    needs_vertex_update: bool,
-    tile_width_resultion: u32,
-    tile_height_resultion: u32,
+    dirty_data: DirtyMapData,
 }
 
 impl<'a> TileMapRenderData<'a> {
     // This have no particular meaning anymore
     pub fn decal_buffer_mut(&mut self) -> (u32, &mut [u8]) {
-        self.needs_decal_update = true;
+        self.dirty_data.decal_dirty = true;
         (
             self.decal_layer_content.stride,
             self.decal_layer_content.bytes.to_mut(),
@@ -44,7 +52,7 @@ impl<'a> TileMapRenderData<'a> {
     }
 
     pub fn color_buffer_mut(&mut self) -> (u32, &mut [u8]) {
-        self.needs_color_update = true;
+        self.dirty_data.color_dirty = true;
         (
             self.color_layer_content.stride,
             self.color_layer_content.bytes.to_mut(),
@@ -52,7 +60,7 @@ impl<'a> TileMapRenderData<'a> {
     }
 
     pub fn debug_buffer_mut(&mut self) -> (u32, &mut [u8]) {
-        self.needs_debug_update = true;
+        self.dirty_data.debug_dirty = true;
         (
             self.debug_layer_content.stride,
             self.debug_layer_content.bytes.to_mut(),
@@ -61,28 +69,36 @@ impl<'a> TileMapRenderData<'a> {
 }
 
 impl<'a> TileMapRenderData<'a> {
-    fn new(device: &wgpu::Device, queue: &wgpu::Queue, grid: &MapChunk<Tile>) -> Self {
-        let resolution = 16;
+    fn new(device: &wgpu::Device, queue: &wgpu::Queue, chunk: &MapChunk<Tile>) -> Self {
         let color_layer_content = texture::TextureContent::new(
-            CHUNK_SIZE as u32 * resolution,
-            CHUNK_SIZE as u32 * resolution,
+            CHUNK_SIZE as u32 * TILEMAP_TEXTURE_RES,
+            CHUNK_SIZE as u32 * TILEMAP_TEXTURE_RES,
         );
+        TileMapRenderData::with_color_texture(color_layer_content, device, queue, chunk)
+    }
+
+    fn with_color_texture(
+        color_layer_content: texture::TextureContent<'a>,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        chunk: &MapChunk<Tile>,
+    ) -> Self {
         let color_layer_texture =
             texture::allocate_simple_texture(device, queue, &color_layer_content, true);
         let decal_layer_content = texture::TextureContent::new(
-            CHUNK_SIZE as u32 * resolution,
-            CHUNK_SIZE as u32 * resolution,
+            CHUNK_SIZE as u32 * TILEMAP_TEXTURE_RES,
+            CHUNK_SIZE as u32 * TILEMAP_TEXTURE_RES,
         );
         let decal_layer_texture =
             texture::allocate_simple_texture(device, queue, &decal_layer_content, false);
         let debug_layer_content = texture::TextureContent::new(
-            CHUNK_SIZE as u32 * resolution,
-            CHUNK_SIZE as u32 * resolution,
+            CHUNK_SIZE as u32 * TILEMAP_TEXTURE_RES,
+            CHUNK_SIZE as u32 * TILEMAP_TEXTURE_RES,
         );
         let debug_layer_texture =
             texture::allocate_simple_texture(device, queue, &decal_layer_content, false);
         //TODO: improve this
-        let verticies = grid
+        let verticies = chunk
             .tiles()
             .into_par_iter()
             .map(|tile| tile.verticies.into_par_iter())
@@ -91,7 +107,7 @@ impl<'a> TileMapRenderData<'a> {
             .collect::<Vec<TileVertex>>();
         let vertex_buffer =
             vertex_buffers::VertexBuffer::allocate_mutable_buffer(device, &verticies);
-        let indicies = grid
+        let indicies = chunk
             .tiles()
             .into_par_iter()
             .map(|tile| tile.indicies.into_par_iter())
@@ -107,7 +123,7 @@ impl<'a> TileMapRenderData<'a> {
         let num_indexes = indicies.len() as u32;
         let instance_buffer = vertex_buffers::VertexBuffer::allocate_mutable_buffer(
             device,
-            &[gltf::InstanceData::new(grid.transform())],
+            &[gltf::InstanceData::new(chunk.transform())],
         );
         let color_view = color_layer_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let decal_layer_view =
@@ -160,12 +176,7 @@ impl<'a> TileMapRenderData<'a> {
             debug_layer_texture,
             instance_buffer,
             bind_group,
-            needs_decal_update: false,
-            needs_color_update: false,
-            needs_debug_update: false,
-            needs_vertex_update: false,
-            tile_height_resultion: resolution,
-            tile_width_resultion: resolution,
+            dirty_data: Default::default(),
         }
     }
 }
@@ -197,8 +208,12 @@ impl<'a> DrawableTileMap<'a> {
                 }
             }
         }
-        drawable_map.render_data.needs_color_update = true;
+        drawable_map.render_data.dirty_data.color_dirty = true;
         drawable_map
+    }
+
+    pub fn from_parts(map: TileMap, render_data: TileMapRenderData<'a>) -> Self {
+        DrawableTileMap { map, render_data }
     }
 
     /// Get a reference to the underlying MapChunk.
@@ -215,16 +230,13 @@ impl<'a> DrawableTileMap<'a> {
 
     #[inline]
     pub fn tile_texture_resolution(&self) -> UVec2 {
-        UVec2::new(
-            self.render_data.tile_width_resultion,
-            self.render_data.tile_height_resultion,
-        )
+        UVec2::new(TILEMAP_TEXTURE_RES, TILEMAP_TEXTURE_RES)
     }
 
     #[inline]
     pub fn reset_displacment(&mut self) {
         self.map.chunk = generate_grid(*self.tile_grid().transform());
-        self.render_data.needs_vertex_update = true;
+        self.render_data.dirty_data.vertex_dirty = true;
     }
 
     pub fn reset_color_layer(&mut self) {
@@ -240,26 +252,26 @@ impl<'a> DrawableTileMap<'a> {
                 }
             }
         }
-        self.render_data.needs_color_update = true;
+        self.render_data.dirty_data.color_dirty = true;
     }
 
     #[inline]
     pub fn reset_decal_layer(&mut self) {
         let (_, buffer) = self.render_data.decal_buffer_mut();
         buffer.fill(0);
-        self.render_data.needs_decal_update = true;
+        self.render_data.dirty_data.decal_dirty = true;
     }
 
     #[inline]
     pub fn reset_debug_layer(&mut self) {
         let (_, buffer) = self.render_data.debug_buffer_mut();
         buffer.fill(0);
-        self.render_data.needs_debug_update = true;
+        self.render_data.dirty_data.debug_dirty = true;
     }
 
     pub fn fill_debug_layer(&mut self) {
-        let height_resolution = self.render_data.tile_height_resultion;
-        let width_resolution = self.render_data.tile_width_resultion;
+        let height_resolution = TILEMAP_TEXTURE_RES;
+        let width_resolution = TILEMAP_TEXTURE_RES;
         for x in 0..CHUNK_SIZE {
             for y in 0..CHUNK_SIZE {
                 let index = ChunkIndex::new(x, y).expect("For loops doesn't match grid size");
@@ -306,13 +318,13 @@ impl<'a> DrawableTileMap<'a> {
                 }
             }
         }
-        self.render_data.needs_debug_update = true;
+        self.render_data.dirty_data.debug_dirty = true;
     }
 
     #[inline]
     pub fn set_tile_height(&mut self, x: i32, y: i32, height: u8) {
         self.map.set_tile_height(x, y, height as f32);
-        self.render_data.needs_vertex_update = true;
+        self.render_data.dirty_data.vertex_dirty = true;
     }
 
     #[inline]
@@ -382,8 +394,8 @@ impl<'a> DrawableTileMap<'a> {
     where
         F: Fn(u32, u32, &mut [u8]) + Send + Sync,
     {
-        let height_resolution = self.render_data.tile_height_resultion;
-        let width_resolution = self.render_data.tile_width_resultion;
+        let height_resolution = TILEMAP_TEXTURE_RES;
+        let width_resolution = TILEMAP_TEXTURE_RES;
         let (stride, buffer) = self.render_data.decal_buffer_mut();
         Self::modify_tile_texels(
             tile_x,
@@ -400,8 +412,8 @@ impl<'a> DrawableTileMap<'a> {
     where
         F: Fn(u32, u32, &mut [u8]) + Send + Sync,
     {
-        let height_resolution = self.render_data.tile_height_resultion;
-        let width_resolution = self.render_data.tile_width_resultion;
+        let height_resolution = TILEMAP_TEXTURE_RES;
+        let width_resolution = TILEMAP_TEXTURE_RES;
         let (stride, buffer) = self.render_data.color_buffer_mut();
         Self::modify_tile_texels(
             tile_x,
@@ -418,8 +430,8 @@ impl<'a> DrawableTileMap<'a> {
     where
         F: Fn(u32, u32, &mut [u8]) + Send + Sync,
     {
-        let height_resolution = self.render_data.tile_height_resultion;
-        let width_resolution = self.render_data.tile_width_resultion;
+        let height_resolution = TILEMAP_TEXTURE_RES;
+        let width_resolution = TILEMAP_TEXTURE_RES;
         let (stride, buffer) = self.render_data.debug_buffer_mut();
         Self::modify_tile_texels(
             tile_x,
@@ -457,7 +469,7 @@ impl<'a> DrawableTileMap<'a> {
     where
         F: Fn(u32, u32, &mut [u8]) + Send + Sync,
     {
-        let width_resolution = self.render_data.tile_width_resultion;
+        let width_resolution = TILEMAP_TEXTURE_RES;
         let (stride, buffer) = self.render_data.decal_buffer_mut();
         Self::modify_texels(width_resolution, stride, buffer, func);
     }
@@ -466,27 +478,27 @@ impl<'a> DrawableTileMap<'a> {
     where
         F: Fn(u32, u32, &mut [u8]) + Send + Sync,
     {
-        let width_resolution = self.render_data.tile_width_resultion;
+        let width_resolution = TILEMAP_TEXTURE_RES;
         let (stride, buffer) = self.render_data.color_buffer_mut();
         Self::modify_texels(width_resolution, stride, buffer, func);
     }
 
-    //TODO: This doesn't serialize the color texture
-    pub fn serialize(&self) -> Result<Vec<u8>> {
-        let serialized = bincode::serialize(&self.map)?;
-        Ok(serialized)
+    pub fn save(&self, path: &Path) -> Result<()> {
+        let color_content = self.render_data.color_layer_content.bytes.to_vec();
+        let loadable_map = LoadableMap::new(&self.map, color_content);
+        loadable_map.save(path)
     }
 
     pub fn update(&mut self, queue: &wgpu::Queue) {
-        if self.render_data.needs_decal_update {
+        if self.render_data.dirty_data.decal_dirty {
             texture::update_texture_data(
                 &self.render_data.decal_layer_content,
                 &self.render_data.decal_layer_texture,
                 queue,
             );
-            self.render_data.needs_decal_update = false;
+            self.render_data.dirty_data.decal_dirty = false;
         }
-        if self.render_data.needs_vertex_update {
+        if self.render_data.dirty_data.vertex_dirty {
             let data = self
                 .map
                 .chunk
@@ -495,23 +507,23 @@ impl<'a> DrawableTileMap<'a> {
                 .flat_map(|tile| tile.verticies.iter().copied())
                 .collect::<Vec<_>>();
             self.render_data.vertex_buffer.update(queue, &data);
-            self.render_data.needs_vertex_update = false;
+            self.render_data.dirty_data.vertex_dirty = false;
         }
-        if self.render_data.needs_color_update {
+        if self.render_data.dirty_data.color_dirty {
             texture::update_texture_data(
                 &self.render_data.color_layer_content,
                 &self.render_data.color_layer_texture,
                 queue,
             );
-            self.render_data.needs_color_update = false;
+            self.render_data.dirty_data.color_dirty = false;
         }
-        if self.render_data.needs_debug_update {
+        if self.render_data.dirty_data.debug_dirty {
             texture::update_texture_data(
                 &self.render_data.debug_layer_content,
                 &self.render_data.debug_layer_texture,
                 queue,
             );
-            self.render_data.needs_debug_update = false;
+            self.render_data.dirty_data.debug_dirty = false;
         }
     }
 
@@ -533,5 +545,32 @@ impl<'a> DrawableTileMap<'a> {
             vertex_buffers::VertexBufferData::slice(&self.render_data.instance_buffer, ..),
         );
         render_pass.draw_indexed(0..self.render_data.num_indexes, 0, 0..1);
+    }
+}
+
+impl AssetLoader for DrawableTileMap<'_> {
+    fn load(path: &Path, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<Self> {
+        let loaded_map = LoadableMap::load(path)?;
+        if let Some(color_texture) = loaded_map.color_texture {
+            let color_content = texture::TextureContent::from_buffer(
+                "Color texture",
+                color_texture,
+                CHUNK_SIZE as u32 * TILEMAP_TEXTURE_RES,
+                CHUNK_SIZE as u32 * TILEMAP_TEXTURE_RES,
+            )?;
+            let render_data = TileMapRenderData::with_color_texture(
+                color_content,
+                device,
+                queue,
+                &loaded_map.map.chunk,
+            );
+            Ok(DrawableTileMap::from_parts(loaded_map.map.into_owned(), render_data))
+        } else {
+            Err(anyhow!("Map: {:?} is missing color texture!", path))
+        }
+    }
+
+    fn extensions() -> &'static [&'static str] {
+        &["map"]
     }
 }

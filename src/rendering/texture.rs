@@ -1,3 +1,5 @@
+use anyhow::anyhow;
+use anyhow::Result;
 use std::{borrow::Cow, num::NonZeroU32};
 use wgpu::{Device, Queue};
 
@@ -25,6 +27,31 @@ impl<'a> TextureContent<'a> {
             stride: stride as u32,
             size: img_size,
         }
+    }
+
+    pub fn from_buffer(
+        label: &'static str,
+        buffer: Vec<u8>,
+        width: u32,
+        height: u32,
+    ) -> Result<Self> {
+        let stride = 4;
+        let expected_len = (width * height) as usize * stride;
+        if expected_len != buffer.len() {
+            return Err(anyhow!("Texture buffer doesn't match widht/height"));
+        }
+        let img_size = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        Ok(TextureContent {
+            label: Some(label),
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            bytes: Cow::Owned(buffer),
+            stride: stride as u32,
+            size: img_size,
+        })
     }
 }
 

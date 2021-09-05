@@ -23,7 +23,6 @@ impl<T: AssetLoader> Handle<T> {
     }
     // Unsafe because this may not be backed by anything in the asset storage.
     // It doesn't actually risk any memory issues but might break semantics in a bad way
-    // Might be misue of unsafe keyword but sue me, I know it's hacky
     pub(crate) unsafe fn new_raw_handle(id: u32) -> Self {
         Handle {
             id,
@@ -88,6 +87,20 @@ impl<T: AssetLoader> Assets<T> {
         self.storage.get(handle)
     }
 
+    pub fn get_mut(&mut self, handle: &Handle<T>) -> Option<&mut T> {
+        self.storage.get_mut(handle)
+    }
+
+    pub fn insert(&mut self, asset: T) -> Handle<T> {
+        let handle = Handle {
+            // Safe because of atomics
+            id: unsafe { CURRENT_ID.fetch_add(1, Ordering::AcqRel) },
+            _marker: PhantomData::default(),
+        };
+        self.storage.insert(handle, asset);
+        handle
+    }
+
     pub fn load(&mut self, path: impl AsRef<Path>) -> Result<Handle<T>> {
         let mut pathbuf = PathBuf::from("assets");
         pathbuf.push(path.as_ref());
@@ -98,6 +111,10 @@ impl<T: AssetLoader> Assets<T> {
                 .any(|ext| *ext == pathbuf.extension().unwrap()),
             "Unexpected file extension"
         );
+        // hack to check if file exists
+        info!("Check if file exists");
+        let _ = std::fs::File::open(&pathbuf)?;
+        info!("File exist");
         let handle = Handle {
             // Safe because of atomics
             id: unsafe { CURRENT_ID.fetch_add(1, Ordering::AcqRel) },

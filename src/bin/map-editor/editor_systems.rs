@@ -67,7 +67,7 @@ pub struct UiState<'a> {
 // TODO: This system is a bit of spagettios but I will clean it up later. Features more important atm!
 pub fn editor_ui(
     #[state] state: &mut UiState<'static>,
-    #[resource] ui_context: &UiContext,
+    #[resource] ui_context: &mut UiContext,
     #[resource] editor_settings: &mut EditorSettings,
     #[resource] tilemap_handle: &mut Handle<DrawableTileMap<'static>>,
     #[resource] window_size: &WindowSize,
@@ -82,7 +82,7 @@ pub fn editor_ui(
         editor_settings.tm_settings.save_path = Some(path.clone());
         editor_settings.tm_settings.load_path = path;
     }
-    egui::TopBottomPanel::top("editor_top_panel").show(&ui_context.context, |ui| {
+    egui::TopBottomPanel::top("editor_top_panel").show(ui_context.context(), |ui| {
         ui.horizontal(|ui| {
             ui.columns(3, |columns| {
                 columns[1].label(format!(
@@ -95,7 +95,7 @@ pub fn editor_ui(
     egui::SidePanel::left("editor_side_panel")
         .resizable(false)
         .max_width(120.0)
-        .show(&ui_context.context, |ui| {
+        .show(&ui_context.context().clone(), |ui| {
         ui.vertical_centered_justified(|ui| {
             let settings = &mut editor_settings.tm_settings;
             CollapsingHeader::new("Tilemap settings")
@@ -170,12 +170,12 @@ pub fn editor_ui(
                             .resizable(false)
                             .collapsible(false)
                             .fixed_pos((x as f32/2.0, y as f32 /2.0 ))
-                            .show(&ui_context.context, |ui| {
+                            .show(ui_context.context(), |ui| {
                                 ui.text_edit_singleline(&mut settings.load_path);
                                 if ui.button("Load").clicked() {
                                     match map_assets.load(Path::new(&settings.load_path)) {
                                         Ok(loaded_map_handle) => {
-                                            tilemap_handle = loaded_map_handle;
+                                            *tilemap_handle = loaded_map_handle;
                                             *load_error_label = None;
                                         },
                                         Err(err) => {

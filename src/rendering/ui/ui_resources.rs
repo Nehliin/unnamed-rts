@@ -11,16 +11,10 @@ use once_cell::sync::OnceCell;
 use std::{borrow::Cow, convert::TryFrom, fs::File, io::BufReader, path::Path};
 use winit::event::ModifiersState;
 
-pub struct CursorPosition {
-    pub x: f64,
-    pub y: f64,
-}
-
 pub struct UiContext {
-    pub context: CtxRef,
-    pub raw_input: RawInput,
-    pub cursor_pos: CursorPosition,
-    pub modifier_state: ModifiersState,
+    pub(super) context: CtxRef,
+    pub(super) raw_input: RawInput,
+    pub(super) modifier_state: ModifiersState,
 }
 
 impl UiContext {
@@ -41,9 +35,17 @@ impl UiContext {
         UiContext {
             context,
             raw_input,
-            cursor_pos: CursorPosition { x: 0.0, y: 0.0 },
             modifier_state: ModifiersState::empty(),
         }
+    }
+
+    // This is needed to ensure thread safety for the context
+    // egui does support multi threaded access to the context
+    // via a feature flag but it's not well tested so it's better to enforce
+    // exclusive access here for now. Without this the system will crash when trying to 
+    // lock parts of the context internal
+    pub fn context(&mut self) -> &CtxRef {
+        &self.context
     }
 }
 

@@ -54,11 +54,11 @@ pub fn selection(
 }
 
 #[system]
-pub fn fps_ui(#[resource] ui_context: &UiContext, #[resource] fps: &FpsStats) {
+pub fn fps_ui(#[resource] ui_context: &mut UiContext, #[resource] fps: &FpsStats) {
     egui::Area::new("Fps stats")
         .anchor(egui::Align2::RIGHT_TOP, egui::Vec2::ZERO)
         .movable(false)
-        .show(&ui_context.context, |ui| {
+        .show(ui_context.context(), |ui| {
             ui.colored_label(egui::Color32::WHITE, format!("Fps avg: {}", fps.avg_fps));
         });
 }

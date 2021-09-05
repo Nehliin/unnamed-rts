@@ -14,7 +14,6 @@ use wgpu::{CommandEncoderDescriptor, Device, Queue};
 use winit::event::{ModifiersState, MouseButton, MouseScrollDelta};
 
 use crate::input::{self, EventReader};
-
 use super::ui_resources::{UiContext, UiTexture};
 
 fn handle_mouse_input(

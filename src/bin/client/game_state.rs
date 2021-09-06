@@ -152,6 +152,7 @@ impl State for GameState {
             .add_system(debug_lines_pass::update_bounding_boxes_system())
             .add_system(debug_lines_pass::draw_system())
             .add_system(client_systems::draw_debug_ui_system())
+            .add_system(common_systems::fps_ui_system())
             .add_system(client_systems::move_action_system())
             .add_system(client_network::server_update_system())
             .build()

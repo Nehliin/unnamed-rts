@@ -2,8 +2,8 @@ use std::net::SocketAddr;
 
 use glam::*;
 use legion::{world::SubWorld, *};
+use unnamed_rts::components::Selectable;
 use unnamed_rts::resources::*;
-use unnamed_rts::{components::Selectable, resources::FpsStats};
 use unnamed_rts::{
     input::{CursorPosition, MouseButtonState},
     rendering::{camera::Camera, ui::ui_resources::UiContext},
@@ -15,25 +15,12 @@ pub fn draw_debug_ui(
     world: &SubWorld,
     #[resource] ui_context: &mut UiContext,
     #[resource] debug_settings: &mut DebugRenderSettings,
-    #[resource] fps: &FpsStats,
     query: &mut Query<&Selectable>,
 ) {
     egui::SidePanel::left("Debug menue")
         .resizable(false)
         .max_width(80.0)
         .show(ui_context.context(), |ui| {
-            let label = egui::Label::new(format!(
-                "FPS: Avg: {}, Min: {}, Max: {}",
-                fps.avg_fps, fps.min_fps, fps.max_fps
-            ))
-            .text_color(egui::Color32::WHITE);
-            ui.add(label);
-            let label = egui::Label::new(format!(
-                "Frame time: Avg: {}, Min: {}, Max: {}",
-                fps.avg_frame_time, fps.min_frame_time, fps.max_frame_time
-            ))
-            .text_color(egui::Color32::WHITE);
-            ui.add(label);
             ui.checkbox(
                 &mut debug_settings.show_bounding_boxes,
                 "Show bounding boxes",

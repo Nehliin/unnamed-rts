@@ -6,7 +6,7 @@ use crate::{
     rendering::{pass::tilemap_pass, *},
     tilemap::*,
 };
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use glam::{UVec2, Vec2, Vec3A};
 use rayon::{
     iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator},
@@ -551,26 +551,22 @@ impl<'a> DrawableTileMap<'a> {
 impl AssetLoader for DrawableTileMap<'_> {
     fn load(path: &Path, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<Self> {
         let loaded_map = LoadableMap::load(path)?;
-        if let Some(color_texture) = loaded_map.color_texture {
-            let color_content = texture::TextureContent::from_buffer(
-                "Color texture",
-                color_texture,
-                CHUNK_SIZE as u32 * TILEMAP_TEXTURE_RES,
-                CHUNK_SIZE as u32 * TILEMAP_TEXTURE_RES,
-            )?;
-            let render_data = TileMapRenderData::with_color_texture(
-                color_content,
-                device,
-                queue,
-                &loaded_map.map.chunk,
-            );
-            Ok(DrawableTileMap::from_parts(
-                loaded_map.map.into_owned(),
-                render_data,
-            ))
-        } else {
-            Err(anyhow!("Map: {:?} is missing color texture!", path))
-        }
+        let color_content = texture::TextureContent::from_buffer(
+            "Color texture",
+            loaded_map.color_texture,
+            CHUNK_SIZE as u32 * TILEMAP_TEXTURE_RES,
+            CHUNK_SIZE as u32 * TILEMAP_TEXTURE_RES,
+        )?;
+        let render_data = TileMapRenderData::with_color_texture(
+            color_content,
+            device,
+            queue,
+            &loaded_map.map.chunk,
+        );
+        Ok(DrawableTileMap::from_parts(
+            loaded_map.map.into_owned(),
+            render_data,
+        ))
     }
 
     fn extensions() -> &'static [&'static str] {

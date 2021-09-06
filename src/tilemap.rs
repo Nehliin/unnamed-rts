@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, io::{BufReader, BufWriter}};
 
 use crate::{
     components::Transform,
@@ -558,25 +558,30 @@ impl TileMap {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoadableMap<'a> {
     pub map: Cow<'a, TileMap>,
-    pub color_texture: Option<Vec<u8>>,
+    pub color_texture: Vec<u8>,
 }
 
 impl<'a> LoadableMap<'a> {
     pub fn new(map: &'a TileMap, color_texture: Vec<u8>) -> Self {
         LoadableMap {
             map: Cow::Borrowed(map),
-            color_texture: Some(color_texture),
+            color_texture,
         }
     }
 
     pub fn save(&self, path: &std::path::Path) -> anyhow::Result<()> {
         let save_file = std::fs::File::create(path)?;
-        bincode::serialize_into(save_file, &self)?;
+        let buf_writer = BufWriter::with_capacity(16_000, save_file);
+        bincode::serialize_into(buf_writer, &self)?;
         Ok(())
     }
 
     pub fn load(path: &std::path::Path) -> anyhow::Result<Self> {
+        let now = std::time::Instant::now();
         let map_file = std::fs::File::open(path)?;
-        Ok(bincode::deserialize_from(map_file)?)
+        let buf_reader = BufReader::with_capacity(16_000,map_file);
+        let loaded_map = bincode::deserialize_from(buf_reader)?;
+        info!("Time to load map from file: {} seconds", now.elapsed().as_secs_f32());
+        Ok(loaded_map)
     }
 }

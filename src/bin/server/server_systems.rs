@@ -1,6 +1,6 @@
 use legion::{world::SubWorld, *};
 use unnamed_rts::components::*;
-use unnamed_rts::navigation::{FlowField, movement_impl};
+use unnamed_rts::navigation::{movement_impl, FlowField};
 use unnamed_rts::resources::*;
 use unnamed_rts::tilemap::TileMap;
 

@@ -7,14 +7,20 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use server_systems::*;
 use std::{
     net::{SocketAddr, SocketAddrV4},
+    path::Path,
     time::Instant,
 };
 use systems::CommandBuffer;
-use unnamed_rts::resources::{
-    NetworkSerialization, NetworkSocket, ServerUpdate, Time, SERVER_ADDR, SERVER_PORT,
-    SERVER_UPDATE_STREAM,
-};
 use unnamed_rts::{components::*, resources::ClientUpdate};
+use unnamed_rts::{
+    map_chunk::ChunkIndex,
+    navigation::FlowField,
+    resources::{
+        NetworkSerialization, NetworkSocket, ServerUpdate, Time, SERVER_ADDR, SERVER_PORT,
+        SERVER_UPDATE_STREAM,
+    },
+    tilemap::TileMap,
+};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -28,7 +34,7 @@ struct ConnectedClients {
 
 fn setup_world(
     world: &mut World,
-    _resources: &mut Resources,
+    resources: &mut Resources,
     net_serilization: &NetworkSerialization,
 ) -> Vec<u8> {
     world.extend(vec![
@@ -51,9 +57,9 @@ fn setup_world(
             },
         ),*/
     ]);
-    // This must be synced with the clients
-    //    let map = TileMap::load(std::path::Path::new("assets/Tilemap.map")).unwrap();
-    //    resources.insert(map);
+    // TODO:  This must be synced with the clients
+    let map = TileMap::load(Path::new("assets/Tilemap.map")).expect("Failed to load the map");
+    resources.insert(map);
     net_serilization.serialize_world(world, any())
 }
 
@@ -162,6 +168,7 @@ fn main() {
 #[system]
 fn client_input(
     command_buffer: &mut CommandBuffer,
+    #[resource] tilemap: &TileMap,
     #[resource] network: &NetworkSocket,
     #[resource] net_serilization: &NetworkSerialization,
 ) {
@@ -173,9 +180,10 @@ fn client_input(
                         info!("Successfully deserialized packet!");
                         command_buffer.add_component(
                             entity,
-                            MoveTarget {
-                                target: target.into(),
-                            },
+                            FlowField::new(
+                                ChunkIndex::new(target.x as i32, target.z as i32).unwrap(),
+                                &tilemap.chunk,
+                            ),
                         );
                     }
                     ClientUpdate::StartGame { .. } => {
@@ -201,10 +209,11 @@ fn send_state(world: &World, resources: &Resources) {
     let net_serilization = resources.get::<NetworkSerialization>().unwrap();
     let connected_clients = resources.get::<ConnectedClients>().unwrap();
     let mut query = <(Entity, Read<Transform>)>::query();
-    let transforms: Vec<(Entity, Transform)> = query.iter(world).map(|(e, t)| (*e, *t)).collect();
+    let transforms: Vec<(Entity, Transform)> =
+        query.par_iter(world).map(|(e, t)| (*e, *t)).collect();
     let server_update = ServerUpdate::State { transforms };
     let payload = net_serilization.serialize_server_update(&server_update);
-    connected_clients.addrs.par_iter().for_each(|client_addr| {
+    connected_clients.addrs.iter().for_each(|client_addr| {
         let packet = Packet::unreliable_sequenced(
             SocketAddr::V4(*client_addr),
             payload.clone(),

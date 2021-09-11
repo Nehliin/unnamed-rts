@@ -13,11 +13,6 @@ pub struct Velocity {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct MoveTarget {
-    pub target: Vec3,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum EntityType {
     BasicUnit,
 }

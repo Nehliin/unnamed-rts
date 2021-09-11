@@ -1,10 +1,12 @@
 use std::{cmp::Reverse, collections::BinaryHeap};
 
-use glam::Vec2;
+use glam::{Affine3A, Quat, Vec2, Vec3, Vec3A};
 
 use crate::{
+    components::{Transform, Velocity},
     map_chunk::{ChunkIndex, MapChunk, CHUNK_SIZE},
-    tilemap::{Tile, TileType},
+    resources::Time,
+    tilemap::{Tile, TileType, TILE_HEIGHT, TILE_WIDTH},
 };
 
 /// Contains positional info + distance so it can be stored in a BinaryHeap
@@ -38,12 +40,12 @@ type DistanceField = MapChunk<Option<u32>>;
 
 #[derive(Debug, Clone, Copy)]
 pub struct FlowTile {
-    pub direction: Vec2,
+    pub direction: Option<Vec2>,
 }
 
 #[derive(Debug)]
 pub struct FlowField {
-    pub chunk: MapChunk<FlowTile>,
+    chunk: MapChunk<FlowTile>,
     pub target: ChunkIndex,
 }
 
@@ -56,6 +58,91 @@ impl FlowField {
             target,
         }
     }
+
+    /// Returns normalized direction of the field at the given tile or Vec2::ZERO
+    /// Direction is caculated using binary interpolation
+    pub fn direction_at_pos(&self, x: f32, y: f32) -> Option<Vec2> {
+        let (fx, fy) = (x.floor(), y.floor());
+
+        // Check if the tile have a direction and it's a valid position
+        match ChunkIndex::new(fx as i32, fy as i32) {
+            Ok(index) if self.chunk.tile(index).direction.is_none() => return None,
+            Ok(_) => {}
+            Err(_) => return None,
+        }
+
+        let (x2, y2) = (fx + 1.0, fy - 1.0);
+        let (x1, y1) = (fx - 1.0, fy + 1.0);
+        // should Y really be inverted here?
+        let denom = (x2 - x1) * (y1 - y2);
+        let w11 = (x2 - x) * (y - y2) / denom;
+        let w12 = (x2 - x) * (y1 - y) / denom;
+        let w21 = (x - x1) * (y - y2) / denom;
+        let w22 = (x - x1) * (y1 - y) / denom;
+
+        let f_dir = |x: f32, y: f32| {
+            ChunkIndex::new(x as i32, y as i32)
+                .map(|idx| self.chunk.tile(idx).direction)
+                .ok()
+                .flatten()
+                .unwrap_or(Vec2::ZERO)
+        };
+        let dir =
+            w11 * f_dir(x1, y1) + w12 * f_dir(x1, y2) + w21 * f_dir(x2, y1) + w22 * f_dir(x2, y2);
+        Some(dir.normalize_or_zero())
+    }
+}
+
+/// Moves a given transfrom (with velocity) along the flow field
+/// Used in different systems both server and client side
+pub fn movement_impl(
+    tilemap: &MapChunk<Tile>,
+    flow_field: &FlowField,
+    transform: &mut Transform,
+    velocity: &mut Velocity,
+    time: &Time,
+) {
+    // Movement along the flow field
+    let position = transform.matrix.translation.floor();
+    if let Ok(chunk_pos) = ChunkIndex::new(position.x as i32, position.z as i32) {
+        if chunk_pos != flow_field.target {
+            if let Some(direction) = flow_field.direction_at_pos(position.x, position.z) {
+                *velocity.velocity = *-Vec3A::new(direction.x, 0.0, direction.y);
+            }
+        } else {
+            *velocity.velocity = *Vec3::ZERO;
+        }
+    }
+    let (scale, _, translation) = transform.matrix.to_scale_rotation_translation();
+    if velocity.velocity != Vec3::ZERO {
+        // Set rotation
+        *transform.matrix = *Affine3A::from_scale_rotation_translation(
+            scale,
+            look_at(velocity.velocity.into()),
+            translation,
+        );
+    }
+    // Set new position (if valid)
+    let offset: Vec3A = Vec3A::splat(4.0) * Vec3A::from(velocity.velocity);
+    let new_pos: Vec3A = Vec3A::from(translation) + (offset * time.delta_time());
+    let floored_new_pos = new_pos.floor();
+    if let Ok(new_chunk_pos) = ChunkIndex::new(floored_new_pos.x as i32, floored_new_pos.z as i32) {
+        let translation = &mut transform.matrix.translation;
+        *translation = new_pos;
+        let tile = tilemap.tile(new_chunk_pos);
+        let tile_position = Vec2::new(translation.x % TILE_WIDTH, translation.z % TILE_HEIGHT);
+        translation.y = tile.height_at(tile_position);
+    }
+}
+
+pub fn look_at(direction: Vec3A) -> Quat {
+    let mut rotation_axis = Vec3A::Z.cross(direction).normalize_or_zero();
+    if rotation_axis.length_squared() < 0.001 {
+        rotation_axis = Vec3A::Y;
+    }
+    let dot = Vec3A::Z.dot(direction);
+    let angle = dot.acos();
+    Quat::from_axis_angle(rotation_axis.into(), angle)
 }
 
 fn calc_distance(n_tile: &Tile, _current_tile: &Tile) -> Option<u32> {
@@ -121,12 +208,12 @@ fn generate_flow_direction(distance_field: &DistanceField) -> MapChunk<FlowTile>
                 let current_pos = Vec2::new(current_x as f32, current_y as f32);
                 let direction = current_pos - closest_pos;
                 let direction = direction.normalize_or_zero();
-                FlowTile { direction }
+                FlowTile {
+                    direction: Some(direction),
+                }
             } else {
                 // The tile doesn't have a path to the target
-                FlowTile {
-                    direction: Vec2::ZERO,
-                }
+                FlowTile { direction: None }
             }
         })
         .collect::<Vec<FlowTile>>();

@@ -105,7 +105,7 @@ impl State for GameState {
         let mut map_assets = Assets::<DrawableTileMap>::default();
         let map_handle = map_assets.load(Path::new("Tilemap.map")).unwrap();
         let mut model_assets = Assets::<GltfModel>::default();
-        let suit = model_assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
+        let suit = model_assets.load("Toon.glb").unwrap();
 
         drop(device);
         drop(queue);

@@ -1,4 +1,4 @@
-use glam::{Affine3A, Quat, Vec2, Vec3, Vec3A};
+use glam::{Affine3A, Vec3, Vec3A};
 use itertools::Itertools;
 use legion::{systems::CommandBuffer, world::SubWorld, *};
 use unnamed_rts::{
@@ -6,7 +6,7 @@ use unnamed_rts::{
     components::{Selectable, Transform, Velocity},
     input::{CursorPosition, MouseButtonState},
     map_chunk::{ChunkIndex, MapChunk, CHUNK_SIZE},
-    navigation::{FlowField, FlowTile},
+    navigation::{self, FlowField},
     rendering::{camera::Camera, drawable_tilemap::*, gltf::GltfModel},
     resources::{Time, WindowSize},
     tilemap::{Tile, TILE_HEIGHT, TILE_WIDTH},
@@ -61,16 +61,6 @@ pub struct DebugFlow {
     pub spawned_arrows: Option<Vec<Entity>>,
 }
 
-fn look_at(direction: Vec3A) -> Quat {
-    let mut rotation_axis = Vec3A::Z.cross(direction).normalize_or_zero();
-    if rotation_axis.length_squared() < 0.001 {
-        rotation_axis = Vec3A::Y;
-    }
-    let dot = Vec3A::Z.dot(direction);
-    let angle = dot.acos();
-    Quat::from_axis_angle(rotation_axis.into(), angle)
-}
-
 fn debug_draw_flow_field(
     command_buffer: &mut CommandBuffer,
     flow_field: &FlowField,
@@ -98,12 +88,14 @@ fn debug_draw_flow_field(
                     y as f32 * TILE_HEIGHT + 0.5,
                 );
                 let scale = Vec3::splat(0.1);
-                let direction =
-                    bilinear_interpolation(translation.x, translation.z, &flow_field.chunk);
+                let direction = flow_field
+                    .direction_at_pos(translation.x, translation.z)
+                    .map(|direction| Vec3A::new(direction.x, 0.0, direction.y))
+                    .unwrap_or(Vec3A::Y);
                 // 2. create Transform for chunky providing pos, rotation, scale
                 let arrow_transform = Affine3A::from_scale_rotation_translation(
                     scale,
-                    look_at(Vec3A::new(direction.x, 0.0, direction.y)),
+                    navigation::look_at(direction),
                     translation,
                 );
                 // 3. multiply transforms
@@ -118,26 +110,6 @@ fn debug_draw_flow_field(
         let spawned_arrows = command_buffer.extend(debug_arrows);
         redraw_flow.spawned_arrows = Some(spawned_arrows.to_vec());
     }
-}
-
-fn bilinear_interpolation(x: f32, y: f32, chunk: &MapChunk<FlowTile>) -> Vec2 {
-    let (fx, fy) = (x.floor(), y.floor());
-    let (x2, y2) = (fx + 1.0, fy - 1.0);
-    let (x1, y1) = (fx - 1.0, fy + 1.0);
-    // should Y really be inverted here?
-    let denom = (x2 - x1) * (y1 - y2);
-    let w11 = (x2 - x) * (y - y2) / denom;
-    let w12 = (x2 - x) * (y1 - y) / denom;
-    let w21 = (x - x1) * (y - y2) / denom;
-    let w22 = (x - x1) * (y1 - y) / denom;
-
-    let f_dir = |x: f32, y: f32| {
-        ChunkIndex::new(x as i32, y as i32)
-            .map(|idx| chunk.tile(idx).direction)
-            .unwrap_or(Vec2::ZERO)
-    };
-    let dir = w11 * f_dir(x1, y1) + w12 * f_dir(x1, y2) + w21 * f_dir(x2, y1) + w22 * f_dir(x2, y2);
-    dir.normalize_or_zero()
 }
 
 #[system]
@@ -164,43 +136,7 @@ pub fn movement(
                 debug_draw_flow_field(command_buffer, flow_field, tilemap.tile_grid(), redraw_flow);
             }
             // Movement along the flow field
-            let position = transform.matrix.translation.floor();
-            if let Ok(chunk_pos) = ChunkIndex::new(position.x as i32, position.z as i32) {
-                if chunk_pos != flow_field.target {
-                    let flow_direction = flow_field.chunk.tile(chunk_pos);
-                    if flow_direction.direction != Vec2::ZERO {
-                        let direction =
-                            bilinear_interpolation(position.x, position.z, &flow_field.chunk);
-                        // Height is determined by interpolation on the tile height
-                        *velocity.velocity = *-Vec3A::new(direction.x, 0.0, direction.y);
-                    }
-                } else {
-                    *velocity.velocity = *Vec3::ZERO;
-                }
-            }
-            let (scale, _, translation) = transform.matrix.to_scale_rotation_translation();
-            if velocity.velocity != Vec3::ZERO {
-                // Set rotation
-                *transform.matrix = *Affine3A::from_scale_rotation_translation(
-                    scale,
-                    look_at(velocity.velocity.into()),
-                    translation,
-                );
-            }
-            // Set new position (if valid)
-            let offset: Vec3A = Vec3A::splat(4.0) * Vec3A::from(velocity.velocity);
-            let new_pos: Vec3A = Vec3A::from(translation) + (offset * time.delta_time());
-            let floored_new_pos = new_pos.floor();
-            if let Ok(new_chunk_pos) =
-                ChunkIndex::new(floored_new_pos.x as i32, floored_new_pos.z as i32)
-            {
-                let translation = &mut transform.matrix.translation;
-                *translation = new_pos;
-                let tile = tilemap.tile_grid().tile(new_chunk_pos);
-                let tile_position =
-                    Vec2::new(translation.x % TILE_WIDTH, translation.z % TILE_HEIGHT);
-                translation.y = tile.height_at(tile_position);
-            }
+            navigation::movement_impl(tilemap.tile_grid(), flow_field, transform, velocity, time);
         },
     );
 }

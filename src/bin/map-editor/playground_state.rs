@@ -78,7 +78,7 @@ impl State for PlaygroundState {
                     velocity: Vec3::splat(0.0),
                 },
                 unit,
-                Selectable { is_selected: false },
+                Selectable::default(),
             ),
             (
                 Transform::new(
@@ -90,7 +90,7 @@ impl State for PlaygroundState {
                     velocity: Vec3::splat(0.0),
                 },
                 unit,
-                Selectable { is_selected: false },
+                Selectable::default(),
             ),
         ]);
 

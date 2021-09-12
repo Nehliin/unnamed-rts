@@ -11,6 +11,7 @@ use std::{
 use std::{hash::Hasher, sync::atomic::AtomicU32};
 use wgpu::{Device, Queue};
 // This derive only works for T: Debug
+// TODO: implement drop and refcounting to clean up resources
 #[derive(Debug)]
 pub struct Handle<T: AssetLoader> {
     id: u32,
@@ -101,6 +102,7 @@ impl<T: AssetLoader> Assets<T> {
         handle
     }
 
+    // TODO: Make this not reload assets if they already exists
     pub fn load(&mut self, path: impl AsRef<Path>) -> Result<Handle<T>> {
         let mut pathbuf = PathBuf::from("assets");
         pathbuf.push(path.as_ref());

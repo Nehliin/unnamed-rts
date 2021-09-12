@@ -141,7 +141,7 @@ pub struct MouseMotion {
     pub delta_y: f64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct CursorPosition {
     pub x: f64,
     pub y: f64,

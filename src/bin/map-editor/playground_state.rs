@@ -64,23 +64,37 @@ impl State for PlaygroundState {
             .get_mut::<Assets<GltfModel>>()
             .expect("Model assets to be loaded");
         // Set entities
+        // TODO: This will actually load the model again which is totally unnecessary
         let unit = model_assets.load("toon.glb").unwrap();
         let debug_arrow = model_assets.load("arrow.glb").unwrap();
-        world.extend(vec![(
-            Transform::new(
-                Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT / 2.0),
-                Vec3::ONE,
-                Quat::IDENTITY,
+        world.extend(vec![
+            (
+                Transform::new(
+                    Vec3::new(TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT / 2.0),
+                    Vec3::ONE,
+                    Quat::IDENTITY,
+                ),
+                Velocity {
+                    velocity: Vec3::splat(0.0),
+                },
+                unit,
+                Selectable::default(),
             ),
-            Velocity {
-                velocity: Vec3::splat(0.0),
-            },
-            unit,
-            Selectable { is_selected: false },
-        )]);
+            (
+                Transform::new(
+                    Vec3::new(3.0 + TILE_WIDTH / 2.0, 0.0, TILE_HEIGHT / 2.0),
+                    Vec3::ONE,
+                    Quat::IDENTITY,
+                ),
+                Velocity {
+                    velocity: Vec3::splat(0.0),
+                },
+                unit,
+                Selectable::default(),
+            ),
+        ]);
 
         drop(model_assets);
-
         // set up resources
         resources.insert(DebugFlow {
             current_target: None,
@@ -103,7 +117,9 @@ impl State for PlaygroundState {
             .add_system(assets::asset_load_system::<GltfModel>())
             .add_system(camera::free_flying_camera_system())
             .add_system(selection_pass::draw_system())
-            .add_system(common_systems::selection_system())
+            .add_system(common_systems::selection_system(
+                common_systems::SelectionState::default(),
+            ))
             .add_system(playground_systems::move_action_system())
             .add_system(playground_systems::movement_system())
             .add_system(common_systems::fps_ui_system())

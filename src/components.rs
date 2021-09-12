@@ -2,7 +2,7 @@
 use glam::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Selectable {
     pub is_selected: bool,
 }

@@ -63,7 +63,7 @@ pub fn add_client_components(
     let mut command_buffer = CommandBuffer::new(world);
     for (entity, _entity_type) in query.iter(world) {
         command_buffer.add_component(*entity, *model);
-        command_buffer.add_component(*entity, Selectable { is_selected: false });
+        command_buffer.add_component(*entity, Selectable::default());
     }
     command_buffer.extend(vec![
         (

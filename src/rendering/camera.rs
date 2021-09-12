@@ -158,7 +158,7 @@ impl Camera {
         let direction = (view_inverse * view_space)
             .xyz()
             .try_normalize()
-            .expect("Normalization to work")
+            .expect("Ray normalization failed")
             .into();
 
         Ray {

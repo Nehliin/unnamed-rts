@@ -3,7 +3,9 @@ use std::borrow::Cow;
 use crate::assets::{Assets, Handle};
 use crate::components::Transform;
 use crate::engine::FrameTexture;
+use crate::rendering::vertex_buffers::{MutableVertexBuffer, VertexData};
 use crossbeam_channel::Sender;
+use fxhash::FxHashMap;
 use legion::{world::SubWorld, *};
 
 use crate::rendering::{
@@ -13,49 +15,26 @@ use crate::rendering::{
     gltf::PbrMaterial,
     gltf::{InstanceData, MeshVertex},
     lights::LightUniformBuffer,
-    vertex_buffers::VertexBuffer,
 };
-
-#[system]
-pub fn update(
-    world: &SubWorld,
-    #[resource] queue: &wgpu::Queue,
-    #[resource] asset_storage: &Assets<GltfModel>,
-    query: &mut Query<(&Transform, &Handle<GltfModel>)>,
-) {
-    // TODO: Change this to something that actually works for different models
-    // bumpallocation while retaining multithreading would be nice
-    query.par_for_each_chunk(world, |chunk| {
-        let (transforms, models) = chunk.get_components();
-        // HACK
-        if let Some(model) = models.get(0) {
-            // DON'T USE A VEC HERE FOR GODS SAKE
-            let model_matrices = transforms
-                .iter()
-                .map(|trans| InstanceData::new(trans))
-                .collect::<Vec<InstanceData>>();
-            let instance_buffer = &asset_storage.get(model).unwrap().instance_buffer;
-            instance_buffer.update(queue, &model_matrices);
-        }
-    });
-}
 
 #[allow(clippy::too_many_arguments)]
 #[system]
 pub fn draw(
     world: &SubWorld,
-    #[resource] pass: &ModelPass,
+    #[resource] pass: &mut ModelPass,
     #[resource] asset_storage: &Assets<GltfModel>,
     #[resource] depth_texture: &DepthTexture,
     #[resource] device: &wgpu::Device,
     #[resource] light_uniform: &LightUniformBuffer,
     #[resource] current_frame: &FrameTexture,
     #[resource] camera: &Camera,
+    #[resource] queue: &wgpu::Queue,
     query: &mut Query<(&Transform, &Handle<GltfModel>)>,
 ) {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Model pass encoder"),
     });
+    let mut instance_data = std::mem::take(&mut pass.instance_data);
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Model render pass"),
         color_attachments: &[wgpu::RenderPassColorAttachment {
@@ -87,21 +66,40 @@ pub fn draw(
     render_pass.set_pipeline(&pass.render_pipeline);
     render_pass.set_bind_group(0, camera.bind_group(), &[]);
     render_pass.set_bind_group(2, &light_uniform.bind_group, &[]);
-    query.for_each_chunk(world, |chunk| {
-        let (transforms, models) = chunk.get_components();
-        if let Some(model) = models.get(0) {
-            let model = asset_storage.get(model).unwrap();
-            model.draw_instanced(&mut render_pass, 0..transforms.len() as u32);
+    // not great
+    for (_, buffer) in instance_data.iter_mut() {
+        buffer.reset();
+    }
+    // chunk could be used here if the gpu_buf kept track of the current offset while cpu_buf reset
+    // inbetween chunks. It would reduce the memory usage
+    query.for_each(world, |(transform, model_handle)| {
+        if !instance_data.contains_key(model_handle) {
+            instance_data.insert(
+                *model_handle,
+                VertexData::allocate_mutable_buffer_with_size(device, 3),
+            );
         }
+        let buf = instance_data.get_mut(model_handle).unwrap();
+        buf.write(InstanceData::new(transform));
     });
+    for (handle, buffer) in instance_data.iter_mut() {
+        if let Some(model) = asset_storage.get(handle) {
+            buffer.update(device, queue);
+            model.draw_with_instance_buffer(&mut render_pass, buffer);
+        } else {
+            // delete
+        }
+    }
     render_pass.pop_debug_group();
     drop(render_pass);
+    pass.instance_data = instance_data;
     pass.command_sender.send(encoder.finish()).unwrap();
 }
 
 pub struct ModelPass {
     render_pipeline: wgpu::RenderPipeline,
     command_sender: Sender<wgpu::CommandBuffer>,
+    instance_data: FxHashMap<Handle<GltfModel>, MutableVertexBuffer<InstanceData>>,
 }
 
 impl ModelPass {
@@ -127,7 +125,7 @@ impl ModelPass {
             vertex: wgpu::VertexState {
                 module: &shader_module,
                 entry_point: "vs_main",
-                buffers: &[MeshVertex::get_descriptor(), InstanceData::get_descriptor()],
+                buffers: &[MeshVertex::descriptor(), InstanceData::descriptor()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader_module,
@@ -165,6 +163,12 @@ impl ModelPass {
         ModelPass {
             render_pipeline,
             command_sender,
+            instance_data: Default::default(),
         }
+    }
+
+    /// Get a reference to the model pass's instance data.
+    pub fn instance_data(&self) -> &FxHashMap<Handle<GltfModel>, MutableVertexBuffer<InstanceData>> {
+        &self.instance_data
     }
 }

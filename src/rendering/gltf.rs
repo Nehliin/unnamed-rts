@@ -13,7 +13,6 @@ use once_cell::sync::OnceCell;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use std::{
     borrow::Cow,
-    ops::Range,
     path::Path,
     sync::atomic::{AtomicI32, Ordering},
     time::Instant,
@@ -23,10 +22,9 @@ use wgpu::{
     Buffer, BufferAddress, Device, Queue, RenderPass, VertexAttribute, VertexFormat,
 };
 
-pub const INSTANCE_BUFFER_LEN: usize = 4000;
 #[derive(Debug)]
 pub struct GltfMesh {
-    vertex_buffer: ImmutableVertexData<MeshVertex>,
+    vertex_buffer: ImmutableVertexBuffer<MeshVertex>,
     index_buffer: Buffer,
     num_indicies: u32,
     local_transform: Mat4, // pre calc if not needed in animations
@@ -42,10 +40,10 @@ pub struct MeshVertex {
     pub tex_coords: Vec2,
 }
 
-impl VertexBuffer for MeshVertex {
+impl VertexData for MeshVertex {
     const STEP_MODE: wgpu::VertexStepMode = wgpu::VertexStepMode::Vertex;
 
-    fn get_attributes<'a>() -> &'a [wgpu::VertexAttribute] {
+    fn attributes<'a>() -> &'a [wgpu::VertexAttribute] {
         &[
             VertexAttribute {
                 offset: 0,
@@ -100,10 +98,10 @@ impl InstanceData {
 const SIZE_VEC4: BufferAddress = (std::mem::size_of::<Vec4>()) as BufferAddress;
 const SIZE_VEC3: BufferAddress = (std::mem::size_of::<Vec3>()) as BufferAddress;
 
-impl VertexBuffer for InstanceData {
+impl VertexData for InstanceData {
     const STEP_MODE: wgpu::VertexStepMode = wgpu::VertexStepMode::Instance;
 
-    fn get_attributes<'a>() -> &'a [wgpu::VertexAttribute] {
+    fn attributes<'a>() -> &'a [wgpu::VertexAttribute] {
         &[
             VertexAttribute {
                 offset: 0,
@@ -564,7 +562,6 @@ fn get_normal_placeholder_texture(
 #[derive(Debug)]
 pub struct GltfModel {
     pub meshes: Vec<GltfMesh>,
-    pub instance_buffer: MutableVertexData<InstanceData>,
     pub min_vertex: Vec3,
     pub max_vertex: Vec3,
 }
@@ -636,7 +633,7 @@ impl GltfModel {
                             }
                         })
                         .collect::<Vec<_>>();
-                    let vertex_buffer = VertexBuffer::allocate_immutable_buffer(device, &vertices);
+                    let vertex_buffer = VertexData::allocate_immutable_buffer(device, &vertices);
                     let indicies = reader
                         .read_indices()
                         .expect("Mesh must have indicies")
@@ -665,12 +662,8 @@ impl GltfModel {
             gltf_load_time,
             start.elapsed().as_secs_f32()
         );
-        let instance_buffer_len = INSTANCE_BUFFER_LEN * std::mem::size_of::<InstanceData>();
-        let buffer_data = vec![InstanceData::default(); instance_buffer_len];
-        let instance_buffer = VertexBuffer::allocate_mutable_buffer(device, &buffer_data);
         Ok(GltfModel {
             meshes,
-            instance_buffer,
             min_vertex: Vec3::new(
                 min_vertex[0].load(Ordering::Acquire) as f32,
                 min_vertex[1].load(Ordering::Acquire) as f32,
@@ -684,24 +677,10 @@ impl GltfModel {
         })
     }
 
-    pub fn draw_instanced<'a, 'b>(&'a self, render_pass: &mut RenderPass<'b>, instances: Range<u32>)
-    where
-        'a: 'b,
-    {
-        self.meshes.iter().for_each(|mesh| {
-            render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-            render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            render_pass.set_bind_group(1, &mesh.material.bind_group, &[]);
-            render_pass.draw_indexed(0..mesh.num_indicies, 0, instances.clone());
-        });
-    }
-
     pub fn draw_with_instance_buffer<'a, 'b>(
         &'a self,
         render_pass: &mut RenderPass<'b>,
-        instance_buffer: &'b MutableVertexData<InstanceData>,
-        instances: Range<u32>,
+        instance_buffer: &'b MutableVertexBuffer<InstanceData>,
     ) where
         'a: 'b,
     {
@@ -710,7 +689,7 @@ impl GltfModel {
             render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
             render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.set_bind_group(1, &mesh.material.bind_group, &[]);
-            render_pass.draw_indexed(0..mesh.num_indicies, 0, instances.clone());
+            render_pass.draw_indexed(0..mesh.num_indicies, 0, 0..instance_buffer.size() as u32);
         });
     }
 }

@@ -132,9 +132,9 @@ pub fn movement(
         world,
         |(_entity, flow_field, selectable, transform, velocity)| {
             let tilemap = map_assets.get(map_handle).expect("Map needs to be loaded");
-            if selectable.is_selected {
-                debug_draw_flow_field(command_buffer, flow_field, tilemap.tile_grid(), redraw_flow);
-            }
+            // if selectable.is_selected {
+            //    debug_draw_flow_field(command_buffer, flow_field, tilemap.tile_grid(), redraw_flow);
+            // }
             // Movement along the flow field
             navigation::movement_impl(tilemap.tile_grid(), flow_field, transform, velocity, time);
         },

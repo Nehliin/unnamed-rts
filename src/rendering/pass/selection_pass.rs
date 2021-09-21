@@ -58,6 +58,8 @@ pub fn draw(
     render_pass.push_debug_group("Selection pass");
     render_pass.set_pipeline(&pass.render_pipeline);
     render_pass.set_bind_group(0, camera.bind_group(), &[]);
+    // TODO: fix this when bump allocation is added a bit messy now
+    instance_data.retain(|handle, _| asset_storage.get(handle).is_some());
     for (_, buffer) in instance_data.iter_mut() {
         buffer.reset();
     }
@@ -80,8 +82,6 @@ pub fn draw(
         if let Some(model) = asset_storage.get(handle) {
             buffer.update(device, queue);
             model.draw_with_instance_buffer(&mut render_pass, buffer);
-        } else {
-            // delete
         }
     }
     render_pass.pop_debug_group();

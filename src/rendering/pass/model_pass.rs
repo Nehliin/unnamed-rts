@@ -66,7 +66,8 @@ pub fn draw(
     render_pass.set_pipeline(&pass.render_pipeline);
     render_pass.set_bind_group(0, camera.bind_group(), &[]);
     render_pass.set_bind_group(2, &light_uniform.bind_group, &[]);
-    // not great
+    // TODO: fix this when bump allocation is added a bit messy now
+    instance_data.retain(|handle, _| asset_storage.get(handle).is_some());
     for (_, buffer) in instance_data.iter_mut() {
         buffer.reset();
     }
@@ -76,7 +77,7 @@ pub fn draw(
         if !instance_data.contains_key(model_handle) {
             instance_data.insert(
                 *model_handle,
-                VertexData::allocate_mutable_buffer_with_size(device, 3),
+                VertexData::allocate_mutable_buffer_with_size(device, 32),
             );
         }
         let buf = instance_data.get_mut(model_handle).unwrap();
@@ -86,8 +87,6 @@ pub fn draw(
         if let Some(model) = asset_storage.get(handle) {
             buffer.update(device, queue);
             model.draw_with_instance_buffer(&mut render_pass, buffer);
-        } else {
-            // delete
         }
     }
     render_pass.pop_debug_group();
@@ -168,7 +167,9 @@ impl ModelPass {
     }
 
     /// Get a reference to the model pass's instance data.
-    pub fn instance_data(&self) -> &FxHashMap<Handle<GltfModel>, MutableVertexBuffer<InstanceData>> {
+    pub fn instance_data(
+        &self,
+    ) -> &FxHashMap<Handle<GltfModel>, MutableVertexBuffer<InstanceData>> {
         &self.instance_data
     }
 }

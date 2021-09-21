@@ -532,18 +532,12 @@ impl<'a> DrawableTileMap<'a> {
         'map: 'encoder,
     {
         render_pass.set_bind_group(0, &self.render_data.bind_group, &[]);
-        render_pass.set_vertex_buffer(
-            0,
-            self.render_data.vertex_buffer.slice(..),
-        );
+        render_pass.set_vertex_buffer(0, self.render_data.vertex_buffer.slice(..));
         render_pass.set_index_buffer(
             self.render_data.index_buffer.slice(..),
             wgpu::IndexFormat::Uint32,
         );
-        render_pass.set_vertex_buffer(
-            1,
-            self.render_data.instance_buffer.slice(..),
-        );
+        render_pass.set_vertex_buffer(1, self.render_data.instance_buffer.slice(..));
         render_pass.draw_indexed(0..self.render_data.num_indexes, 0, 0..1);
     }
 }

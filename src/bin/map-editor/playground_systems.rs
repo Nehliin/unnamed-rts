@@ -57,7 +57,9 @@ pub fn move_action(
 #[system]
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_units(
-    #[state] handles: &Vec<Handle<GltfModel>>,
+    #[allow(clippy::ptr_arg)]
+    #[state]
+    handles: &Vec<Handle<GltfModel>>,
     command_buffer: &mut CommandBuffer,
     #[resource] camera: &Camera,
     #[resource] mouse_button_state: &MouseButtonState,
@@ -161,23 +163,15 @@ pub fn movement(
     #[resource] map_handle: &Handle<DrawableTileMap>,
     #[resource] redraw_flow: &mut DebugFlow,
     #[resource] time: &Time,
-    query: &mut Query<(
-        Entity,
-        &FlowField,
-        &Selectable,
-        &mut Transform,
-        &mut Velocity,
-    )>,
+    query: &mut Query<(&FlowField, &Selectable, &mut Transform, &mut Velocity)>,
 ) {
-    query.for_each_mut(
-        world,
-        |(_entity, flow_field, selectable, transform, velocity)| {
-            let tilemap = map_assets.get(map_handle).expect("Map needs to be loaded");
-            // if selectable.is_selected {
-            //    debug_draw_flow_field(command_buffer, flow_field, tilemap.tile_grid(), redraw_flow);
-            // }
-            // Movement along the flow field
-            navigation::movement_impl(tilemap.tile_grid(), flow_field, transform, velocity, time);
-        },
-    );
+    query.for_each_mut(world, |(flow_field, selectable, transform, velocity)| {
+        let tilemap = map_assets.get(map_handle).expect("Map needs to be loaded");
+        if selectable.is_selected {
+            // TODO: This have horrible performance when multiple units are selected. fix it
+            debug_draw_flow_field(command_buffer, flow_field, tilemap.tile_grid(), redraw_flow);
+        }
+        // Movement along the flow field
+        navigation::movement_impl(tilemap.tile_grid(), flow_field, transform, velocity, time);
+    });
 }

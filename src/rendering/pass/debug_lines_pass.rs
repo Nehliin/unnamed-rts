@@ -7,7 +7,7 @@ use crate::rendering::{
     common::{DepthTexture, DEPTH_FORMAT},
     gltf::GltfModel,
     gltf::InstanceData,
-    vertex_buffers::{ImmutableVertexData, VertexBuffer, VertexBufferData},
+    vertex_buffers::{ImmutableVertexBuffer, VertexData},
 };
 use crate::{
     assets::{Assets, Handle},
@@ -19,49 +19,48 @@ use glam::Vec3;
 use legion::*;
 use world::SubWorld;
 
+use super::model_pass::ModelPass;
+
 #[derive(Debug, Default)]
-// This should be refactored to be component based instead of using this resource
 pub struct BoundingBoxMap {
-    vertex_info_map: FxHashMap<Handle<GltfModel>, ImmutableVertexData<BoxVert>>,
+    vertex_info_map: FxHashMap<Handle<GltfModel>, ImmutableVertexBuffer<BoxVert>>,
 }
 
 // maybe handle rotation here at some point, currently just using AABB
 #[system]
+#[read_component(Handle<GltfModel>)]
 pub fn update_bounding_boxes(
     world: &SubWorld,
     #[resource] bounding_box_map: &mut BoundingBoxMap,
     #[resource] device: &wgpu::Device,
     #[resource] asset_storage: &Assets<GltfModel>,
-    query: &mut Query<(&Transform, &Handle<GltfModel>)>,
 ) {
-    query.for_each_chunk(world, |chunk| {
-        let (_, models) = chunk.get_components();
-        if let Some(model_handle) = models.get(0) {
+    let mut query = <&Handle<GltfModel>>::query().filter(component::<Transform>());
+    query.for_each(world, |model_handle| {
+        if !bounding_box_map.vertex_info_map.contains_key(model_handle) {
             let model = asset_storage.get(model_handle).unwrap();
-            if !bounding_box_map.vertex_info_map.contains_key(model_handle) {
-                let buffer = calc_buffer(&model.min_vertex, &model.max_vertex);
-                bounding_box_map.vertex_info_map.insert(
-                    *model_handle,
-                    VertexBuffer::allocate_immutable_buffer(device, &buffer),
-                );
-            }
+            let buffer = calc_buffer(&model.min_vertex, &model.max_vertex);
+            bounding_box_map.vertex_info_map.insert(
+                *model_handle,
+                VertexData::allocate_immutable_buffer(device, &buffer),
+            );
         }
     });
 }
 
 #[allow(clippy::too_many_arguments)]
 #[system]
+#[read_component(Handle<GltfModel>)]
 pub fn draw(
     world: &SubWorld,
     #[resource] pass: &DebugLinesPass,
+    #[resource] model_pass: &ModelPass,
     #[resource] bounding_box_map: &BoundingBoxMap,
     #[resource] device: &wgpu::Device,
     #[resource] depth_texture: &DepthTexture,
-    #[resource] asset_storage: &Assets<GltfModel>,
     #[resource] current_frame: &FrameTexture,
     #[resource] debug_settings: &DebugRenderSettings,
     #[resource] camera: &Camera,
-    query: &mut Query<(&Transform, &Handle<GltfModel>)>,
 ) {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Debug lines encoder"),
@@ -88,19 +87,19 @@ pub fn draw(
             stencil_ops: None,
         }),
     });
+
+    let mut query = <&Handle<GltfModel>>::query().filter(component::<Transform>());
+
     render_pass.push_debug_group("Debug lines debug group");
     render_pass.set_pipeline(pipeline);
     render_pass.set_bind_group(0, camera.bind_group(), &[]);
     if debug_settings.show_bounding_boxes {
-        query.for_each_chunk(world, |chunk| {
-            let (transforms, models) = chunk.get_components();
-            if let Some(model_handle) = models.get(0) {
-                let model = asset_storage.get(model_handle).unwrap();
-                let buffer = bounding_box_map.vertex_info_map.get(model_handle).unwrap();
-                render_pass.set_vertex_buffer(0, model.instance_buffer.slice(..));
-                render_pass.set_vertex_buffer(1, buffer.slice(..));
-                render_pass.draw(0..24, 0..transforms.len() as u32);
-            }
+        query.for_each(world, |model_handle| {
+            let buffer = bounding_box_map.vertex_info_map.get(model_handle).unwrap();
+            let instance_buffer = model_pass.instance_data().get(model_handle).unwrap();
+            render_pass.set_vertex_buffer(0, instance_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, buffer.slice(..));
+            render_pass.draw(0..24, 0..instance_buffer.size() as u32);
         });
     }
     render_pass.pop_debug_group();
@@ -155,10 +154,10 @@ struct BoxVert {
     position: [f32; 3],
 }
 
-impl VertexBuffer for BoxVert {
+impl VertexData for BoxVert {
     const STEP_MODE: wgpu::VertexStepMode = wgpu::VertexStepMode::Vertex;
 
-    fn get_attributes<'a>() -> &'a [wgpu::VertexAttribute] {
+    fn attributes<'a>() -> &'a [wgpu::VertexAttribute] {
         &[wgpu::VertexAttribute {
             format: wgpu::VertexFormat::Float32x3,
             offset: 0,
@@ -195,7 +194,7 @@ impl DebugLinesPass {
             vertex: wgpu::VertexState {
                 module: &shader_module,
                 entry_point: "vs_main",
-                buffers: &[InstanceData::get_descriptor(), BoxVert::get_descriptor()],
+                buffers: &[InstanceData::descriptor(), BoxVert::descriptor()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader_module,

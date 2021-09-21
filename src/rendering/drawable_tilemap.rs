@@ -26,7 +26,7 @@ const TILEMAP_TEXTURE_RES: u32 = 16;
 // This isn't really needed, could be merged with drawable map
 #[derive(Debug)]
 pub struct TileMapRenderData<'a> {
-    vertex_buffer: vertex_buffers::MutableVertexData<TileVertex>,
+    vertex_buffer: vertex_buffers::MutableVertexBuffer<TileVertex>,
     index_buffer: wgpu::Buffer,
     num_indexes: u32,
     color_layer_texture: wgpu::Texture,
@@ -35,8 +35,7 @@ pub struct TileMapRenderData<'a> {
     decal_layer_content: texture::TextureContent<'a>,
     debug_layer_texture: wgpu::Texture,
     debug_layer_content: texture::TextureContent<'a>,
-    // TODO remove
-    instance_buffer: vertex_buffers::MutableVertexData<gltf::InstanceData>,
+    instance_buffer: vertex_buffers::ImmutableVertexBuffer<gltf::InstanceData>,
     bind_group: wgpu::BindGroup,
     dirty_data: DirtyMapData,
 }
@@ -103,10 +102,8 @@ impl<'a> TileMapRenderData<'a> {
             .into_par_iter()
             .map(|tile| tile.verticies.into_par_iter())
             .flatten()
-            //.copied()
             .collect::<Vec<TileVertex>>();
-        let vertex_buffer =
-            vertex_buffers::VertexBuffer::allocate_mutable_buffer(device, &verticies);
+        let vertex_buffer = vertex_buffers::VertexData::allocate_mutable_buffer(device, verticies);
         let indicies = chunk
             .tiles()
             .into_par_iter()
@@ -121,7 +118,7 @@ impl<'a> TileMapRenderData<'a> {
             contents: bytemuck::cast_slice(&indicies),
         });
         let num_indexes = indicies.len() as u32;
-        let instance_buffer = vertex_buffers::VertexBuffer::allocate_mutable_buffer(
+        let instance_buffer = vertex_buffers::VertexData::allocate_immutable_buffer(
             device,
             &[gltf::InstanceData::new(chunk.transform())],
         );
@@ -489,7 +486,7 @@ impl<'a> DrawableTileMap<'a> {
         loadable_map.save(path)
     }
 
-    pub fn update(&mut self, queue: &wgpu::Queue) {
+    pub fn update(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
         if self.render_data.dirty_data.decal_dirty {
             texture::update_texture_data(
                 &self.render_data.decal_layer_content,
@@ -504,9 +501,12 @@ impl<'a> DrawableTileMap<'a> {
                 .chunk
                 .tiles()
                 .iter()
-                .flat_map(|tile| tile.verticies.iter().copied())
-                .collect::<Vec<_>>();
-            self.render_data.vertex_buffer.update(queue, &data);
+                .flat_map(|tile| tile.verticies.iter().copied());
+            self.render_data.vertex_buffer.reset();
+            for tile_vertex in data {
+                self.render_data.vertex_buffer.write(tile_vertex);
+            }
+            self.render_data.vertex_buffer.update(device, queue);
             self.render_data.dirty_data.vertex_dirty = false;
         }
         if self.render_data.dirty_data.color_dirty {
@@ -532,18 +532,12 @@ impl<'a> DrawableTileMap<'a> {
         'map: 'encoder,
     {
         render_pass.set_bind_group(0, &self.render_data.bind_group, &[]);
-        render_pass.set_vertex_buffer(
-            0,
-            vertex_buffers::VertexBufferData::slice(&self.render_data.vertex_buffer, ..),
-        );
+        render_pass.set_vertex_buffer(0, self.render_data.vertex_buffer.slice(..));
         render_pass.set_index_buffer(
             self.render_data.index_buffer.slice(..),
             wgpu::IndexFormat::Uint32,
         );
-        render_pass.set_vertex_buffer(
-            1,
-            vertex_buffers::VertexBufferData::slice(&self.render_data.instance_buffer, ..),
-        );
+        render_pass.set_vertex_buffer(1, self.render_data.instance_buffer.slice(..));
         render_pass.draw_indexed(0..self.render_data.num_indexes, 0, 0..1);
     }
 }

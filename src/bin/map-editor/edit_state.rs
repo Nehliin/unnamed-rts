@@ -154,7 +154,6 @@ impl State for EditState {
         Schedule::builder()
             .add_system(assets::asset_load_system::<UiTexture>())
             .add_system(assets::asset_load_system::<DrawableTileMap<'static>>())
-            .add_system(model_pass::update_system())
             .add_system(lights::update_system())
             .add_system(model_pass::draw_system())
             .add_system(tilemap_pass::update_system())
@@ -170,7 +169,6 @@ impl State for EditState {
             .add_system(assets::asset_load_system::<UiTexture>())
             .add_system(assets::asset_load_system::<DrawableTileMap<'static>>())
             .add_system(camera::free_flying_camera_system())
-            .add_system(model_pass::update_system())
             .add_system(lights::update_system())
             .add_system(model_pass::draw_system())
             .add_system(editor_systems::tilemap_modification_system(

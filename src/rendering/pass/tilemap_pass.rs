@@ -14,12 +14,12 @@ use crate::{
     tilemap::TileVertex,
 };
 
-use crate::rendering::{common::DepthTexture, vertex_buffers::VertexBuffer};
+use crate::rendering::{common::DepthTexture, vertex_buffers::VertexData};
 
-impl VertexBuffer for TileVertex {
+impl VertexData for TileVertex {
     const STEP_MODE: wgpu::VertexStepMode = wgpu::VertexStepMode::Vertex;
 
-    fn get_attributes<'a>() -> &'a [wgpu::VertexAttribute] {
+    fn attributes<'a>() -> &'a [wgpu::VertexAttribute] {
         &[
             wgpu::VertexAttribute {
                 offset: 0,
@@ -111,7 +111,7 @@ impl TileMapPass {
             vertex: wgpu::VertexState {
                 module: &shader_module,
                 entry_point: "vs_main",
-                buffers: &[TileVertex::get_descriptor(), InstanceData::get_descriptor()],
+                buffers: &[TileVertex::descriptor(), InstanceData::descriptor()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader_module,
@@ -142,6 +142,7 @@ impl TileMapPass {
 
 #[system]
 pub fn update(
+    #[resource] device: &wgpu::Device,
     #[resource] queue: &wgpu::Queue,
     #[resource] assets: &mut Assets<DrawableTileMap<'static>>,
     #[resource] map_handle: &Handle<DrawableTileMap<'static>>,
@@ -149,7 +150,7 @@ pub fn update(
     let tilemap = assets
         .get_mut(map_handle)
         .expect("Map must be loaded before updating it");
-    tilemap.update(queue);
+    tilemap.update(device, queue);
 }
 
 #[system]

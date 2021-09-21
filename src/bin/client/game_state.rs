@@ -142,7 +142,6 @@ impl State for GameState {
             .add_system(assets::asset_load_system::<GltfModel>())
             .add_system(assets::asset_load_system::<DrawableTileMap>())
             .add_system(camera::free_flying_camera_system())
-            .add_system(model_pass::update_system())
             .add_system(lights::update_system())
             .add_system(model_pass::draw_system())
             .add_system(selection_pass::draw_system())

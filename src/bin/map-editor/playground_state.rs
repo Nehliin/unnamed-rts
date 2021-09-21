@@ -3,7 +3,7 @@ use std::time::Instant;
 use crossbeam_channel::Receiver;
 use glam::{Quat, Vec3};
 use unnamed_rts::{
-    assets::{self, Assets},
+    assets::{self, Assets, Handle},
     common_systems,
     components::{Selectable, Transform, Velocity},
     input::KeyboardState,
@@ -50,7 +50,10 @@ fn setup_render_resources(
 }
 
 #[derive(Debug, Default)]
-pub struct PlaygroundState;
+pub struct PlaygroundState {
+    // Temporary thing to test unit spawning
+    tmp: Option<Vec<Handle<GltfModel>>>,
+}
 
 impl State for PlaygroundState {
     fn on_init(
@@ -66,6 +69,8 @@ impl State for PlaygroundState {
         // Set entities
         // TODO: This will actually load the model again which is totally unnecessary
         let unit = model_assets.load("toon.glb").unwrap();
+        let unit2 = model_assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
+        self.tmp = Some(vec![unit, unit2]);
         let debug_arrow = model_assets.load("arrow.glb").unwrap();
         world.extend(vec![
             (
@@ -119,6 +124,9 @@ impl State for PlaygroundState {
             .add_system(selection_pass::draw_system())
             .add_system(common_systems::selection_system(
                 common_systems::SelectionState::default(),
+            ))
+            .add_system(playground_systems::spawn_units_system(
+                self.tmp.clone().unwrap(),
             ))
             .add_system(playground_systems::move_action_system())
             .add_system(playground_systems::movement_system())

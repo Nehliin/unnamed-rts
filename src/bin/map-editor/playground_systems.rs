@@ -4,7 +4,7 @@ use legion::{systems::CommandBuffer, world::SubWorld, *};
 use unnamed_rts::{
     assets::{Assets, Handle},
     components::{Selectable, Transform, Velocity},
-    input::{CursorPosition, MouseButtonState},
+    input::{CursorPosition, KeyboardState, MouseButtonState},
     map_chunk::{ChunkIndex, MapChunk, CHUNK_SIZE},
     navigation::{self, FlowField},
     rendering::{camera::Camera, drawable_tilemap::*, gltf::GltfModel},
@@ -51,6 +51,47 @@ pub fn move_action(
                 }
             }
         });
+    }
+}
+
+#[system]
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_units(
+    #[state] handles: &Vec<Handle<GltfModel>>,
+    command_buffer: &mut CommandBuffer,
+    #[resource] camera: &Camera,
+    #[resource] mouse_button_state: &MouseButtonState,
+    #[resource] keyboard_staet: &KeyboardState,
+    #[resource] mouse_pos: &CursorPosition,
+    #[resource] window_size: &WindowSize,
+) {
+    if mouse_button_state.pressed_current_frame(&MouseButton::Left)
+        && keyboard_staet.is_pressed(winit::event::VirtualKeyCode::E)
+    {
+        let ray = camera.raycast(mouse_pos, window_size);
+        // check intersection with the regular ground plan
+        let normal = Vec3A::Y;
+        let denominator = normal.dot(ray.direction);
+        if denominator.abs() > 0.0001 {
+            // it isn't parallel to the plane
+            // (camera can still theoretically be within the plane but don't care about that)
+            let t = -(normal.dot(ray.origin)) / denominator;
+            if t >= 0.0 {
+                // there was an intersection
+                let target = (t * ray.direction) + ray.origin;
+                let index: usize = rand::random();
+                if ChunkIndex::new(target.x as i32, target.z as i32).is_ok() {
+                    command_buffer.extend(vec![(
+                        Transform::new(target.into(), Vec3::ONE, glam::Quat::IDENTITY),
+                        Velocity {
+                            velocity: Vec3::splat(0.0),
+                        },
+                        handles[index % handles.len()],
+                        Selectable::default(),
+                    )]);
+                }
+            }
+        }
     }
 }
 

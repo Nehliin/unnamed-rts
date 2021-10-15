@@ -69,8 +69,12 @@ impl State for PlaygroundState {
         // Set entities
         // TODO: This will actually load the model again which is totally unnecessary
         let unit = model_assets.load("toon.glb").unwrap();
-        let unit2 = model_assets.load("FlightHelmet/FlightHelmet.gltf").unwrap();
-        self.tmp = Some(vec![unit, unit2]);
+        self.tmp = Some(vec![
+            unit,
+            model_assets.load("building.glb").unwrap(),
+            model_assets.load("OrientationTest.glb").unwrap(),
+            model_assets.load("FlightHelmet/FlightHelmet.gltf").unwrap(),
+        ]);
         let debug_arrow = model_assets.load("arrow.glb").unwrap();
         world.extend(vec![
             (

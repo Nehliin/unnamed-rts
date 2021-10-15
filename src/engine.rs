@@ -45,14 +45,14 @@ impl Renderer {
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
             })
             .await
             .expect("Failed to create adaptor");
         let (device, queue) = adapter
             .request_device(
                 &DeviceDescriptor {
-                    features: Features::NON_FILL_POLYGON_MODE
-                        | Features::ADDRESS_MODE_CLAMP_TO_BORDER, // TODO: Set this properly
+                    features: Features::POLYGON_MODE_LINE | Features::ADDRESS_MODE_CLAMP_TO_BORDER, // TODO: Set this properly
                     limits: Limits::default(),
                     label: Some("Device"),
                 },
@@ -93,8 +93,11 @@ impl Renderer {
     }
 
     pub fn begin_frame(&self, resources: &mut Resources) -> Result<(), wgpu::SurfaceError> {
-        resources.remove::<FrameTexture>();
-        let frame = self.surface.get_current_frame()?.output;
+        if let Some(prev_frame) = resources.remove::<FrameTexture>() {
+            // Present prev frame
+            prev_frame.texture.present();
+        }
+        let frame = self.surface.get_current_texture()?;
         let frame_view = frame.texture.create_view(&TextureViewDescriptor::default());
         resources.insert(FrameTexture {
             texture: frame,
@@ -103,7 +106,7 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn submit_frame(&self, resources: &mut Resources) {
+    pub fn submit_commands(&self, resources: &mut Resources) {
         let queue = resources.get_mut::<Queue>().unwrap();
         queue.submit(
             self.state_command_receivers
@@ -299,7 +302,7 @@ impl Engine {
         }
         // Reset the state transition between frames
         self.resources.insert(StateTransition::Noop);
-        self.renderer.submit_frame(&mut self.resources);
+        self.renderer.submit_commands(&mut self.resources);
         Ok(())
     }
 }

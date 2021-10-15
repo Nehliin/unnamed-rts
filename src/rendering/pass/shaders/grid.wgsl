@@ -29,7 +29,7 @@ fn get_world_coords(x: f32, y:f32, z: f32, unprojection_mat: mat4x4<f32>) -> vec
     return unprojected_point.xyz / unprojected_point.w;
 }
 
-var GRID_PLANE: array<vec3<f32>, 6> = array<vec3<f32>, 6>(
+var<private> GRID_PLANE: array<vec3<f32>, 6> = array<vec3<f32>, 6>(
     vec3<f32>(1.0, 1.0, 0.0), vec3<f32>(-1.0, -1.0, 0.0), vec3<f32>(-1.0, 1.0, 0.0), 
     vec3<f32>(-1.0, -1.0, 0.0), vec3<f32>(1.0, 1.0, 0.0), vec3<f32>(1.0, -1.0, 0.0)
 );

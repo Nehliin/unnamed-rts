@@ -7,10 +7,10 @@ use crate::rendering::{
     camera::Camera,
     common::DEPTH_FORMAT,
     gltf::{GltfModel, InstanceData, MeshVertex},
-    vertex_buffers::{MutableVertexBuffer, VertexData},
+    mesh_instance_buffer_cache::MeshInstanceBufferCache,
+    vertex_buffers::VertexData,
 };
 use crossbeam_channel::Sender;
-use fxhash::FxHashMap;
 use glam::{Affine3A, Vec3};
 use legion::{world::SubWorld, *};
 
@@ -58,32 +58,24 @@ pub fn draw(
     render_pass.push_debug_group("Selection pass");
     render_pass.set_pipeline(&pass.render_pipeline);
     render_pass.set_bind_group(0, camera.bind_group(), &[]);
-    // TODO: fix this when bump allocation is added a bit messy now
-    instance_data.retain(|handle, _| asset_storage.get(handle).is_some());
-    for (_, buffer) in instance_data.iter_mut() {
-        buffer.reset();
-    }
+
+    instance_data.evict_stale(asset_storage);
     query
         .iter(world)
         .filter(|(_, selectable, _)| selectable.is_selected)
         .for_each(|(transform, _, model_handle)| {
-            if !instance_data.contains_key(model_handle) {
-                instance_data.insert(
-                    *model_handle,
-                    VertexData::allocate_mutable_buffer_with_size(device, 32),
-                );
-            }
-            let buf = instance_data.get_mut(model_handle).unwrap();
-            buf.write(InstanceData::new(&Transform {
-                matrix: transform.matrix * Affine3A::from_scale(Vec3::splat(1.01)),
-            }));
+            let model = asset_storage.get(model_handle).unwrap();
+            instance_data.put(device, model_handle, model, |mesh| Transform {
+                matrix: transform.matrix
+                    * *mesh.local_transform()
+                    * Affine3A::from_scale(Vec3::splat(1.01)),
+            })
         });
-    for (handle, buffer) in instance_data.iter_mut() {
-        if let Some(model) = asset_storage.get(handle) {
-            buffer.update(device, queue);
-            model.draw_with_instance_buffer(&mut render_pass, buffer);
-        }
+    for (mesh, buffer) in instance_data.iter_mut(asset_storage) {
+        buffer.update(device, queue);
+        mesh.draw_with_instance_buffer(&mut render_pass, buffer);
     }
+
     render_pass.pop_debug_group();
     drop(render_pass);
     pass.instance_data = instance_data;
@@ -92,7 +84,7 @@ pub fn draw(
 
 pub struct SelectionPass {
     render_pipeline: wgpu::RenderPipeline,
-    instance_data: FxHashMap<Handle<GltfModel>, MutableVertexBuffer<InstanceData>>,
+    instance_data: MeshInstanceBufferCache,
     command_sender: Sender<wgpu::CommandBuffer>,
 }
 

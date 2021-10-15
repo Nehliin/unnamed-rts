@@ -23,7 +23,7 @@ use super::model_pass::ModelPass;
 
 #[derive(Debug, Default)]
 pub struct BoundingBoxMap {
-    vertex_info_map: FxHashMap<Handle<GltfModel>, ImmutableVertexBuffer<BoxVert>>,
+    vertex_info_map: FxHashMap<(usize, Handle<GltfModel>), ImmutableVertexBuffer<BoxVert>>,
 }
 
 // maybe handle rotation here at some point, currently just using AABB
@@ -37,13 +37,15 @@ pub fn update_bounding_boxes(
 ) {
     let mut query = <&Handle<GltfModel>>::query().filter(component::<Transform>());
     query.for_each(world, |model_handle| {
-        if !bounding_box_map.vertex_info_map.contains_key(model_handle) {
-            let model = asset_storage.get(model_handle).unwrap();
-            let buffer = calc_buffer(&model.min_vertex, &model.max_vertex);
-            bounding_box_map.vertex_info_map.insert(
-                *model_handle,
-                VertexData::allocate_immutable_buffer(device, &buffer),
-            );
+        let model = asset_storage.get(model_handle).unwrap();
+        for mesh in &model.meshes {
+            let key = &(*mesh.index(), *model_handle);
+            if !bounding_box_map.vertex_info_map.contains_key(key) {
+                let buffer = calc_buffer(&model.min_vertex, &model.max_vertex);
+                bounding_box_map
+                    .vertex_info_map
+                    .insert(*key, VertexData::allocate_immutable_buffer(device, &buffer));
+            }
         }
     });
 }
@@ -60,6 +62,7 @@ pub fn draw(
     #[resource] depth_texture: &DepthTexture,
     #[resource] current_frame: &FrameTexture,
     #[resource] debug_settings: &DebugRenderSettings,
+    #[resource] asset_storage: &mut Assets<GltfModel>,
     #[resource] camera: &Camera,
 ) {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -95,11 +98,15 @@ pub fn draw(
     render_pass.set_bind_group(0, camera.bind_group(), &[]);
     if debug_settings.show_bounding_boxes {
         query.for_each(world, |model_handle| {
-            let buffer = bounding_box_map.vertex_info_map.get(model_handle).unwrap();
-            let instance_buffer = model_pass.instance_data().get(model_handle).unwrap();
-            render_pass.set_vertex_buffer(0, instance_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, buffer.slice(..));
-            render_pass.draw(0..24, 0..instance_buffer.size() as u32);
+            let model = asset_storage.get(model_handle).unwrap();
+            for mesh in &model.meshes {
+                let key = &(*mesh.index(), *model_handle);
+                let buffer = bounding_box_map.vertex_info_map.get(key).unwrap();
+                let instance_buffer = model_pass.instance_data().get(key).unwrap();
+                render_pass.set_vertex_buffer(0, instance_buffer.slice(..));
+                render_pass.set_vertex_buffer(1, buffer.slice(..));
+                render_pass.draw(0..24, 0..instance_buffer.size() as u32);
+            }
         });
     }
     render_pass.pop_debug_group();

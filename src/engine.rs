@@ -34,7 +34,7 @@ pub struct FrameTexture {
 }
 
 impl Renderer {
-    pub async fn init(window: &Window, resourcs: &mut Resources) -> Renderer {
+    pub async fn init(window: &Window, resources: &mut Resources) -> Renderer {
         let size = window.inner_size();
         #[cfg(not(target_os = "macos"))]
         let instance = Instance::new(Backends::VULKAN);
@@ -70,8 +70,8 @@ impl Renderer {
         };
 
         surface.configure(&device, &surface_config);
-        resourcs.insert(device);
-        resourcs.insert(queue);
+        resources.insert(device);
+        resources.insert(queue);
         Renderer {
             surface,
             surface_config,

@@ -7,16 +7,13 @@ use bytemuck::{Pod, Zeroable};
 use crevice::std430::AsStd430;
 use crevice::std430::Std430;
 use glam::*;
+use gltf::buffer::Data;
+use gltf::Primitive;
 use gltf::{accessor::util::ItemIter, mesh::util::ReadTexCoords};
 use log::info;
 use once_cell::sync::OnceCell;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
-use std::{
-    borrow::Cow,
-    path::Path,
-    sync::atomic::{AtomicI32, Ordering},
-    time::Instant,
-};
+use std::{borrow::Cow, path::Path, time::Instant};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     Buffer, BufferAddress, Device, Queue, RenderPass, VertexAttribute, VertexFormat,
@@ -24,12 +21,42 @@ use wgpu::{
 
 #[derive(Debug)]
 pub struct GltfMesh {
+    index: usize,
     vertex_buffer: ImmutableVertexBuffer<MeshVertex>,
     index_buffer: Buffer,
     num_indicies: u32,
-    local_transform: Mat4, // pre calc if not needed in animations
+    local_transform: Affine3A,
+    min_vertex: Vec3,
+    max_vertex: Vec3,
     material: PbrMaterial,
 }
+
+impl GltfMesh {
+    /// Get a reference to the gltf mesh's index.
+    pub fn index(&self) -> &usize {
+        &self.index
+    }
+
+    /// Get a reference to the gltf mesh's local transform.
+    pub fn local_transform(&self) -> &Affine3A {
+        &self.local_transform
+    }
+
+    pub fn draw_with_instance_buffer<'a, 'b>(
+        &'a self,
+        render_pass: &mut RenderPass<'b>,
+        instance_buffer: &'b MutableVertexBuffer<InstanceData>,
+    ) where
+        'a: 'b,
+    {
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        render_pass.set_bind_group(1, &self.material.bind_group, &[]);
+        render_pass.draw_indexed(0..self.num_indicies, 0, 0..instance_buffer.size() as u32);
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Pod, Zeroable)]
 pub struct MeshVertex {
@@ -74,6 +101,7 @@ impl VertexData for MeshVertex {
         ]
     }
 }
+
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, Pod, Zeroable)]
 //TODO: The perspective part isn't needed here
@@ -141,6 +169,7 @@ impl VertexData for InstanceData {
         ]
     }
 }
+
 #[derive(Debug)]
 struct PbrMaterialTexture {
     sampler: wgpu::Sampler,
@@ -566,6 +595,129 @@ pub struct GltfModel {
     pub max_vertex: Vec3,
 }
 
+struct GltfPrimitive {
+    vertex_buffer: ImmutableVertexBuffer<MeshVertex>,
+    index_buffer: Buffer,
+    num_indicies: u32,
+    material: PbrMaterial,
+    min_vertex: Vec3,
+    max_vertex: Vec3,
+}
+
+fn load_primitive(
+    primitive: Primitive,
+    device: &Device,
+    queue: &Queue,
+    buffers: &[Data],
+    texture_content: &[TextureContent],
+) -> GltfPrimitive {
+    let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+    let tex_coords_iter = reader
+        .read_tex_coords(0)
+        .unwrap_or_else(|| {
+            ReadTexCoords::F32(gltf::accessor::Iter::Standard(ItemIter::new(
+                // 2 f32s
+                &[0; 8], 8,
+            )))
+        })
+        .into_f32()
+        .cycle();
+    let tan_iter = reader
+        .read_tangents()
+        .unwrap_or_else(|| {
+            // TODO: print file path here when utf8 file names are guarenteed
+            warn!("Mesh loaded is missing tangents!",);
+            gltf::accessor::Iter::Standard(ItemIter::new(&[0; 16], 16))
+        })
+        .cycle();
+    let mut min_vertex = Vec3::new(f32::MAX, f32::MAX, f32::MAX);
+    let mut max_vertex = Vec3::new(f32::MIN, f32::MIN, f32::MIN);
+    let vertices = reader
+        .read_positions()
+        .expect("Mesh must have vertecies")
+        .zip(reader.read_normals().expect("Mesh must have normals"))
+        .zip(tan_iter)
+        .zip(tex_coords_iter)
+        .map(|(((pos, norm), tan), tex)| {
+            let position = Vec3::new(pos[0], pos[1], pos[2]);
+            *min_vertex = *min_vertex.min(position);
+            *max_vertex = *max_vertex.max(position);
+            MeshVertex {
+                position,
+                normal: Vec3::new(norm[0], norm[1], norm[2]),
+                tanget: Vec3::new(tan[0], tan[1], tan[2]),
+                tang_handeness: tan[3],
+                tex_coords: Vec2::new(tex[0], tex[1]),
+            }
+        })
+        .collect::<Vec<_>>();
+    let vertex_buffer = VertexData::allocate_immutable_buffer(device, &vertices);
+    let indicies = reader
+        .read_indices()
+        .expect("Mesh must have indicies")
+        .into_u32()
+        .collect::<Vec<u32>>();
+    let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("Index buffer"),
+        usage: wgpu::BufferUsages::INDEX,
+        contents: bytemuck::cast_slice(&indicies),
+    });
+    GltfPrimitive {
+        vertex_buffer,
+        index_buffer,
+        material: PbrMaterial::new(device, queue, &primitive.material(), texture_content),
+        num_indicies: indicies.len() as u32,
+        min_vertex,
+        max_vertex,
+    }
+}
+
+fn load_meshes<'a>(
+    nodes: impl Iterator<Item = gltf::Node<'a>>,
+    parent_transfrom: Affine3A,
+    device: &Device,
+    queue: &Queue,
+    buffers: &[Data],
+    texture_content: &[TextureContent],
+) -> Vec<GltfMesh> {
+    let mut final_meshes = Vec::with_capacity(nodes.size_hint().0);
+    for node in nodes {
+        if let Some(mesh) = node.mesh() {
+            let local_transform = Mat4::from_cols_array_2d(&node.transform().matrix());
+            let local_transform = Affine3A::from_mat4(local_transform);
+            let transform = parent_transfrom * local_transform;
+            let mut meshes: Vec<GltfMesh> = mesh
+                .primitives()
+                .par_bridge()
+                .map(|primitive| load_primitive(primitive, device, queue, buffers, texture_content))
+                .map(|gltf_primitive| GltfMesh {
+                    index: mesh.index(),
+                    vertex_buffer: gltf_primitive.vertex_buffer,
+                    index_buffer: gltf_primitive.index_buffer,
+                    num_indicies: gltf_primitive.num_indicies,
+                    local_transform: transform,
+                    material: gltf_primitive.material,
+                    min_vertex: gltf_primitive.min_vertex,
+                    max_vertex: gltf_primitive.max_vertex,
+                })
+                .collect();
+            final_meshes.append(&mut meshes);
+            let mut children = load_meshes(
+                node.children(),
+                transform,
+                device,
+                queue,
+                buffers,
+                texture_content,
+            );
+            final_meshes.append(&mut children);
+        } else {
+            error!("Gltf load error: only mesh nodes are supported");
+        }
+    }
+    final_meshes
+}
+
 impl GltfModel {
     fn load(device: &Device, queue: &Queue, path: impl AsRef<Path>) -> Result<GltfModel> {
         let gltf_start = Instant::now();
@@ -576,87 +728,26 @@ impl GltfModel {
             .par_iter()
             .map(TextureContent::from)
             .collect::<Vec<_>>();
-        let min_vertex = [
-            AtomicI32::new(i32::MAX),
-            AtomicI32::new(i32::MAX),
-            AtomicI32::new(i32::MAX),
-        ];
-        let max_vertex = [
-            AtomicI32::new(i32::MIN),
-            AtomicI32::new(i32::MIN),
-            AtomicI32::new(i32::MIN),
-        ];
-        let meshes = gltf.nodes()
-            .par_bridge()
-            .filter(|node| node.mesh().is_some())
-            .map(|node| {
-                let (position, rotation, scaled) = node.transform().decomposed();
-                let local_transform = Mat4::from_scale_rotation_translation(
-                    scaled.into(),
-                    Quat::from_vec4(rotation.into()),
-                    position.into(),
-                );
-                let mesh = node.mesh().unwrap();
-                mesh.primitives().par_bridge().map( |primitive| {
-                    let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
-                    let tex_coords_iter = reader
-                        .read_tex_coords(0)
-                        .unwrap_or_else(|| {
-                            ReadTexCoords::F32(gltf::accessor::Iter::Standard(ItemIter::new(
-                                // 2 f32s
-                                &[0; 8], 8,
-                            )))
-                        })
-                        .into_f32()
-                        .cycle();
-                    let vertices = reader
-                        .read_positions()
-                        .expect("Mesh must have vertecies")
-                        .zip(reader.read_normals().expect("Mesh must have normals"))
-                        .zip(reader.read_tangents().expect("TODO: compute tangents"))
-                        .zip(tex_coords_iter)
-                        .map(|(((pos, norm), tan), tex)| {
-                            max_vertex[0].fetch_max(pos[0].ceil() as i32, Ordering::AcqRel);
-                            max_vertex[1].fetch_max(pos[1].ceil() as i32, Ordering::AcqRel);
-                            max_vertex[2].fetch_max(pos[2].ceil() as i32, Ordering::AcqRel);
-                            min_vertex[0].fetch_min(pos[0].floor() as i32, Ordering::AcqRel);
-                            min_vertex[1].fetch_min(pos[1].floor() as i32, Ordering::AcqRel);
-                            min_vertex[2].fetch_min(pos[2].floor() as i32, Ordering::AcqRel);
-                            // TODO: Apply local transform? 
-                            let position = /*local_transform */ Vec4::new(pos[0], pos[1], pos[2], 1.0);
-                            MeshVertex {
-                                position: position.into(),
-                                normal: Vec3::new(norm[0], norm[1], norm[2]),
-                                tanget: Vec3::new(tan[0], tan[1], tan[2]),
-                                tang_handeness: tan[3],
-                                tex_coords: Vec2::new(tex[0], tex[1]),
-                            }
-                        })
-                        .collect::<Vec<_>>();
-                    let vertex_buffer = VertexData::allocate_immutable_buffer(device, &vertices);
-                    let indicies = reader
-                        .read_indices()
-                        .expect("Mesh must have indicies")
-                        .into_u32()
-                        .collect::<Vec<u32>>();
-                    let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
-                        label: Some("Index buffer"),
-                        usage: wgpu::BufferUsages::INDEX,
-                        contents: bytemuck::cast_slice(&indicies),
-                    });
-                    GltfMesh {
-                        vertex_buffer,
-                        local_transform,
-                        index_buffer,
-                        material: PbrMaterial::new(device, queue, &primitive.material(), &texture_content),
-                        num_indicies: indicies.len() as u32,
-                    }
-                })
-                .collect::<Vec<_>>()
-        })
-        .flatten()
-        .collect::<Vec<_>>();
-
+        let meshes = load_meshes(
+            gltf.nodes(),
+            Affine3A::IDENTITY,
+            device,
+            queue,
+            &buffers,
+            &texture_content,
+        );
+        // TODO: use utf8 filenames
+        let model_min_vertex = meshes
+            .iter()
+            .min_by(|m1, m2| m1.min_vertex.partial_cmp(&m2.min_vertex).unwrap())
+            .map(|mesh| mesh.min_vertex)
+            .expect("Can't find min vertex for model");
+        // TODO: use utf8 filenames
+        let model_max_vertex = meshes
+            .iter()
+            .min_by(|m1, m2| m1.max_vertex.partial_cmp(&m2.max_vertex).unwrap())
+            .map(|mesh| mesh.max_vertex)
+            .expect("Can't find max vertex for model");
         info!(
             "Glft Load: {}, Loadtime: {}",
             gltf_load_time,
@@ -664,33 +755,9 @@ impl GltfModel {
         );
         Ok(GltfModel {
             meshes,
-            min_vertex: Vec3::new(
-                min_vertex[0].load(Ordering::Acquire) as f32,
-                min_vertex[1].load(Ordering::Acquire) as f32,
-                min_vertex[2].load(Ordering::Acquire) as f32,
-            ),
-            max_vertex: Vec3::new(
-                max_vertex[0].load(Ordering::Acquire) as f32,
-                max_vertex[1].load(Ordering::Acquire) as f32,
-                max_vertex[2].load(Ordering::Acquire) as f32,
-            ),
+            min_vertex: model_min_vertex,
+            max_vertex: model_max_vertex,
         })
-    }
-
-    pub fn draw_with_instance_buffer<'a, 'b>(
-        &'a self,
-        render_pass: &mut RenderPass<'b>,
-        instance_buffer: &'b MutableVertexBuffer<InstanceData>,
-    ) where
-        'a: 'b,
-    {
-        self.meshes.iter().for_each(|mesh| {
-            render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-            render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            render_pass.set_bind_group(1, &mesh.material.bind_group, &[]);
-            render_pass.draw_indexed(0..mesh.num_indicies, 0, 0..instance_buffer.size() as u32);
-        });
     }
 }
 
